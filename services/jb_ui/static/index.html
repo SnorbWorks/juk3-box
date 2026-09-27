@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>JUKE.BOX</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b0b0f; color: #f2f2f2;
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+  }
+  #wrap { display: flex; flex-direction: column; height: 100%; padding: 24px; box-sizing: border-box; }
+  h1 { font-size: 48px; letter-spacing: 4px; margin: 0 0 4px 0; }
+  #status { font-size: 18px; color: #888; margin-bottom: 24px; }
+  #status.connected { color: #4ade80; }
+  #status.disconnected { color: #f87171; }
+  #log { flex: 1; overflow-y: auto; font-family: "SF Mono", Menlo, monospace; font-size: 16px; }
+  .line { padding: 4px 0; border-bottom: 1px solid #1f1f26; }
+  .topic { color: #7dd3fc; margin-right: 12px; }
+  .payload { color: #d4d4d8; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>JUKE.BOX</h1>
+  <div id="status" class="disconnected">connecting...</div>
+  <div id="log"></div>
+</div>
+<script>
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const MAX_LINES = 200;
+
+  const client = mqtt.connect('ws://localhost:9001');
+
+  client.on('connect', () => {
+    statusEl.textContent = 'connected to bus';
+    statusEl.className = 'connected';
+    client.subscribe('jukebox/#');
+  });
+
+  client.on('reconnect', () => {
+    statusEl.textContent = 'reconnecting...';
+    statusEl.className = 'disconnected';
+  });
+
+  client.on('close', () => {
+    statusEl.textContent = 'disconnected';
+    statusEl.className = 'disconnected';
+  });
+
+  client.on('message', (topic, payload) => {
+    const line = document.createElement('div');
+    line.className = 'line';
+    const time = new Date().toLocaleTimeString();
+    line.innerHTML = '<span class="topic">' + time + ' ' + topic + '</span>' +
+                      '<span class="payload">' + payload.toString() + '</span>';
+    logEl.prepend(line);
+    while (logEl.children.length > MAX_LINES) {
+      logEl.removeChild(logEl.lastChild);
+    }
+  });
+</script>
+</body>
+</html>
