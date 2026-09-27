@@ -24,11 +24,24 @@ class Bus:
     async def __aexit__(self, *exc_info):
         await self._client.__aexit__(*exc_info)
 
-    async def publish(self, topic: str, payload: dict) -> None:
-        await self._client.publish(topic, json.dumps(payload))
+    async def publish(self, topic: str, payload: dict, retain: bool = False) -> None:
+        await self._client.publish(topic, json.dumps(payload), retain=retain)
 
     async def subscribe(self, topic: str):
+        """Subscribes immediately and returns an async iterator of messages.
+
+        Split into two steps (subscribe now, iterate later) on purpose: a
+        plain async-generator function doesn't run any of its body -- so
+        doesn't actually register the MQTT subscription -- until the first
+        time it's iterated. Anything published to this topic between
+        startup and "async for ... in bus.subscribe(...)" would otherwise be
+        silently dropped (QoS0, no retain), which matters a lot right after
+        a coordinated restart of multiple services that trigger each other.
+        """
         await self._client.subscribe(topic)
+        return self._iter_messages()
+
+    async def _iter_messages(self):
         async for message in self._client.messages:
             yield message.topic.value, json.loads(message.payload)
 

@@ -57,7 +57,7 @@ async def main() -> None:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
         await publish_state(bus, log)
         asyncio.create_task(bus.run_heartbeat())
-        async for _topic, payload in bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd"):
+        async for _topic, payload in await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd"):
             try:
                 await handle_command(bus, log, payload)
             except Exception:

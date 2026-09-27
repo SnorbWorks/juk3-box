@@ -7,6 +7,9 @@ PI_HOST="juk3-box.local"
 PI_USER="admin"
 PI_KEY="$HOME/.ssh/sidecar_ed25519"
 REMOTE_DIR="/opt/juk3-box"
+# Persistent runtime data (SQLite DBs, etc) lives outside REMOTE_DIR since
+# that whole tree gets rsync --delete'd from the repo on every deploy.
+DATA_DIR="/var/lib/juk3-box"
 
 SERVICE_NAME="${1:?Usage: deploy.sh <service-name>}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +26,7 @@ fi
 ssh_pi_sudo() { ssh_pi "echo '$PI_SUDO_PASS' | sudo -S -p '' sh -c '$*'"; }
 
 ssh_pi_sudo "mkdir -p $REMOTE_DIR && chown $PI_USER:$PI_USER $REMOTE_DIR"
+ssh_pi_sudo "mkdir -p $DATA_DIR && chown $PI_USER:$PI_USER $DATA_DIR"
 
 rsync -az --delete \
   --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude 'venv' \
