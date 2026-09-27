@@ -1,0 +1,16 @@
+[Unit]
+Description=juk3-box {{SERVICE_NAME}}
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/juk3-box
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/opt/juk3-box/venv/bin/python -m services.{{SERVICE_NAME}}.main
+Restart=on-failure
+RestartSec=2
+User=admin
+
+[Install]
+WantedBy=multi-user.target
