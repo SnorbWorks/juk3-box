@@ -113,6 +113,33 @@ async def enrichment_loop(log) -> None:
             await asyncio.sleep(ENRICH_DELAY_S)
 
 
+async def publish_snapshot(bus: Bus, conn: sqlite3.Connection, log) -> None:
+    """Publishes the whole library, sorted by title. Small enough (under a
+    thousand tracks, a couple hundred bytes each) to just send in one shot
+    rather than building a page/sort request-response protocol yet -- the UI
+    can slice/sort client-side."""
+    rows = conn.execute(
+        """
+        SELECT title, artist, album, artwork_url, item_path
+        FROM tracks ORDER BY title COLLATE NOCASE
+        """
+    ).fetchall()
+    tracks = [
+        {"title": r[0], "artist": r[1], "album": r[2], "artwork_url": r[3], "item_path": r[4]}
+        for r in rows
+    ]
+    await bus.publish("jukebox/jb-library/tracks", {"tracks": tracks}, retain=True)
+    log.info("published snapshot: %d tracks", len(tracks))
+
+
+async def snapshot_loop(bus: Bus, conn: sqlite3.Connection, log) -> None:
+    """Republishes periodically while enrichment is still filling in data,
+    so the board visibly picks up artist/art as they arrive."""
+    while True:
+        await asyncio.sleep(20)
+        await publish_snapshot(bus, conn, log)
+
+
 async def main() -> None:
     log = jb_logging.setup(SERVICE_NAME)
     cfg = config.load(SERVICE_NAME)
@@ -122,6 +149,8 @@ async def main() -> None:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
         asyncio.create_task(bus.run_heartbeat())
         asyncio.create_task(enrichment_loop(log))
+        asyncio.create_task(snapshot_loop(bus, conn, log))
+        await publish_snapshot(bus, conn, log)
 
         # Trigger a fresh crawl on our own startup too, in case a phone was
         # already connected before we started (the "connected" retained
@@ -140,6 +169,7 @@ async def main() -> None:
                     "SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)
                 ).fetchone()[0]
                 log.info("stored %d tracks for %s (crawl returned %d)", total, mac, len(tracks))
+                await publish_snapshot(bus, conn, log)
 
 
 if __name__ == "__main__":
