@@ -372,28 +372,91 @@
 
   function renderPage() {
     const start = currentPage * PAGE_SIZE;
-    if (boardMode === 'categories') {
-      for (let i = 0; i < PAGE_SIZE; i++) {
-        const value = categoryValues[start + i];
-        slotTitleEls[i].textContent = value || '—';
-        slotTitleEls[i].title = '';
-      }
-      return;
-    }
     for (let i = 0; i < PAGE_SIZE; i++) {
-      const track = sortedTracks[start + i];
-      slotTitleEls[i].textContent = track ? track.title : '—';
-      slotTitleEls[i].title = track && track.artist ? track.title + ' — ' + track.artist : '';
+      let newText, newTooltip;
+      if (boardMode === 'categories') {
+        const value = categoryValues[start + i];
+        newText = value || '—';
+        newTooltip = '';
+      } else {
+        const track = sortedTracks[start + i];
+        newText = track ? track.title : '—';
+        newTooltip = track && track.artist ? track.title + ' — ' + track.artist : '';
+      }
+      slotTitleEls[i].textContent = newText;
+      slotTitleEls[i].title = newTooltip;
     }
   }
 
+  // Slide/carousel page-turn (Back/Forward only): snapshot the current
+  // board as a clone positioned exactly on top of the real one, swap the
+  // real board's content to the new page while it's off-screen, then
+  // slide the clone out and the real board in from the opposite side at
+  // the same time. direction: +1 = Forward (board enters from the
+  // right), -1 = Back (enters from the left).
+  const SLIDE_DURATION_MS = 800;
+  const SLIDE_STAGGER_MS = 350; // head start the outgoing card gets before the new one starts entering
+
+  function slidePage(direction) {
+    const board = document.getElementById('board');
+    const rect = board.getBoundingClientRect();
+    // Translating by 100% of the board's *own* width isn't enough to
+    // clear the screen -- it sits inside padded content, not flush with
+    // the viewport edge, so a sliver of the incoming card was visible
+    // immediately on click. Use the actual viewport width instead, so
+    // both cards genuinely start/end fully off-screen.
+    const offscreen = window.innerWidth + 40;
+    const clone = board.cloneNode(true);
+    // Deliberately kept id="board" (not removed) -- that's what the
+    // #board { display: flex; ... } CSS rule targets, and without it the
+    // clone's columns collapse into an unstyled stack instead of staying
+    // clipped, which is what caused the "runs off the bottom" glitch.
+    // Nothing looks up getElementById('board') during the brief window
+    // both copies exist, so the duplicate id is harmless here.
+    clone.style.position = 'fixed';
+    clone.style.boxSizing = 'border-box';
+    clone.style.top = rect.top + 'px';
+    clone.style.left = rect.left + 'px';
+    clone.style.width = rect.width + 'px';
+    clone.style.height = rect.height + 'px';
+    clone.style.margin = '0';
+    clone.style.zIndex = '5';
+    clone.style.transition = 'none';
+    clone.style.transform = 'translateX(0)';
+    document.body.appendChild(clone);
+
+    board.style.transition = 'none';
+    board.style.transform = `translateX(${direction > 0 ? offscreen : -offscreen}px)`;
+    renderPage(); // swap to the new page's content while off-screen
+
+    void board.offsetHeight; // force reflow before animating
+
+    // Outgoing clone starts immediately; the incoming board gets a delayed
+    // start so the old card is already well on its way out before the new
+    // one begins entering, rather than both moving as one simultaneous swap.
+    requestAnimationFrame(() => {
+      clone.style.transition = `transform ${SLIDE_DURATION_MS}ms ease-in-out`;
+      clone.style.transform = `translateX(${direction > 0 ? -offscreen : offscreen}px)`;
+    });
+
+    setTimeout(() => {
+      board.style.transition = `transform ${SLIDE_DURATION_MS}ms ease-in-out`;
+      board.style.transform = 'translateX(0)';
+    }, SLIDE_STAGGER_MS);
+
+    setTimeout(() => {
+      clone.remove();
+      board.style.transition = 'none';
+    }, SLIDE_STAGGER_MS + SLIDE_DURATION_MS + 30);
+  }
+
   function pageBack() {
-    if (currentPage > 0) { currentPage--; renderPage(); }
+    if (currentPage > 0) { currentPage--; slidePage(-1); }
   }
   function pageForward() {
     const total = boardMode === 'categories' ? categoryValues.length : sortedTracks.length;
     const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
-    if (currentPage < maxPage) { currentPage++; renderPage(); }
+    if (currentPage < maxPage) { currentPage++; slidePage(1); }
   }
 
   // Picking a slot: in 'categories' mode, drills into that value (shows
