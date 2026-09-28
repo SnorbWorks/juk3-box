@@ -88,13 +88,36 @@
   .slot .label { color: #facc15; font-weight: bold; width: 24px; flex-shrink: 0; }
   .slot .title { color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* bottom row: now playing + shuffle + up next */
+  /* bottom row: volume + shuffle + now playing + up next */
   #bottom { display: flex; gap: 12px; height: 110px; flex-shrink: 0; }
+  #volume-btn,
   #shuffle-btn {
     flex: 0 0 90px; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 6px;
   }
   #shuffle-icon { font-size: 28px; opacity: 0.7; }
+  /* pure-CSS speaker icon -- no font glyph coverage needed (the emoji
+     speaker showed as a "tofu" box, this Pi has no emoji font installed) */
+  #volume-icon {
+    position: relative;
+    width: 26px; height: 24px;
+    opacity: 0.7;
+  }
+  #volume-icon::before {
+    content: '';
+    position: absolute; left: 0; top: 6px;
+    width: 9px; height: 12px;
+    background: #f2f2f2;
+    clip-path: polygon(0 25%, 40% 25%, 100% 0, 100% 100%, 40% 75%, 0 75%);
+  }
+  #volume-icon::after {
+    content: '';
+    position: absolute; left: 13px; top: 5px;
+    width: 11px; height: 14px;
+    border: 2px solid #f2f2f2;
+    border-left: none;
+    border-radius: 0 50% 50% 0 / 0 50% 50% 0;
+  }
   #shuffle-label { font-size: 11px; letter-spacing: 1px; opacity: 0.7; }
   #shuffle-btn.active #shuffle-icon,
   #shuffle-btn.active #shuffle-label { color: #facc15; opacity: 1; }
@@ -109,7 +132,7 @@
   #now-playing .transport { display: flex; gap: 10px; font-size: 20px; opacity: 0.6; }
   /* horizontally scrollable -- more than 5 can be queued, side-scroll is
      the intended way to see the rest once gesture input drives it */
-  #up-next { flex: 2; display: flex; gap: 8px; padding: 10px; overflow-x: auto; overflow-y: hidden; }
+  #up-next { flex: 1; display: flex; gap: 8px; padding: 10px; overflow-x: auto; overflow-y: hidden; }
   .queue-item { flex: 0 0 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
   .queue-item .art { width: 40px; height: 40px; background-size: cover; background-position: center; }
   .queue-item .title {
@@ -129,6 +152,11 @@
   }
   .sort-opt.chosen { border-color: #facc15; color: #facc15; }
   .sort-opt.cursor { outline: 2px solid #7dd3fc; }
+  .sort-value {
+    font-size: 12px; color: #facc15; opacity: 0.85;
+    margin-left: -4px; max-width: 140px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   /* paging */
   #paging { display: flex; justify-content: space-between; flex-shrink: 0; }
@@ -139,10 +167,16 @@
   }
 
   /* encoder selection highlight -- rotating the encoder cycles this among
-     every [data-select] element; clicking fires that element's action */
-  [data-select].encoder-selected {
-    outline: 3px solid #7dd3fc;
+     every [data-select] element; clicking fires that element's action.
+     Outline width/offset stay constant and only the color fades, since
+     outline-style can't be animated but outline-color can. */
+  [data-select] {
+    outline: 3px solid transparent;
     outline-offset: 2px;
+    transition: outline-color 300ms ease;
+  }
+  [data-select].encoder-selected {
+    outline-color: #7dd3fc;
   }
 
   /* popup overlay: volume/phone/library/spotify/now-playing open one of
@@ -191,7 +225,6 @@
   <div id="header" class="box">
     <div id="logo">JUKE.BOX</div>
     <div id="tabs">
-      <div class="tab" data-select="volume" id="sel-volume">Volume</div>
       <div class="tab active" data-select="phone" id="sel-phone">Shawn's iPhone</div>
       <div class="tab" data-select="library" id="sel-library">Library</div>
       <div class="tab" data-select="spotify" id="sel-spotify">Spotify</div>
@@ -199,6 +232,13 @@
   </div>
 
   <div id="bottom">
+    <div id="volume-btn" class="box" data-select="volume">
+      <div id="volume-icon"></div>
+    </div>
+    <div id="shuffle-btn" class="box" data-select="shuffle">
+      <div id="shuffle-icon">&#8646;</div>
+      <div id="shuffle-label">SHUFFLE</div>
+    </div>
     <div id="now-playing" class="box" data-select="nowplaying">
       <div id="np-art" class="art box"></div>
       <div class="info">
@@ -219,10 +259,6 @@
         </div>
       </div>
     </div>
-    <div id="shuffle-btn" class="box" data-select="shuffle">
-      <div id="shuffle-icon">&#8646;</div>
-      <div id="shuffle-label">SHUFFLE</div>
-    </div>
     <div id="up-next" class="box" data-select="upnext">
       <div class="box-label" style="position:absolute">up next</div>
     </div>
@@ -232,8 +268,11 @@
     <span class="box-label">sort</span>
     <div class="sort-opt" data-sort="title">Song</div>
     <div class="sort-opt" data-sort="artist">Artist</div>
+    <span class="sort-value" data-sort-value="artist"></span>
     <div class="sort-opt" data-sort="album">Album</div>
+    <span class="sort-value" data-sort-value="album"></span>
     <div class="sort-opt" data-sort="genre">Genre</div>
+    <span class="sort-value" data-sort-value="genre"></span>
   </div>
 
   <div id="board" class="box"></div>
@@ -277,23 +316,70 @@
   });
 
   // ---- library board: paginate the full snapshot from jb-library ----
-  const slotTitleEls = Array.from(document.querySelectorAll('.slot .title'));
+  // Two board modes: 'songs' (a flat, playable track list -- either the
+  // whole library sorted by title, or a category drill-down's results)
+  // and 'categories' (browsing the unique Artist/Album/Genre values
+  // themselves, before a specific one is picked).
+  const slotEls = Array.from(document.querySelectorAll('.slot'));
+  const slotTitleEls = slotEls.map((el) => el.querySelector('.title'));
   const PAGE_SIZE = slotTitleEls.length; // 100, one page of the letter+digit board
   let libraryTracks = []; // as received from jb-library, always title-sorted
-  let sortedTracks = [];  // libraryTracks re-sorted by the chosen field
+  let sortedTracks = [];  // the flat track list currently on the board
+  let categoryValues = []; // unique values for the active category field
   let sortField = 'title';
+  let categoryFilter = null; // {field, value} once a specific artist/album/genre is picked
+  let boardMode = 'songs';   // 'songs' | 'categories'
   let currentPage = 0;
 
+  function getUniqueValues(field) {
+    const seen = new Set();
+    const values = [];
+    for (const t of libraryTracks) {
+      const v = t[field];
+      if (v && !seen.has(v)) {
+        seen.add(v);
+        values.push(v);
+      }
+    }
+    values.sort((a, b) => a.localeCompare(b));
+    return values;
+  }
+
   function applySort() {
-    sortedTracks = [...libraryTracks].sort((a, b) => {
-      const av = (a[sortField] || '').toString();
-      const bv = (b[sortField] || '').toString();
-      return av.localeCompare(bv);
+    if (sortField !== 'title' && categoryFilter && categoryFilter.field === sortField) {
+      // Drilled into a specific artist/album/genre -- flat list of just
+      // the songs matching it.
+      boardMode = 'songs';
+      sortedTracks = libraryTracks
+        .filter((t) => t[sortField] === categoryFilter.value)
+        .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else if (sortField !== 'title') {
+      // Browsing the category itself -- one slot per unique value.
+      boardMode = 'categories';
+      categoryValues = getUniqueValues(sortField);
+    } else {
+      boardMode = 'songs';
+      sortedTracks = [...libraryTracks].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    }
+  }
+
+  function updateSortValueLabels() {
+    document.querySelectorAll('.sort-value').forEach((el) => {
+      const field = el.dataset.sortValue;
+      el.textContent = categoryFilter && categoryFilter.field === field ? categoryFilter.value : '';
     });
   }
 
   function renderPage() {
     const start = currentPage * PAGE_SIZE;
+    if (boardMode === 'categories') {
+      for (let i = 0; i < PAGE_SIZE; i++) {
+        const value = categoryValues[start + i];
+        slotTitleEls[i].textContent = value || '—';
+        slotTitleEls[i].title = '';
+      }
+      return;
+    }
     for (let i = 0; i < PAGE_SIZE; i++) {
       const track = sortedTracks[start + i];
       slotTitleEls[i].textContent = track ? track.title : '—';
@@ -305,9 +391,33 @@
     if (currentPage > 0) { currentPage--; renderPage(); }
   }
   function pageForward() {
-    const maxPage = Math.max(0, Math.ceil(sortedTracks.length / PAGE_SIZE) - 1);
+    const total = boardMode === 'categories' ? categoryValues.length : sortedTracks.length;
+    const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
     if (currentPage < maxPage) { currentPage++; renderPage(); }
   }
+
+  // Picking a slot: in 'categories' mode, drills into that value (shows
+  // its songs); in 'songs' mode, queues that track. No real alphanumeric
+  // code-entry input exists yet (Phase 2b), so slots are click-selectable
+  // here purely as a temporary testing stand-in -- not a real input method,
+  // this build has no mouse/touch in the final product.
+  function selectSlot(i) {
+    const start = currentPage * PAGE_SIZE;
+    if (boardMode === 'categories') {
+      const value = categoryValues[start + i];
+      if (!value) return;
+      categoryFilter = { field: sortField, value };
+      applySort();
+      currentPage = 0;
+      renderPage();
+      updateSortValueLabels();
+    } else {
+      const track = sortedTracks[start + i];
+      if (!track) return;
+      publishCmd('jukebox/jb-core/cmd', { action: 'select', track });
+    }
+  }
+  slotEls.forEach((el, i) => el.addEventListener('click', () => selectSlot(i)));
 
   // ---- now playing: from jb-source-phone, artwork cross-referenced by
   // title against the library snapshot we already have loaded for the board ----
@@ -328,13 +438,27 @@
   }
 
   function updateNowPlaying(np) {
+    if (np.status !== 'playing') {
+      // Nothing actually playing (includes jb-core's deliberate pause when
+      // the queue is empty) -- show empty rather than a frozen last track,
+      // which reads as "just paused mid-song" instead of "idle".
+      npTitle.textContent = '—';
+      npArtist.textContent = '';
+      npElapsed.textContent = '0:00';
+      npDuration.textContent = '0:00';
+      npProgressBar.style.width = '0%';
+      npPlayPause.textContent = '▶';
+      npArt.style.backgroundImage = '';
+      return;
+    }
+
     npTitle.textContent = np.title || '—';
     npArtist.textContent = np.artist || '';
     npElapsed.textContent = formatMs(np.position_ms);
     npDuration.textContent = formatMs(np.duration_ms);
     const pct = np.duration_ms ? Math.min(100, (100 * np.position_ms) / np.duration_ms) : 0;
     npProgressBar.style.width = pct + '%';
-    npPlayPause.textContent = np.status === 'playing' ? '‖' : '▶';
+    npPlayPause.textContent = '‖';
 
     const match = libraryTracks.find((t) => t.title === np.title);
     npArt.style.backgroundImage = match && match.artwork_url ? 'url(' + match.artwork_url + ')' : '';
@@ -383,18 +507,35 @@
   // Pico, arriving as USB HID keyboard events) replaces this.
   // =========================================================================
 
-  const selectables = Array.from(document.querySelectorAll('[data-select]'));
+  // Explicit rotation order -- kept in sync with actual visual layout
+  // (reading top-to-bottom, left-to-right) rather than left implicit via
+  // DOM order, so it's obvious this needs updating by hand if the layout
+  // changes again. Current layout: header row (Phone/Library/Spotify),
+  // then Volume/Shuffle/Now Playing/Up Next, then Sort, then Back/Forward.
+  const SELECT_ORDER = [
+    'phone', 'library', 'spotify', 'volume', 'shuffle',
+    'nowplaying', 'upnext', 'sort', 'back', 'forward',
+  ];
+  const selectables = SELECT_ORDER.map(
+    (key) => document.querySelector('[data-select="' + key + '"]')
+  );
   const sortOptEls = Array.from(document.querySelectorAll('.sort-opt'));
   const sortFields = sortOptEls.map((el) => el.dataset.sort);
 
   let mode = 'select'; // 'select' | 'volume' | 'upnext-scroll' | 'sort' | 'popup'
-  let selectedIndex = 0;
+  // Volume is the "home" resting position -- the thing most likely to get
+  // adjusted, so idle selection always drifts back to it -- independent
+  // of SELECT_ORDER's traversal sequence.
+  const HOME_INDEX = SELECT_ORDER.indexOf('volume');
+  let selectedIndex = HOME_INDEX;
   let sortCursor = sortFields.indexOf(sortField);
   let currentVolume = 0.3;
   let shuffleActive = false;
   let phoneConnected = false;
   let phoneName = 'Phone';
   const MODE_TIMEOUT_MS = 4000;
+  const HOME_TIMEOUT_MS = 6000;
+  let homeTimer = null;
 
   // Inactive: "SHUFFLE" + a cyclical icon (click to start shuffling).
   // Active: "SINGLES" + a single right arrow (click to go back to
@@ -414,10 +555,22 @@
     );
   }
   highlightSelection();
+  armHomeTimeout();
 
   function armModeTimeout() {
     clearTimeout(modeTimer);
     modeTimer = setTimeout(exitMode, MODE_TIMEOUT_MS);
+  }
+
+  function armHomeTimeout() {
+    clearTimeout(homeTimer);
+    homeTimer = setTimeout(goHome, HOME_TIMEOUT_MS);
+  }
+
+  function goHome() {
+    if (mode !== 'select') return; // only drifts home while at rest
+    selectedIndex = HOME_INDEX;
+    highlightSelection();
   }
 
   function exitMode() {
@@ -427,6 +580,7 @@
     hidePopup();
     updateSortHighlight();
     highlightSelection();
+    armHomeTimeout();
   }
 
   function showPopup(title, bodyHtml) {
@@ -473,6 +627,7 @@
     if (mode === 'select') {
       selectedIndex = (selectedIndex + direction + selectables.length) % selectables.length;
       highlightSelection();
+      armHomeTimeout();
       return;
     }
     if (mode === 'volume') {
@@ -489,11 +644,17 @@
   }
 
   function click() {
+    if (mode === 'select') armHomeTimeout(); // any activity resets the idle clock
     if (mode === 'sort') {
-      sortField = sortFields[sortCursor];
+      const chosen = sortFields[sortCursor];
+      if (chosen === sortField && categoryFilter && categoryFilter.field === chosen) {
+        categoryFilter = null; // already drilled in -- go back up to the category list
+      }
+      sortField = chosen;
       applySort();
       currentPage = 0;
       renderPage();
+      updateSortValueLabels();
       exitMode();
       return;
     }
