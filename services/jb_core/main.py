@@ -128,6 +128,15 @@ async def main() -> None:
                 ):
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
+            elif topic == "jukebox/jb-source-phone/play-error":
+                # The commanded track never actually started (e.g. a stale
+                # item_path from a library snapshot crawled before the last
+                # AVRCP reconnect) -- don't sit believing it's "now playing"
+                # forever. Drop the expectation and try the next queued track.
+                log.warning("play_item failed on the bus, advancing queue: %r", payload.get("item_path"))
+                q.expected_title = None
+                await try_autoplay(bus, q, log)
+
             elif topic == "jukebox/jb-source-phone/now-playing":
                 title = payload.get("title")
                 if not title:

@@ -4,12 +4,31 @@ import os
 
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
+from dbus_next.errors import DBusError
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
 
 SERVICE_NAME = "jb-source-phone"
 BLUEZ = "org.bluez"
+
+# Right after an AVRCP renegotiation (BlueZ tearing down the old player
+# object and standing up a new one), the browsing channel can still be
+# settling and answers with a transient "Device or resource busy" -- retry
+# rather than leaving the caller (jb-library's crawl) with a stale result.
+DBUS_RETRY_ATTEMPTS = 5
+DBUS_RETRY_DELAY_S = 0.5
+
+
+async def _dbus_retry(coro_fn):
+    last_error = None
+    for attempt in range(DBUS_RETRY_ATTEMPTS):
+        try:
+            return await coro_fn()
+        except DBusError as e:
+            last_error = e
+            await asyncio.sleep(DBUS_RETRY_DELAY_S)
+    raise last_error
 
 # The AVRCP browse position lives server-side in bluetoothd, not in our
 # process -- so a plain in-memory "we started at root" assumption breaks the
@@ -100,11 +119,11 @@ class Phone:
                     f"can't navigate to Songs from unknown scope {self.current_scope!r} "
                     "(ChangeFolder can't jump straight back to root)"
                 )
-            await self._enter_folder_by_name("/My Music")
-            await self._enter_folder_by_name("/Songs")
+            await _dbus_retry(lambda: self._enter_folder_by_name("/My Music"))
+            await _dbus_retry(lambda: self._enter_folder_by_name("/Songs"))
             self.current_scope = "songs"
             save_nav_scope(self.player_path, self.current_scope)
-        items = await self.folder_iface.call_list_items({})
+        items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
         return [
             {"item_path": path, "title": props["Name"].value if "Name" in props else None}
             for path, props in items.items()
@@ -194,7 +213,11 @@ async def main() -> None:
         if action in ("play", "pause", "next", "previous"):
             await phone.transport(action)
         elif action == "play_item":
-            await phone.play_item(cmd["item_path"])
+            try:
+                await phone.play_item(cmd["item_path"])
+            except Exception:
+                log.exception("play_item failed: %r", cmd["item_path"])
+                await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", cmd)
         elif action == "crawl":
             tracks = await phone.crawl_songs()
             await bus.publish(
