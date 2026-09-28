@@ -157,8 +157,19 @@ Raw keys become logical actions; runs in parallel with 2a using any USB keyboard
 - [ ] Keycode to logical name mapping in a config file
 - [ ] Gesture engine: click, double-click, hold, push-and-turn, with configurable thresholds (about 300 ms double window, 700 ms hold)
 - [ ] Publish logical actions; action-to-function mapping lives in config and is decided later
+- [ ] Wire up the draft gesture-to-function mapping below once jb-input exists (jb-ui currently reads the encoder directly as an interim stand-in)
 
 Done when: every gesture fires reliably with no false triggers.
+
+### Gesture-to-function mapping (draft)
+
+Ideas from a 2026-09-27 design conversation, not yet implemented — captured here so Phase 2b's gesture engine and the phases that own each function (noted below) have a starting point instead of designing from scratch. All of it lives in config per the Phase 2b design, so it costs nothing to change once real use reveals what actually feels right. The 20 alphanumeric keys are deliberately excluded: their function is purely positional (which letter, which digit), so a single press each is all they should ever need.
+
+- **Now Playing** (function owned by Phase 4/6 transport, gesture routed through jb-core's queue so it stays authoritative rather than issuing a raw "next"): click = play/pause toggle; double-click = skip to next track; hold = previous/restart current track.
+- **Volume**: double-click = toggle mute (jb-audio's `toggle_mute` command already exists — see `services/jb_audio/main.py` — nothing currently triggers it), distinct from the existing single-click-to-enter-slider-adjust-mode.
+- **Phone** (Phase 4): click = quick glance at who's connected (already built); hold = open the phone pairing/management screen (pair new, forget old) — keeps the common case uncluttered by the rarer, more deliberate one.
+- **Reset**: click = cancel/back (already the plan's draft default); hold (several seconds) = full reboot, a "something's frozen, get me out" recovery path distinct from the soft-cancel click.
+- **Up Next — still undecided**: how to remove a specific queued item once it's reachable via Up Next's scroll mode (click vs. hold). Needs a decision before Phase 6/7 implement it.
 
 ## Phase 2c: LED board build
 
@@ -207,6 +218,7 @@ Pairing, multiple phones, and switching between them, built on the Phase 3 findi
 - [ ] Auto-reconnect on boot: last active phone, then others by most recent use
 - [ ] Publish the connected phone's name (drives the source tab label)
 - [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork
+- [ ] Phone button hold gesture opens the pairing/management screen, distinct from a plain click's quick-glance status (see the gesture-to-function mapping in Phase 2b)
 
 Done when: the phone reconnects on boot, two phones switch from the command line, and a track ID on the bus plays that song.
 
@@ -231,6 +243,8 @@ The jukebox behavior, working end to end with no UI.
 - [ ] Paging, sort-mode cycling, menu state
 - [ ] Selection queue using the Phase 3 end-of-track strategy; queue clears on phone switch
 - [ ] Record plays for the popular view
+- [ ] Now Playing double-click (skip to next) and hold (previous/restart) drive through this same queue mechanism, not a raw transport command (see the gesture-to-function mapping in Phase 2b)
+- [ ] Up Next item-removal gesture, once decided (see the open question in Phase 2b's gesture-to-function mapping)
 
 Done when: select, queue three songs, they play in order, and paging and sorting change what each key selects.
 
@@ -290,6 +304,7 @@ It behaves like a machine, not a computer.
 - [ ] Phone leaves range mid-song; power cut during a sync
 - [ ] Log rotation; read-only or overlay root filesystem
 - [ ] Cold boot to a working jukebox in under a minute
+- [ ] Reset button hold (several seconds) triggers a full reboot, as a physical recovery path distinct from its click = cancel/back (see the gesture-to-function mapping in Phase 2b)
 
 Done when: 10 pull-the-plug tests pass in a row.
 
@@ -309,7 +324,8 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 
 | Decision | Needed by | Current thinking |
 | --- | --- | --- |
-| Button and gesture mapping | Phase 2b config | Deferred. Draft: knob turn = volume, push + turn = paging, Reset = cancel/back. Lives in config, costs nothing to change |
+| Button and gesture mapping | Phase 2b config | Deferred. Draft: knob turn = volume, push + turn = paging, Reset = cancel/back, plus the click/double-click/hold mapping in Phase 2b's "Gesture-to-function mapping" section. Lives in config, costs nothing to change |
+| Up Next: removing a queued item | Phase 6/7 | Undecided — click vs. hold once an item is reachable via Up Next's scroll mode; see Phase 2b's gesture-to-function mapping |
 | Connection policy: takeover vs. locked | Phase 4 | Locked: switching only from the jukebox menu |
 | Monitor size, resolution, aspect | Phase 7 | Mockup is 4:3 |
 | Coin-return retrofit feasibility | Phase 2a | Fallback: separate panel knob, still fits the pin budget |
