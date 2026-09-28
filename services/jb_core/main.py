@@ -27,6 +27,12 @@ class Queue:
         self.library_tracks: list[dict] = []
         self.expected_title: str | None = None
         self.last_seen_title: str | None = None
+        # Readiness check before playing anything -- what this means
+        # depends on the active source. Only the phone source exists so
+        # far; Library/Spotify (Phases 9/10+, not built) will need their
+        # own equivalent ("are there any songs loaded locally?", etc.)
+        # when they exist.
+        self.phone_connected = False
 
     def refill_shuffle(self) -> None:
         if not self.shuffle_active or not self.library_tracks:
@@ -51,24 +57,35 @@ class Queue:
 
 
 SHUFFLE_AUTOPLAY_DELAY_S = 4.0
+RECONNECT_AUTOPLAY_DELAY_S = 1.5
 
 
-async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
-    """A few seconds after shuffle turns on, start it playing rather than
-    waiting for whatever's already playing to end on its own -- gives
-    immediate feedback that shuffle mode actually did something."""
-    await asyncio.sleep(SHUFFLE_AUTOPLAY_DELAY_S)
-    if not q.shuffle_active:
-        return  # toggled back off during the delay
+async def try_autoplay(bus: Bus, q: Queue, log, delay: float = 0.0) -> None:
+    if delay:
+        await asyncio.sleep(delay)
     next_track = q.pop_next()
     if next_track:
-        log.info("shuffle auto-play: %s", next_track["title"])
+        log.info("autoplay: %s", next_track["title"])
         await bus.publish(
             "jukebox/jb-source-phone/cmd",
             {"action": "play_item", "item_path": next_track["item_path"]},
         )
         q.expected_title = next_track["title"]
         await publish_queue(bus, q)
+
+
+async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
+    """A few seconds after shuffle turns on, start it playing rather than
+    waiting for whatever's already playing to end on its own -- gives
+    immediate feedback that shuffle mode actually did something. No-ops if
+    there's no phone to play through (a "connect device" notice already
+    went out when shuffle was requested); the queue is left intact so it
+    plays automatically once a phone actually connects (see the
+    "connected" handler)."""
+    await asyncio.sleep(SHUFFLE_AUTOPLAY_DELAY_S)
+    if not q.shuffle_active or not q.phone_connected:
+        return
+    await try_autoplay(bus, q, log)
 
 
 async def publish_queue(bus: Bus, q: Queue) -> None:
@@ -95,12 +112,21 @@ async def main() -> None:
                 q.library_tracks = payload.get("tracks", [])
 
             elif topic == "jukebox/jb-source-phone/connected":
+                was_connected = q.phone_connected
+                q.phone_connected = bool(payload.get("connected"))
                 # Don't fight whatever's already playing on a fresh
                 # (re)connect -- re-establish baseline on the next
                 # now-playing update instead of treating it as an
                 # unexpected change to override.
                 q.expected_title = None
                 q.last_seen_title = None
+                # If something got queued up while disconnected (a manual
+                # pick, or shuffle turned on with nothing to play through),
+                # start it now that a phone actually exists to play it on.
+                if q.phone_connected and not was_connected and (
+                    q.manual or (q.shuffle_active and q.shuffle_buffer)
+                ):
+                    asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
             elif topic == "jukebox/jb-source-phone/now-playing":
                 title = payload.get("title")
@@ -118,8 +144,7 @@ async def main() -> None:
                 if q.expected_title is not None and title == q.expected_title:
                     continue  # our own commanded change taking effect
                 # The track changed without our say-so (iOS auto-advanced
-                # on its own) -- take over if we have anything queued,
-                # otherwise just accept it as the new baseline.
+                # on its own) -- take over if we have anything queued.
                 next_track = q.pop_next()
                 if next_track:
                     log.info("overriding auto-advance with queued track: %s", next_track["title"])
@@ -129,7 +154,14 @@ async def main() -> None:
                     )
                     q.expected_title = next_track["title"]
                 else:
-                    q.expected_title = title
+                    # Nothing queued -- a jukebox with nothing left to play
+                    # should stop, not silently keep going with whatever
+                    # iOS auto-advanced to on its own (that's exactly the
+                    # "iOS's queue is never used" principle this whole
+                    # service exists to enforce).
+                    log.info("queue empty, pausing instead of letting iOS auto-advance run")
+                    await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+                    q.expected_title = None
                 await publish_queue(bus, q)
 
             elif topic == "jukebox/jb-core/cmd":
@@ -139,12 +171,17 @@ async def main() -> None:
                     if track:
                         q.manual.append(track)
                         log.info("queued manual selection: %s", track.get("title"))
+                        if not q.phone_connected:
+                            await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
                         await publish_queue(bus, q)
                 elif action == "shuffle_on":
                     q.shuffle_active = True
                     q.refill_shuffle()
                     await publish_queue(bus, q)
-                    asyncio.create_task(shuffle_autoplay(bus, q, log))
+                    if q.phone_connected:
+                        asyncio.create_task(shuffle_autoplay(bus, q, log))
+                    else:
+                        await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
                 elif action == "shuffle_off":
                     q.shuffle_active = False
                     q.shuffle_buffer = []

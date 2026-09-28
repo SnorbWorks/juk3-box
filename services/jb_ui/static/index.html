@@ -116,6 +116,7 @@
     font-size: 11px; color: rgba(255,255,255,0.5); text-align: center;
     max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  #upnext-empty-msg { margin: auto; font-size: 13px; opacity: 0.5; text-align: center; padding: 0 20px; }
 
   /* sort row */
   #sort-row {
@@ -344,7 +345,16 @@
 
   function renderUpNext(data) {
     upNext.innerHTML = '';
-    (data.upcoming || []).forEach((track, i) => {
+    setShuffleUI(!!data.shuffle_active); // jb-core is the source of truth
+    const tracks = data.upcoming || [];
+    if (tracks.length === 0) {
+      const msg = document.createElement('div');
+      msg.id = 'upnext-empty-msg';
+      msg.textContent = 'Select any Single. Or tap Shuffle to auto play.';
+      upNext.appendChild(msg);
+      return;
+    }
+    tracks.forEach((track, i) => {
       const item = document.createElement('div');
       item.className = 'queue-item';
       const art = document.createElement('div');
@@ -385,6 +395,17 @@
   let phoneConnected = false;
   let phoneName = 'Phone';
   const MODE_TIMEOUT_MS = 4000;
+
+  // Inactive: "SHUFFLE" + a cyclical icon (click to start shuffling).
+  // Active: "SINGLES" + a single right arrow (click to go back to
+  // normal single-play/manual mode) -- the label itself is the mode
+  // indicator, not just an icon color.
+  function setShuffleUI(active) {
+    shuffleActive = active;
+    document.getElementById('shuffle-btn').classList.toggle('active', active);
+    document.getElementById('shuffle-icon').innerHTML = active ? '&#8594;' : '&#8646;';
+    document.getElementById('shuffle-label').textContent = active ? 'SINGLES' : 'SHUFFLE';
+  }
   let modeTimer = null;
 
   function highlightSelection() {
@@ -415,6 +436,16 @@
   }
   function hidePopup() {
     document.getElementById('popup-overlay').classList.remove('visible');
+  }
+
+  // A backend-triggered popup (e.g. "connect device") that isn't part of
+  // the encoder mode/click state machine -- shows briefly, then closes
+  // itself, without disturbing whatever mode the user is actually in.
+  function flashNotice(title, bodyHtml, duration = 4000) {
+    showPopup(title, bodyHtml);
+    setTimeout(() => {
+      if (mode === 'select') hidePopup();
+    }, duration);
   }
 
   function renderVolumePopup() {
@@ -503,9 +534,7 @@
         armModeTimeout();
         break;
       case 'shuffle':
-        shuffleActive = !shuffleActive;
-        document.getElementById('shuffle-btn').classList.toggle('active', shuffleActive);
-        document.getElementById('shuffle-label').textContent = shuffleActive ? 'JUKEBOX' : 'SHUFFLE';
+        setShuffleUI(!shuffleActive);
         publishCmd('jukebox/jb-core/cmd', { action: shuffleActive ? 'shuffle_on' : 'shuffle_off' });
         break;
       case 'upnext':
@@ -577,6 +606,11 @@
       if (typeof data.volume === 'number') {
         currentVolume = data.volume;
         if (mode === 'volume') renderVolumePopup();
+      }
+    } else if (topic === 'jukebox/jb-core/notice') {
+      const data = JSON.parse(payload.toString());
+      if (data.type === 'connect_device') {
+        flashNotice('CONNECT DEVICE', 'Please connect your phone to continue.');
       }
     }
 
