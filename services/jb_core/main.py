@@ -50,6 +50,27 @@ class Queue:
         return (self.manual + self.shuffle_buffer)[:limit]
 
 
+SHUFFLE_AUTOPLAY_DELAY_S = 4.0
+
+
+async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
+    """A few seconds after shuffle turns on, start it playing rather than
+    waiting for whatever's already playing to end on its own -- gives
+    immediate feedback that shuffle mode actually did something."""
+    await asyncio.sleep(SHUFFLE_AUTOPLAY_DELAY_S)
+    if not q.shuffle_active:
+        return  # toggled back off during the delay
+    next_track = q.pop_next()
+    if next_track:
+        log.info("shuffle auto-play: %s", next_track["title"])
+        await bus.publish(
+            "jukebox/jb-source-phone/cmd",
+            {"action": "play_item", "item_path": next_track["item_path"]},
+        )
+        q.expected_title = next_track["title"]
+        await publish_queue(bus, q)
+
+
 async def publish_queue(bus: Bus, q: Queue) -> None:
     await bus.publish(
         "jukebox/jb-core/queue",
@@ -123,6 +144,7 @@ async def main() -> None:
                     q.shuffle_active = True
                     q.refill_shuffle()
                     await publish_queue(bus, q)
+                    asyncio.create_task(shuffle_autoplay(bus, q, log))
                 elif action == "shuffle_off":
                     q.shuffle_active = False
                     q.shuffle_buffer = []

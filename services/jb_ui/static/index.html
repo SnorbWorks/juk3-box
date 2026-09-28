@@ -95,7 +95,9 @@
     align-items: center; justify-content: center; gap: 6px;
   }
   #shuffle-icon { font-size: 28px; opacity: 0.7; }
-  #shuffle-btn.active #shuffle-icon { color: #facc15; opacity: 1; }
+  #shuffle-label { font-size: 11px; letter-spacing: 1px; opacity: 0.7; }
+  #shuffle-btn.active #shuffle-icon,
+  #shuffle-btn.active #shuffle-label { color: #facc15; opacity: 1; }
   #now-playing { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px; }
   #now-playing .art { width: 80px; height: 80px; flex-shrink: 0; background-size: cover; background-position: center; }
   #now-playing .info { flex: 1; min-width: 0; }
@@ -217,8 +219,8 @@
       </div>
     </div>
     <div id="shuffle-btn" class="box" data-select="shuffle">
-      <span class="box-label">shuffle</span>
       <div id="shuffle-icon">&#8646;</div>
+      <div id="shuffle-label">SHUFFLE</div>
     </div>
     <div id="up-next" class="box" data-select="upnext">
       <div class="box-label" style="position:absolute">up next</div>
@@ -503,6 +505,7 @@
       case 'shuffle':
         shuffleActive = !shuffleActive;
         document.getElementById('shuffle-btn').classList.toggle('active', shuffleActive);
+        document.getElementById('shuffle-label').textContent = shuffleActive ? 'JUKEBOX' : 'SHUFFLE';
         publishCmd('jukebox/jb-core/cmd', { action: shuffleActive ? 'shuffle_on' : 'shuffle_off' });
         break;
       case 'upnext':

@@ -145,7 +145,7 @@ async def main() -> None:
 
     phone: Phone | None = None
 
-    async def connect_current_phone(bus: Bus):
+    async def connect_current_phone(bus: Bus, retries: int = 5, retry_delay: float = 0.8):
         nonlocal phone
         found = await find_connected_player(system_bus)
         if not found:
@@ -153,15 +153,34 @@ async def main() -> None:
             await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
             return
         device_path, player_path = found
-        phone = Phone(system_bus, device_path, player_path)
-        await phone.setup()
-        phone.mac = device_path.rsplit("dev_", 1)[-1].replace("_", ":")
-        log.info("phone connected: %s (%s)", phone.name, phone.mac)
-        await bus.publish(
-            f"jukebox/{SERVICE_NAME}/connected",
-            {"connected": True, "name": phone.name, "mac": phone.mac},
-            retain=True,
-        )
+        # Right after (re)connect, BlueZ sometimes registers MediaPlayer1
+        # slightly before MediaFolder1/Properties are fully up on the same
+        # object -- setup() can throw on that race. Retry a few times
+        # rather than leaving a half-initialized Phone sitting around
+        # (which would spam AttributeErrors from poll_now_playing forever
+        # and never republish "connected").
+        for attempt in range(1, retries + 1):
+            candidate = Phone(system_bus, device_path, player_path)
+            try:
+                await candidate.setup()
+            except Exception:
+                log.warning(
+                    "phone setup failed (attempt %d/%d), retrying", attempt, retries, exc_info=True
+                )
+                await asyncio.sleep(retry_delay)
+                continue
+            phone = candidate
+            phone.mac = device_path.rsplit("dev_", 1)[-1].replace("_", ":")
+            log.info("phone connected: %s (%s)", phone.name, phone.mac)
+            await bus.publish(
+                f"jukebox/{SERVICE_NAME}/connected",
+                {"connected": True, "name": phone.name, "mac": phone.mac},
+                retain=True,
+            )
+            return
+        log.error("phone setup failed after %d attempts, giving up", retries)
+        phone = None
+        await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
 
     async def handle_command(bus: Bus, cmd: dict):
         nonlocal phone
