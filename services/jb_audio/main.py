@@ -37,7 +37,9 @@ async def handle_command(bus: Bus, log, cmd: dict) -> None:
     if action == "volume_delta":
         delta = cmd.get("value", 0)
         sign = "+" if delta >= 0 else "-"
-        await run_wpctl("set-volume", SINK, f"{abs(delta) * 100:.0f}%{sign}")
+        # wpctl allows over-amplification above 100% by default -- cap it,
+        # both to keep the UI's bar meaningful and to avoid clipping/distortion.
+        await run_wpctl("set-volume", "-l", "1.0", SINK, f"{abs(delta) * 100:.0f}%{sign}")
     elif action == "mute":
         await run_wpctl("set-mute", SINK, "1")
     elif action == "unmute":

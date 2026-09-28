@@ -173,7 +173,7 @@
   [data-select] {
     outline: 3px solid transparent;
     outline-offset: 2px;
-    transition: outline-color 300ms ease;
+    transition: outline-color 600ms ease;
   }
   [data-select].encoder-selected {
     outline-color: #7dd3fc;
@@ -764,9 +764,14 @@
       phoneTab.classList.toggle('active', phoneConnected);
     } else if (topic === 'jukebox/jb-audio/state') {
       const data = JSON.parse(payload.toString());
-      if (typeof data.volume === 'number') {
+      // While actively turning the volume knob, our own optimistic local
+      // math (in rotate()) is authoritative -- a backend confirmation for
+      // an older command can arrive after several newer local updates
+      // already moved the display further, and applying it would snap the
+      // slider backwards even though the real volume never actually
+      // dropped. Only resync from the backend once the knob is at rest.
+      if (typeof data.volume === 'number' && mode !== 'volume') {
         currentVolume = data.volume;
-        if (mode === 'volume') renderVolumePopup();
       }
     } else if (topic === 'jukebox/jb-core/notice') {
       const data = JSON.parse(payload.toString());
