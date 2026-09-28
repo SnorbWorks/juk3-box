@@ -192,6 +192,8 @@ Done when: both chains run test patterns while music plays, with no audio artifa
 
 Throwaway test code that answers ten questions before any real phone service is built. The Pi runs as an A2DP sink and AVRCP controller; pair an iPhone and record results below.
 
+**Intentional: A2DP + AVRCP only, never HFP/HSP.** The jukebox should only ever receive media playback audio (Music, Spotify, Podcasts, etc.), never phone calls, Siri, or system/notification sounds. iOS decides what to route to a Bluetooth device based on which profiles it advertises — A2DP-only makes it look like a plain speaker, so calls/Siri/system audio stay on the phone. Adding HFP/HSP later would make the jukebox a usable speakerphone, which is explicitly not wanted; don't add those profiles without revisiting this decision.
+
 | # | Question | Decides | Result |
 | --- | --- | --- | --- |
 | 1 | Do streaming/Apple Music library items appear, or only downloads? | What the board can show |  |
