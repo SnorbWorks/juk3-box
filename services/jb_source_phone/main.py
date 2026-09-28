@@ -1,6 +1,4 @@
 import asyncio
-import json
-import os
 
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
@@ -30,30 +28,6 @@ async def _dbus_retry(coro_fn):
             await asyncio.sleep(DBUS_RETRY_DELAY_S)
     raise last_error
 
-# The AVRCP browse position lives server-side in bluetoothd, not in our
-# process -- so a plain in-memory "we started at root" assumption breaks the
-# moment our service restarts without the underlying player object also being
-# recreated (which only happens on AVRCP renegotiation, not on our restarts).
-# Persist it, keyed by player path, so restarts don't lose track of where we are.
-NAV_STATE_PATH = "/var/lib/juk3-box/source_phone_nav.json"
-
-
-def load_nav_state() -> dict:
-    if os.path.exists(NAV_STATE_PATH):
-        try:
-            with open(NAV_STATE_PATH) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-
-def save_nav_scope(player_path: str, scope: str) -> None:
-    state = load_nav_state()
-    state[player_path] = scope
-    with open(NAV_STATE_PATH, "w") as f:
-        json.dump(state, f)
-
 
 class Phone:
     """Wraps the currently connected phone's BlueZ AVRCP objects."""
@@ -65,14 +39,6 @@ class Phone:
         self.player_iface = None
         self.player_props_iface = None
         self.name = None
-        # BlueZ's ChangeFolder only moves one level at a time (down into a
-        # listed child, or up to the immediate parent) -- there's no jump
-        # straight to an arbitrary ancestor. So we track where we are
-        # ourselves, persisted across restarts (see NAV_STATE_PATH). A truly
-        # new player (never seen before) is assumed to start at Filesystem
-        # root per the AVRCP spec default. This only holds if nothing else
-        # is driving this player's browse position, true for our appliance.
-        self.current_scope = load_nav_state().get(player_path, "root")
 
     async def setup(self):
         dev_intro = await self.system_bus.introspect(BLUEZ, self.device_path)
@@ -112,21 +78,37 @@ class Phone:
         raise RuntimeError(f"folder not found: {name_suffix}")
 
     async def crawl_songs(self) -> list:
-        """Navigate Filesystem > My Music > Songs and list every track (title only, per AVRCP limits)."""
-        if self.current_scope != "songs":
-            if self.current_scope != "root":
-                raise RuntimeError(
-                    f"can't navigate to Songs from unknown scope {self.current_scope!r} "
-                    "(ChangeFolder can't jump straight back to root)"
-                )
+        """Navigate Filesystem > My Music > Songs and list every track (title only, per AVRCP limits).
+        The AVRCP browse position is stateful server-side in bluetoothd, not in
+        our process, and ChangeFolder can only move one level at a time (down
+        into a listed child; BlueZ rejects an arbitrary jump straight back to
+        root with "Invalid arguments", confirmed live). We used to track our
+        own belief about the position and persist it across restarts, but that
+        broke badly after a full reboot: BlueZ's player path numbering restarts
+        from player0 too, so a persisted "we're already in Songs" belief from a
+        previous, unrelated session got silently applied to a brand-new player
+        that was actually still sitting at Filesystem root -- the crawl listed
+        the top-level folders as if they were songs, and every subsequent
+        play_item failed with "interface not found". Ask BlueZ's own Name
+        property where we actually are instead of trusting anything remembered
+        -- it can't go stale since it's queried fresh every time."""
+        current = await _dbus_retry(lambda: self.player_props_iface.call_get("org.bluez.MediaFolder1", "Name"))
+        current = current.value
+        if current == "/Filesystem":
             await _dbus_retry(lambda: self._enter_folder_by_name("/My Music"))
             await _dbus_retry(lambda: self._enter_folder_by_name("/Songs"))
-            self.current_scope = "songs"
-            save_nav_scope(self.player_path, self.current_scope)
+        elif current == "/Filesystem/My Music":
+            await _dbus_retry(lambda: self._enter_folder_by_name("/Songs"))
+        elif current != "/Filesystem/My Music/Songs":
+            raise RuntimeError(f"can't navigate to Songs from unexpected browse position {current!r}")
         items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
+        # Defensive: every entry here should be a playable track, not a
+        # sub-folder -- but this is exactly the assumption that silently broke
+        # before, so verify it instead of trusting it blindly.
         return [
             {"item_path": path, "title": props["Name"].value if "Name" in props else None}
             for path, props in items.items()
+            if props.get("Type", None) is None or props["Type"].value != "folder"
         ]
 
     async def play_item(self, item_path: str):
