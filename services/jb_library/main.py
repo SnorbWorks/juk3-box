@@ -120,12 +120,15 @@ async def publish_snapshot(bus: Bus, conn: sqlite3.Connection, log) -> None:
     can slice/sort client-side."""
     rows = conn.execute(
         """
-        SELECT title, artist, album, artwork_url, item_path
+        SELECT title, artist, album, genre, artwork_url, item_path
         FROM tracks ORDER BY title COLLATE NOCASE
         """
     ).fetchall()
     tracks = [
-        {"title": r[0], "artist": r[1], "album": r[2], "artwork_url": r[3], "item_path": r[4]}
+        {
+            "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
+            "artwork_url": r[4], "item_path": r[5],
+        }
         for r in rows
     ]
     await bus.publish("jukebox/jb-library/tracks", {"tracks": tracks}, retain=True)

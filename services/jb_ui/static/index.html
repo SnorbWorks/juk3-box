@@ -88,17 +88,44 @@
   .slot .label { color: #facc15; font-weight: bold; width: 24px; flex-shrink: 0; }
   .slot .title { color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* bottom row: now playing + up next */
+  /* bottom row: now playing + shuffle + up next */
   #bottom { display: flex; gap: 12px; height: 110px; flex-shrink: 0; }
+  #shuffle-btn {
+    flex: 0 0 90px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px;
+  }
+  #shuffle-icon { font-size: 28px; opacity: 0.7; }
+  #shuffle-btn.active #shuffle-icon { color: #facc15; opacity: 1; }
   #now-playing { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px; }
-  #now-playing .art { width: 80px; height: 80px; flex-shrink: 0; }
+  #now-playing .art { width: 80px; height: 80px; flex-shrink: 0; background-size: cover; background-position: center; }
   #now-playing .info { flex: 1; min-width: 0; }
   #now-playing .info .label { display: block; }
+  #np-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #np-progress-wrap { display: flex; align-items: center; gap: 6px; font-size: 10px; opacity: 0.6; margin-top: 4px; }
+  .np-progress-track { flex: 1; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden; }
+  #np-progress-bar { height: 100%; width: 0%; background: #facc15; }
   #now-playing .transport { display: flex; gap: 10px; font-size: 20px; opacity: 0.6; }
-  #up-next { flex: 2; display: flex; gap: 8px; padding: 10px; overflow: hidden; }
-  .queue-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-  .queue-item .art { width: 40px; height: 40px; }
-  .queue-item .title { font-size: 11px; color: rgba(255,255,255,0.5); }
+  /* horizontally scrollable -- more than 5 can be queued, side-scroll is
+     the intended way to see the rest once gesture input drives it */
+  #up-next { flex: 2; display: flex; gap: 8px; padding: 10px; overflow-x: auto; overflow-y: hidden; }
+  .queue-item { flex: 0 0 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .queue-item .art { width: 40px; height: 40px; background-size: cover; background-position: center; }
+  .queue-item .title {
+    font-size: 11px; color: rgba(255,255,255,0.5); text-align: center;
+    max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* sort row */
+  #sort-row {
+    display: flex; align-items: center; gap: 10px;
+    height: 40px; flex-shrink: 0; padding: 0 12px;
+  }
+  .sort-opt {
+    padding: 4px 14px; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px;
+    font-size: 13px; color: rgba(255,255,255,0.6);
+  }
+  .sort-opt.chosen { border-color: #facc15; color: #facc15; }
+  .sort-opt.cursor { outline: 2px solid #7dd3fc; }
 
   /* paging */
   #paging { display: flex; justify-content: space-between; flex-shrink: 0; }
@@ -107,6 +134,36 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; letter-spacing: 2px;
   }
+
+  /* encoder selection highlight -- rotating the encoder cycles this among
+     every [data-select] element; clicking fires that element's action */
+  [data-select].encoder-selected {
+    outline: 3px solid #7dd3fc;
+    outline-offset: 2px;
+  }
+
+  /* popup overlay: volume/phone/library/spotify/now-playing open one of
+     these when clicked. Volume's also stays open while the encoder's
+     rotation is repurposed as the volume slider. */
+  #popup-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 10;
+    background: rgba(0,0,0,0.7);
+    align-items: center; justify-content: center;
+  }
+  #popup-overlay.visible { display: flex; }
+  #popup-box {
+    background: #14141a; border: 1px solid rgba(255,255,255,0.2); border-radius: 16px;
+    padding: 48px 64px; min-width: 420px; text-align: center;
+  }
+  #popup-title { font-size: 42px; letter-spacing: 3px; margin-bottom: 24px; }
+  #popup-body { font-size: 20px; opacity: 0.8; }
+  .volume-slider-track {
+    width: 320px; height: 14px; border-radius: 7px;
+    background: rgba(255,255,255,0.15); overflow: hidden; margin: 0 auto;
+  }
+  .volume-slider-fill { height: 100%; background: #facc15; }
+  .volume-pct { font-size: 28px; margin-top: 16px; }
 
   #debug {
     position: fixed; bottom: 10px; left: 12px; z-index: 3;
@@ -131,36 +188,67 @@
   <div id="header" class="box">
     <div id="logo">JUKE.BOX</div>
     <div id="tabs">
-      <div class="tab active">Shawn's iPhone</div>
-      <div class="tab">Library</div>
-      <div class="tab">Spotify</div>
-      <div class="tab">+</div>
+      <div class="tab" data-select="volume" id="sel-volume">Volume</div>
+      <div class="tab active" data-select="phone" id="sel-phone">Shawn's iPhone</div>
+      <div class="tab" data-select="library" id="sel-library">Library</div>
+      <div class="tab" data-select="spotify" id="sel-spotify">Spotify</div>
     </div>
   </div>
 
   <div id="bottom">
-    <div id="now-playing" class="box">
-      <div class="art box"></div>
+    <div id="now-playing" class="box" data-select="nowplaying">
+      <div id="np-art" class="art box"></div>
       <div class="info">
         <span class="box-label">now playing</span>
-        <div>—</div>
-        <div style="opacity:0.5">—</div>
-        <div class="transport">&#9198; &#9199; &#9197;</div>
+        <div id="np-title">—</div>
+        <div id="np-artist" style="opacity:0.5">—</div>
+        <div id="np-progress-wrap">
+          <span id="np-elapsed">0:00</span>
+          <div class="np-progress-track">
+            <div id="np-progress-bar"></div>
+          </div>
+          <span id="np-duration">0:00</span>
+        </div>
+        <div class="transport">
+          <span id="np-prev">&#9664;&#9664;</span>
+          <span id="np-playpause">&#9654;</span>
+          <span id="np-next">&#9654;&#9654;</span>
+        </div>
       </div>
     </div>
-    <div id="up-next" class="box">
+    <div id="shuffle-btn" class="box" data-select="shuffle">
+      <span class="box-label">shuffle</span>
+      <div id="shuffle-icon">&#8646;</div>
+    </div>
+    <div id="up-next" class="box" data-select="upnext">
       <div class="box-label" style="position:absolute">up next</div>
     </div>
+  </div>
+
+  <div id="sort-row" class="box" data-select="sort">
+    <span class="box-label">sort</span>
+    <div class="sort-opt" data-sort="title">Song</div>
+    <div class="sort-opt" data-sort="artist">Artist</div>
+    <div class="sort-opt" data-sort="album">Album</div>
+    <div class="sort-opt" data-sort="genre">Genre</div>
   </div>
 
   <div id="board" class="box"></div>
 
   <div id="paging">
-    <div class="page-btn box">&larr; BACK</div>
-    <div class="page-btn box">FORWARD &rarr;</div>
+    <div class="page-btn box" data-select="back">&larr; BACK</div>
+    <div class="page-btn box" data-select="forward">FORWARD &rarr;</div>
   </div>
 
 </div>
+
+<div id="popup-overlay">
+  <div id="popup-box">
+    <div id="popup-title"></div>
+    <div id="popup-body"></div>
+  </div>
+</div>
+
 <div id="debug">
   <div id="status" class="disconnected">connecting...</div>
   <div id="log"></div>
@@ -188,13 +276,23 @@
   // ---- library board: paginate the full snapshot from jb-library ----
   const slotTitleEls = Array.from(document.querySelectorAll('.slot .title'));
   const PAGE_SIZE = slotTitleEls.length; // 100, one page of the letter+digit board
-  let libraryTracks = [];
+  let libraryTracks = []; // as received from jb-library, always title-sorted
+  let sortedTracks = [];  // libraryTracks re-sorted by the chosen field
+  let sortField = 'title';
   let currentPage = 0;
+
+  function applySort() {
+    sortedTracks = [...libraryTracks].sort((a, b) => {
+      const av = (a[sortField] || '').toString();
+      const bv = (b[sortField] || '').toString();
+      return av.localeCompare(bv);
+    });
+  }
 
   function renderPage() {
     const start = currentPage * PAGE_SIZE;
     for (let i = 0; i < PAGE_SIZE; i++) {
-      const track = libraryTracks[start + i];
+      const track = sortedTracks[start + i];
       slotTitleEls[i].textContent = track ? track.title : '—';
       slotTitleEls[i].title = track && track.artist ? track.title + ' — ' + track.artist : '';
     }
@@ -204,27 +302,232 @@
     if (currentPage > 0) { currentPage--; renderPage(); }
   }
   function pageForward() {
-    const maxPage = Math.max(0, Math.ceil(libraryTracks.length / PAGE_SIZE) - 1);
+    const maxPage = Math.max(0, Math.ceil(sortedTracks.length / PAGE_SIZE) - 1);
     if (currentPage < maxPage) { currentPage++; renderPage(); }
   }
 
-  // No mouse/touch in this build -- physical controls arrive as USB HID
-  // keyboard events (the Pico), so that's what we listen for. Arrow keys
-  // are a placeholder until the real gesture-to-action mapping (Phase 2b)
-  // is decided.
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') pageBack();
-    else if (e.key === 'ArrowRight') pageForward();
-  });
+  // ---- now playing: from jb-source-phone, artwork cross-referenced by
+  // title against the library snapshot we already have loaded for the board ----
+  const npArt = document.getElementById('np-art');
+  const npTitle = document.getElementById('np-title');
+  const npArtist = document.getElementById('np-artist');
+  const npElapsed = document.getElementById('np-elapsed');
+  const npDuration = document.getElementById('np-duration');
+  const npProgressBar = document.getElementById('np-progress-bar');
+  const npPlayPause = document.getElementById('np-playpause');
 
-  // ---- up next placeholders (queue count TBD from jb-core later) ----
-  const upNext = document.getElementById('up-next');
-  for (let i = 2; i <= 5; i++) {
-    const item = document.createElement('div');
-    item.className = 'queue-item';
-    item.innerHTML = '<div class="art box"></div><div class="title">' + i + '. &mdash;</div>';
-    upNext.appendChild(item);
+  function formatMs(ms) {
+    if (!ms && ms !== 0) return '0:00';
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return m + ':' + String(s).padStart(2, '0');
   }
+
+  function updateNowPlaying(np) {
+    npTitle.textContent = np.title || '—';
+    npArtist.textContent = np.artist || '';
+    npElapsed.textContent = formatMs(np.position_ms);
+    npDuration.textContent = formatMs(np.duration_ms);
+    const pct = np.duration_ms ? Math.min(100, (100 * np.position_ms) / np.duration_ms) : 0;
+    npProgressBar.style.width = pct + '%';
+    npPlayPause.textContent = np.status === 'playing' ? '‖' : '▶';
+
+    const match = libraryTracks.find((t) => t.title === np.title);
+    npArt.style.backgroundImage = match && match.artwork_url ? 'url(' + match.artwork_url + ')' : '';
+  }
+
+  // ---- up next: the real queue from jb-core ----
+  const upNext = document.getElementById('up-next');
+
+  function renderUpNext(data) {
+    upNext.innerHTML = '';
+    (data.upcoming || []).forEach((track, i) => {
+      const item = document.createElement('div');
+      item.className = 'queue-item';
+      const art = document.createElement('div');
+      art.className = 'art box';
+      if (track.artwork_url) art.style.backgroundImage = 'url(' + track.artwork_url + ')';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = (i + 1) + '. ' + track.title;
+      item.appendChild(art);
+      item.appendChild(title);
+      upNext.appendChild(item);
+    });
+  }
+
+  // =========================================================================
+  // Encoder-driven navigation: one rotary encoder (rotate + click) drives
+  // almost everything. Rotating cycles a highlight through every
+  // [data-select] element (the song board itself is excluded). Clicking
+  // either fires a one-shot action (Back/Forward/Shuffle-toggle/sort
+  // commit) or temporarily repurposes rotation for a secondary function
+  // (Volume's slider, Up Next's side-scroll, Sort's option-cycling) until
+  // a period of inactivity times it back out to plain selection.
+  //
+  // No physical encoder exists yet -- Left/Right arrow keys simulate
+  // rotation and Enter simulates a click, until the real hardware (via the
+  // Pico, arriving as USB HID keyboard events) replaces this.
+  // =========================================================================
+
+  const selectables = Array.from(document.querySelectorAll('[data-select]'));
+  const sortOptEls = Array.from(document.querySelectorAll('.sort-opt'));
+  const sortFields = sortOptEls.map((el) => el.dataset.sort);
+
+  let mode = 'select'; // 'select' | 'volume' | 'upnext-scroll' | 'sort' | 'popup'
+  let selectedIndex = 0;
+  let sortCursor = sortFields.indexOf(sortField);
+  let currentVolume = 0.3;
+  let shuffleActive = false;
+  let phoneConnected = false;
+  let phoneName = 'Phone';
+  const MODE_TIMEOUT_MS = 4000;
+  let modeTimer = null;
+
+  function highlightSelection() {
+    selectables.forEach((el, i) =>
+      el.classList.toggle('encoder-selected', mode === 'select' && i === selectedIndex)
+    );
+  }
+  highlightSelection();
+
+  function armModeTimeout() {
+    clearTimeout(modeTimer);
+    modeTimer = setTimeout(exitMode, MODE_TIMEOUT_MS);
+  }
+
+  function exitMode() {
+    clearTimeout(modeTimer);
+    modeTimer = null;
+    mode = 'select';
+    hidePopup();
+    updateSortHighlight();
+    highlightSelection();
+  }
+
+  function showPopup(title, bodyHtml) {
+    document.getElementById('popup-title').textContent = title;
+    document.getElementById('popup-body').innerHTML = bodyHtml;
+    document.getElementById('popup-overlay').classList.add('visible');
+  }
+  function hidePopup() {
+    document.getElementById('popup-overlay').classList.remove('visible');
+  }
+
+  function renderVolumePopup() {
+    const pct = Math.round(currentVolume * 100);
+    showPopup(
+      'VOLUME',
+      '<div class="volume-slider-track"><div class="volume-slider-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="volume-pct">' + pct + '%</div>'
+    );
+  }
+
+  function updateSortHighlight() {
+    sortOptEls.forEach((el, i) => {
+      el.classList.toggle('cursor', mode === 'sort' && i === sortCursor);
+      el.classList.toggle('chosen', sortFields[i] === sortField);
+    });
+  }
+  updateSortHighlight();
+
+  function publishCmd(topic, payload) {
+    client.publish(topic, JSON.stringify(payload));
+  }
+
+  function rotate(direction) {
+    if (mode === 'select') {
+      selectedIndex = (selectedIndex + direction + selectables.length) % selectables.length;
+      highlightSelection();
+      return;
+    }
+    if (mode === 'volume') {
+      currentVolume = Math.max(0, Math.min(1, currentVolume + direction * 0.05));
+      publishCmd('jukebox/jb-audio/cmd', { action: 'volume_delta', value: direction * 0.05 });
+      renderVolumePopup();
+    } else if (mode === 'upnext-scroll') {
+      upNext.scrollLeft += direction * 100;
+    } else if (mode === 'sort') {
+      sortCursor = (sortCursor + direction + sortFields.length) % sortFields.length;
+      updateSortHighlight();
+    }
+    armModeTimeout(); // any rotation while in a secondary mode resets its timeout
+  }
+
+  function click() {
+    if (mode === 'sort') {
+      sortField = sortFields[sortCursor];
+      applySort();
+      currentPage = 0;
+      renderPage();
+      exitMode();
+      return;
+    }
+    if (mode !== 'select') {
+      // Volume / Up Next scroll / informational popups: a click just
+      // closes early rather than doing anything else.
+      exitMode();
+      return;
+    }
+
+    const key = selectables[selectedIndex].dataset.select;
+    switch (key) {
+      case 'volume':
+        mode = 'volume';
+        renderVolumePopup();
+        armModeTimeout();
+        break;
+      case 'phone':
+        mode = 'popup';
+        showPopup('PHONE', phoneConnected ? phoneName + '<br>Connected' : 'No phone connected');
+        armModeTimeout();
+        break;
+      case 'library':
+        mode = 'popup';
+        showPopup('LIBRARY', 'Not built yet');
+        armModeTimeout();
+        break;
+      case 'spotify':
+        mode = 'popup';
+        showPopup('SPOTIFY', 'Not built yet');
+        armModeTimeout();
+        break;
+      case 'nowplaying':
+        // Pinned -- no dedicated function decided yet, just an enlarged
+        // view of what's already shown in the strip.
+        mode = 'popup';
+        showPopup('NOW PLAYING', (npTitle.textContent || '—') + '<br>' + (npArtist.textContent || ''));
+        armModeTimeout();
+        break;
+      case 'shuffle':
+        shuffleActive = !shuffleActive;
+        document.getElementById('shuffle-btn').classList.toggle('active', shuffleActive);
+        publishCmd('jukebox/jb-core/cmd', { action: shuffleActive ? 'shuffle_on' : 'shuffle_off' });
+        break;
+      case 'upnext':
+        mode = 'upnext-scroll';
+        armModeTimeout();
+        break;
+      case 'sort':
+        mode = 'sort';
+        updateSortHighlight();
+        armModeTimeout();
+        break;
+      case 'back':
+        pageBack();
+        break;
+      case 'forward':
+        pageForward();
+        break;
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') rotate(-1);
+    else if (e.key === 'ArrowRight') rotate(1);
+    else if (e.key === 'Enter') click();
+  });
 
   // ---- bus debug overlay (unchanged) ----
   const statusEl = document.getElementById('status');
@@ -253,7 +556,25 @@
     if (topic === 'jukebox/jb-library/tracks') {
       const data = JSON.parse(payload.toString());
       libraryTracks = data.tracks;
+      applySort();
       renderPage();
+    } else if (topic === 'jukebox/jb-source-phone/now-playing') {
+      updateNowPlaying(JSON.parse(payload.toString()));
+    } else if (topic === 'jukebox/jb-core/queue') {
+      renderUpNext(JSON.parse(payload.toString()));
+    } else if (topic === 'jukebox/jb-source-phone/connected') {
+      const data = JSON.parse(payload.toString());
+      phoneConnected = !!data.connected;
+      phoneName = data.name || 'Phone';
+      const phoneTab = document.getElementById('sel-phone');
+      phoneTab.textContent = phoneConnected ? phoneName : 'No Phone';
+      phoneTab.classList.toggle('active', phoneConnected);
+    } else if (topic === 'jukebox/jb-audio/state') {
+      const data = JSON.parse(payload.toString());
+      if (typeof data.volume === 'number') {
+        currentVolume = data.volume;
+        if (mode === 'volume') renderVolumePopup();
+      }
     }
 
     const line = document.createElement('div');
