@@ -231,7 +231,7 @@
   <div id="header" class="box">
     <div id="logo">JUKE.BOX</div>
     <div id="tabs">
-      <div class="tab" data-select="phone" id="sel-phone">No Phone</div>
+      <div class="tab" data-select="phone" id="sel-phone">Phone</div>
       <div class="tab" data-select="library" id="sel-library">Library</div>
       <div class="tab" data-select="spotify" id="sel-spotify">Spotify</div>
     </div>
@@ -852,7 +852,7 @@
       phoneConnected = !!data.connected;
       phoneName = data.name || 'Phone';
       const phoneTab = document.getElementById('sel-phone');
-      phoneTab.textContent = phoneConnected ? phoneName : 'No Phone';
+      phoneTab.textContent = phoneConnected ? phoneName : 'Phone';
       phoneTab.classList.toggle('active', phoneConnected);
     } else if (topic === 'jukebox/jb-audio/state') {
       const data = JSON.parse(payload.toString());
