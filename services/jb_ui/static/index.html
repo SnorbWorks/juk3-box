@@ -255,7 +255,7 @@
   #sort-menu.visible { display: flex; }
   .sort-opt {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
-    min-width: 120px; padding: 14px 22px;
+    min-width: 120px; padding: 14px 22px; white-space: nowrap;
     border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
     font-size: 22px; color: rgba(255,255,255,0.6);
   }
@@ -394,6 +394,8 @@
       <div class="sort-opt" data-sort="artist">Artist<span class="sort-value" data-sort-value="artist"></span></div>
       <div class="sort-opt" data-sort="album">Album<span class="sort-value" data-sort-value="album"></span></div>
       <div class="sort-opt" data-sort="genre">Genre<span class="sort-value" data-sort-value="genre"></span></div>
+      <div class="sort-opt" data-sort="top100">Top 100</div>
+      <div class="sort-opt" data-sort="mostplayed">Most Played</div>
     </div>
   </div>
 </div>
@@ -454,8 +456,27 @@
     return values;
   }
 
+  const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '');
+  // Ranked lists: flat song lists in a fixed order, no drill-down.
+  const RANKED_SORTS = {
+    // Global popularity (Last.fm listeners, looked up by jb-library);
+    // exactly one board page.
+    top100: () => libraryTracks
+      .filter((t) => t.popularity)
+      .sort((a, b) => b.popularity - a.popularity || byTitle(a, b))
+      .slice(0, 100),
+    // Plays on this jukebox (counted by jb-library after 30s of play).
+    mostplayed: () => libraryTracks
+      .filter((t) => t.play_count > 0)
+      .sort((a, b) => b.play_count - a.play_count
+        || (b.last_played_at || 0) - (a.last_played_at || 0) || byTitle(a, b)),
+  };
+
   function applySort() {
-    if (sortField !== 'title' && categoryFilter && categoryFilter.field === sortField) {
+    if (RANKED_SORTS[sortField]) {
+      boardMode = 'songs';
+      sortedTracks = RANKED_SORTS[sortField]();
+    } else if (sortField !== 'title' && categoryFilter && categoryFilter.field === sortField) {
       // Drilled into a specific artist/album/genre -- flat list of just
       // the songs matching it.
       boardMode = 'songs';

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import sqlite3
 import time
 
@@ -16,6 +17,19 @@ DB_PATH = "/var/lib/juk3-box/library.db"
 ENRICH_DELAY_S = 1.5
 ENRICH_RETRY_DELAY_S = 30  # after a failed lookup (e.g. no internet yet at boot)
 ENRICH_PUBLISH_INTERVAL_S = 60
+# Last.fm asks API clients to stay under 5 requests/second.
+LASTFM_DELAY_S = 0.25
+# A track counts as "played" once it has actually played this long (the
+# same rule Last.fm scrobbling uses) -- so skips, and the moment iOS starts
+# its own auto-advance pick before jb-core overrides it, don't count.
+PLAY_COUNT_THRESHOLD_MS = 30_000
+
+# Columns added after the table was first created -- applied in place so an
+# existing library.db keeps its data.
+MIGRATIONS = {
+    "lastfm_listeners": "INTEGER",            # global popularity: distinct Last.fm listeners
+    "popularity_checked": "INTEGER DEFAULT 0",
+}
 
 
 def get_db() -> sqlite3.Connection:
@@ -37,6 +51,10 @@ def get_db() -> sqlite3.Connection:
         )
         """
     )
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(tracks)")}
+    for column, decl in MIGRATIONS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE tracks ADD COLUMN {column} {decl}")
     conn.commit()
     return conn
 
@@ -79,6 +97,37 @@ async def lookup_itunes(session: aiohttp.ClientSession, title: str) -> dict | No
         }
 
 
+def _search_terms(title: str, artist: str) -> tuple[str, str]:
+    """Strip "(feat. X)" / "[Remix]"-style extras from the title and keep only
+    the lead artist -- confirmed live to take Last.fm matching from 16/20 to
+    19/20 on a sample of this library."""
+    clean_title = re.sub(r"\s*[\(\[].*?[\)\]]", "", title).strip() or title
+    main_artist = re.split(r" feat\.? | featuring | & |, | and ", artist, flags=re.I)[0]
+    return clean_title, main_artist
+
+
+async def lookup_lastfm(session: aiohttp.ClientSession, api_key: str, title: str, artist: str) -> int | None:
+    """Returns the song's global Last.fm listener count, or None if Last.fm
+    has no such track. Raises on network/API failure (caller retries).
+    track.getInfo aggregates every version of a song and autocorrects
+    spelling, unlike per-recording scores (Deezer's rank was tried first and
+    was noticeably noisier)."""
+    clean_title, main_artist = _search_terms(title, artist)
+    params = {
+        "method": "track.getInfo", "api_key": api_key, "format": "json",
+        "track": clean_title, "artist": main_artist, "autocorrect": 1,
+    }
+    async with session.get(
+        "https://ws.audioscrobbler.com/2.0/", params=params, timeout=aiohttp.ClientTimeout(total=10)
+    ) as resp:
+        data = await resp.json(content_type=None)
+    if "track" in data:
+        return int(data["track"].get("listeners") or 0)
+    if data.get("error") == 6:  # "Track not found" -- a real answer, not a failure
+        return None
+    raise RuntimeError(f"Last.fm error: {data.get('error')} {data.get('message')}")
+
+
 class Snapshots:
     """Publishes the library snapshot, skipping it when nothing changed.
 
@@ -97,7 +146,8 @@ class Snapshots:
         """Whole library sorted by title -- the UI slices/sorts client-side."""
         rows = self.conn.execute(
             """
-            SELECT title, artist, album, genre, artwork_url, item_path
+            SELECT title, artist, album, genre, artwork_url, item_path,
+                   lastfm_listeners, play_count, last_played_at
             FROM tracks ORDER BY title COLLATE NOCASE
             """
         ).fetchall()
@@ -105,6 +155,7 @@ class Snapshots:
             {
                 "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
                 "artwork_url": r[4], "item_path": r[5],
+                "popularity": r[6], "play_count": r[7] or 0, "last_played_at": r[8],
             }
             for r in rows
         ]
@@ -117,59 +168,144 @@ class Snapshots:
         self.log.info("published snapshot: %d tracks", len(tracks))
 
 
-async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, log) -> None:
-    """Fills in artist/album/genre/art for un-enriched tracks, then sleeps
-    until a new sync adds more (no polling). Needs internet, not the phone,
-    so it also finishes any leftover work from before a restart."""
+async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:
+    """Background enrichment, in two passes per track, then sleeps until a
+    new sync adds more (no polling). Needs internet, not the phone, so it
+    also finishes any leftover work from before a restart.
+      1. iTunes: artist/album/genre/art (needs only the title).
+      2. Last.fm: global popularity (needs the artist from pass 1). Skipped
+         entirely if no lastfm_api_key is configured."""
     conn = get_db()
     dirty = False
     last_publish = time.monotonic()
+    if not lastfm_key:
+        log.warning("no lastfm_api_key configured -- popularity (Top 100) lookups disabled")
     async with aiohttp.ClientSession() as session:
         while True:
-            row = conn.execute(
-                "SELECT phone_mac, title FROM tracks WHERE enriched = 0 LIMIT 1"
-            ).fetchone()
-            if row is None:
-                if dirty:
-                    await snapshots.publish()
-                    dirty = False
-                    log.info("enrichment complete")
-                wake.clear()
-                await wake.wait()
-                continue
-            mac, title = row
-            try:
-                info = await lookup_itunes(session, title)
-            except Exception:
-                # A real failure (network, API hiccup) -- leave enriched=0
-                # so it gets retried later instead of permanently giving up.
-                log.exception("iTunes lookup failed for %r, will retry later", title)
-                await asyncio.sleep(ENRICH_RETRY_DELAY_S)
-                continue
-
-            if info:
-                conn.execute(
-                    """
-                    UPDATE tracks SET artist=:artist, album=:album, genre=:genre,
-                        artwork_url=:artwork_url, enriched=1
-                    WHERE phone_mac=:mac AND title=:title
-                    """,
-                    {**info, "mac": mac, "title": title},
-                )
-                dirty = True
-            else:
-                # Successful lookup, genuinely no match -- done, not a retry case.
-                conn.execute(
-                    "UPDATE tracks SET enriched=1 WHERE phone_mac=? AND title=?", (mac, title)
-                )
-            conn.commit()
-            # A first-time sync of a big library takes ~20min to enrich --
+            # A first-time sync of a big library takes a while to enrich --
             # show progress on the board occasionally, not per track.
             if dirty and time.monotonic() - last_publish >= ENRICH_PUBLISH_INTERVAL_S:
                 await snapshots.publish()
                 dirty = False
                 last_publish = time.monotonic()
-            await asyncio.sleep(ENRICH_DELAY_S)
+
+            row = conn.execute(
+                "SELECT phone_mac, title FROM tracks WHERE enriched = 0 LIMIT 1"
+            ).fetchone()
+            if row is not None:
+                dirty |= await _enrich_itunes(conn, session, *row, log)
+                await asyncio.sleep(ENRICH_DELAY_S)
+                continue
+
+            row = conn.execute(
+                "SELECT phone_mac, title, artist FROM tracks"
+                " WHERE enriched = 1 AND popularity_checked = 0 LIMIT 1"
+            ).fetchone() if lastfm_key else None
+            if row is not None:
+                dirty |= await _enrich_lastfm(conn, session, lastfm_key, *row, log)
+                await asyncio.sleep(LASTFM_DELAY_S)
+                continue
+
+            if dirty:
+                await snapshots.publish()
+                dirty = False
+                last_publish = time.monotonic()
+                log.info("enrichment complete")
+            wake.clear()
+            await wake.wait()
+
+
+async def _enrich_itunes(conn, session, mac: str, title: str, log) -> bool:
+    """Returns whether any displayed data changed."""
+    try:
+        info = await lookup_itunes(session, title)
+    except Exception:
+        # A real failure (network, API hiccup) -- leave enriched=0
+        # so it gets retried later instead of permanently giving up.
+        log.exception("iTunes lookup failed for %r, will retry later", title)
+        await asyncio.sleep(ENRICH_RETRY_DELAY_S)
+        return False
+    if info:
+        conn.execute(
+            """
+            UPDATE tracks SET artist=:artist, album=:album, genre=:genre,
+                artwork_url=:artwork_url, enriched=1
+            WHERE phone_mac=:mac AND title=:title
+            """,
+            {**info, "mac": mac, "title": title},
+        )
+    else:
+        # Successful lookup, genuinely no match -- done, not a retry case.
+        conn.execute("UPDATE tracks SET enriched=1 WHERE phone_mac=? AND title=?", (mac, title))
+    conn.commit()
+    return bool(info)
+
+
+async def _enrich_lastfm(conn, session, api_key: str, mac: str, title: str, artist: str | None, log) -> bool:
+    """Returns whether any displayed data changed."""
+    listeners = None
+    if artist:  # without an artist there's nothing reliable to look up
+        try:
+            listeners = await lookup_lastfm(session, api_key, title, artist)
+        except Exception:
+            log.exception("Last.fm lookup failed for %r, will retry later", title)
+            await asyncio.sleep(ENRICH_RETRY_DELAY_S)
+            return False
+    conn.execute(
+        "UPDATE tracks SET lastfm_listeners=?, popularity_checked=1 WHERE phone_mac=? AND title=?",
+        (listeners, mac, title),
+    )
+    conn.commit()
+    return listeners is not None
+
+
+class PlayTracker:
+    """Counts jukebox plays from jb-source-phone's now-playing stream.
+
+    One play = one continuous playthrough that reaches PLAY_COUNT_THRESHOLD_MS.
+    A new playthrough starts when the title changes or the position jumps
+    backwards (the same song restarted or replayed)."""
+
+    def __init__(self, conn: sqlite3.Connection, log):
+        self.conn = conn
+        self.log = log
+        self.mac: str | None = None
+        self._title: str | None = None
+        self._last_pos = 0
+        self._counted = False
+        self._first_update = True
+
+    def on_connected(self, payload: dict) -> None:
+        self.mac = payload.get("mac") if payload.get("connected") else None
+
+    def on_now_playing(self, np: dict) -> bool:
+        """Returns True when this update recorded a play."""
+        title, pos = np.get("title"), np.get("position_ms") or 0
+        if self._first_update:
+            # Joined mid-song (e.g. this service restarted on a deploy): that
+            # playthrough may already have been counted before the restart,
+            # so don't count it again -- an occasional missed count beats
+            # inflating one on every restart.
+            self._first_update = False
+            self._title, self._last_pos = title, pos
+            self._counted = pos >= PLAY_COUNT_THRESHOLD_MS
+            return False
+        if title != self._title or pos < self._last_pos - 5_000:
+            self._title, self._counted = title, False
+        self._last_pos = pos
+        if (self._counted or not title or not self.mac
+                or np.get("status") != "playing" or pos < PLAY_COUNT_THRESHOLD_MS):
+            return False
+        self._counted = True
+        cur = self.conn.execute(
+            "UPDATE tracks SET play_count = play_count + 1, last_played_at = ?"
+            " WHERE phone_mac = ? AND title = ?",
+            (time.time(), self.mac, title),
+        )
+        self.conn.commit()
+        if cur.rowcount:
+            self.log.info("counted play: %s", title)
+        return bool(cur.rowcount)
 
 
 async def main() -> None:
@@ -179,9 +315,12 @@ async def main() -> None:
 
     async with Bus(SERVICE_NAME, host=cfg["mqtt_host"], port=cfg["mqtt_port"]) as bus:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
-        # Subscribe first: crawl-result is retained, so if jb-source-phone
-        # already synced a connected phone before we started, we get it now.
+        # Subscribe first: crawl-result and connected are retained, so if
+        # jb-source-phone already synced a connected phone before we started,
+        # we get it now. (All subscriptions share one message stream.)
         messages = await bus.subscribe("jukebox/jb-source-phone/crawl-result")
+        await bus.subscribe("jukebox/jb-source-phone/connected")
+        await bus.subscribe("jukebox/jb-source-phone/now-playing")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -192,9 +331,17 @@ async def main() -> None:
 
         wake = asyncio.Event()
         wake.set()  # pick up any enrichment left over from before a restart
-        asyncio.create_task(enrichment_loop(snapshots, wake, log))
+        asyncio.create_task(enrichment_loop(snapshots, wake, cfg.get("lastfm_api_key"), log))
+        plays = PlayTracker(conn, log)
 
-        async for _topic, payload in messages:
+        async for topic, payload in messages:
+            if topic.endswith("/connected"):
+                plays.on_connected(payload)
+                continue
+            if topic.endswith("/now-playing"):
+                if plays.on_now_playing(payload):
+                    await snapshots.publish()  # once per counted play
+                continue
             mac = payload.get("mac")
             tracks = payload.get("tracks")
             if not mac or tracks is None:
