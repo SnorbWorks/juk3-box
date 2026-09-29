@@ -76,23 +76,50 @@
   }
 
   /* board */
+  /* Layered art, not one painted board: the chrome frame is a 9-slice
+     border image (corners/edges stay pixel-exact at any board size, only
+     the dark middle stretches); strips are styled per cell below. The art
+     is authored at 2x -- slice 80 image px = 40 CSS px of corner. Padding
+     clears the frame's visible thickness (~26px top/bottom, ~33px sides). */
   #board {
     flex: 1;
-    display: flex; gap: 8px;
+    display: flex; gap: 14px;
     min-height: 0;
-    padding: 8px;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: none;
+    border-image: url(img/songboard_background.png) 80 fill / 40px stretch;
+    padding: 26px 32px;
   }
-  .col { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .col {
+    flex: 1; display: flex; flex-direction: column;
+    gap: 1px; overflow: hidden;
+    background: #d3cab5; /* shows through the 1px gaps as strip separators */
+  }
   .slot {
     flex: 1;
-    display: flex; align-items: center; gap: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    padding: 0 6px;
-    font-size: 12px;
+    display: flex; align-items: stretch;
+    background: #ded5c1; /* cream, sampled from the mockup */
     min-height: 0;
   }
-  .slot .label { color: #facc15; font-weight: bold; width: 24px; flex-shrink: 0; }
-  .slot .title { color: rgba(255,255,255,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot .label {
+    flex-shrink: 0; width: 38px;
+    display: flex; align-items: center; justify-content: center;
+    background: url(img/songboard_numbers.png) center / 100% 100%;
+    color: #fff; font-weight: bold; font-size: 13px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+  }
+  .slot .text {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 8px;
+    line-height: 1.15;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .slot .title, .slot .artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot .title { color: #15171a; font-size: 11px; font-weight: 600; }
+  .slot .artist { color: #55615e; font-size: 9px; }
+  .slot .artist:empty { display: none; }
 
   /* bottom row: volume + shuffle + now playing + up next */
   #bottom { display: flex; gap: 12px; height: 110px; flex-shrink: 0; }
@@ -314,7 +341,8 @@
       digits.forEach(d => {
         const slot = document.createElement('div');
         slot.className = 'slot';
-        slot.innerHTML = '<span class="label">' + letter + d + '</span><span class="title">&mdash;</span>';
+        slot.innerHTML = '<span class="label">' + letter + d + '</span>' +
+          '<span class="text"><span class="title">&mdash;</span><span class="artist"></span></span>';
         col.appendChild(slot);
       });
     });
@@ -328,6 +356,7 @@
   // themselves, before a specific one is picked).
   const slotEls = Array.from(document.querySelectorAll('.slot'));
   const slotTitleEls = slotEls.map((el) => el.querySelector('.title'));
+  const slotArtistEls = slotEls.map((el) => el.querySelector('.artist'));
   const PAGE_SIZE = slotTitleEls.length; // 100, one page of the letter+digit board
   let libraryTracks = []; // as received from jb-library, always title-sorted
   let sortedTracks = [];  // the flat track list currently on the board
@@ -379,18 +408,21 @@
   function renderPage() {
     const start = currentPage * PAGE_SIZE;
     for (let i = 0; i < PAGE_SIZE; i++) {
-      let newText, newTooltip;
+      let newText, newArtist, newTooltip;
       if (boardMode === 'categories') {
         const value = categoryValues[start + i];
         newText = value || '—';
+        newArtist = '';
         newTooltip = '';
       } else {
         const track = sortedTracks[start + i];
         newText = track ? track.title : '—';
+        newArtist = (track && track.artist) || '';
         newTooltip = track && track.artist ? track.title + ' — ' + track.artist : '';
       }
       slotTitleEls[i].textContent = newText;
       slotTitleEls[i].title = newTooltip;
+      slotArtistEls[i].textContent = newArtist;
     }
   }
 
