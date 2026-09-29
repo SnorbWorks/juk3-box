@@ -1,5 +1,7 @@
 import asyncio
+import json
 import sqlite3
+import time
 
 import aiohttp
 
@@ -12,6 +14,8 @@ DB_PATH = "/var/lib/juk3-box/library.db"
 # Free, keyless API -- be polite about request rate. Enrichment is a one-time
 # background cost per track (cached forever after), so slow-and-steady is fine.
 ENRICH_DELAY_S = 1.5
+ENRICH_RETRY_DELAY_S = 30  # after a failed lookup (e.g. no internet yet at boot)
+ENRICH_PUBLISH_INTERVAL_S = 60
 
 
 def get_db() -> sqlite3.Connection:
@@ -75,15 +79,63 @@ async def lookup_itunes(session: aiohttp.ClientSession, title: str) -> dict | No
         }
 
 
-async def enrichment_loop(log) -> None:
+class Snapshots:
+    """Publishes the library snapshot, skipping it when nothing changed.
+
+    The snapshot is the whole library in one retained message (~365KB for
+    ~900 tracks) -- cheap to send once, but every subscriber (the kiosk UI
+    especially) re-parses and re-renders all of it, so it must only go out
+    when the data actually changed, never on a timer."""
+
+    def __init__(self, bus: Bus, conn: sqlite3.Connection, log):
+        self.bus = bus
+        self.conn = conn
+        self.log = log
+        self._last_payload: str | None = None
+
+    async def publish(self) -> None:
+        """Whole library sorted by title -- the UI slices/sorts client-side."""
+        rows = self.conn.execute(
+            """
+            SELECT title, artist, album, genre, artwork_url, item_path
+            FROM tracks ORDER BY title COLLATE NOCASE
+            """
+        ).fetchall()
+        tracks = [
+            {
+                "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
+                "artwork_url": r[4], "item_path": r[5],
+            }
+            for r in rows
+        ]
+        payload = {"tracks": tracks}
+        serialized = json.dumps(payload)
+        if serialized == self._last_payload:
+            return
+        await self.bus.publish("jukebox/jb-library/tracks", payload, retain=True)
+        self._last_payload = serialized
+        self.log.info("published snapshot: %d tracks", len(tracks))
+
+
+async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, log) -> None:
+    """Fills in artist/album/genre/art for un-enriched tracks, then sleeps
+    until a new sync adds more (no polling). Needs internet, not the phone,
+    so it also finishes any leftover work from before a restart."""
     conn = get_db()
+    dirty = False
+    last_publish = time.monotonic()
     async with aiohttp.ClientSession() as session:
         while True:
             row = conn.execute(
                 "SELECT phone_mac, title FROM tracks WHERE enriched = 0 LIMIT 1"
             ).fetchone()
             if row is None:
-                await asyncio.sleep(10)
+                if dirty:
+                    await snapshots.publish()
+                    dirty = False
+                    log.info("enrichment complete")
+                wake.clear()
+                await wake.wait()
                 continue
             mac, title = row
             try:
@@ -92,7 +144,7 @@ async def enrichment_loop(log) -> None:
                 # A real failure (network, API hiccup) -- leave enriched=0
                 # so it gets retried later instead of permanently giving up.
                 log.exception("iTunes lookup failed for %r, will retry later", title)
-                await asyncio.sleep(ENRICH_DELAY_S)
+                await asyncio.sleep(ENRICH_RETRY_DELAY_S)
                 continue
 
             if info:
@@ -104,43 +156,20 @@ async def enrichment_loop(log) -> None:
                     """,
                     {**info, "mac": mac, "title": title},
                 )
+                dirty = True
             else:
                 # Successful lookup, genuinely no match -- done, not a retry case.
                 conn.execute(
                     "UPDATE tracks SET enriched=1 WHERE phone_mac=? AND title=?", (mac, title)
                 )
             conn.commit()
+            # A first-time sync of a big library takes ~20min to enrich --
+            # show progress on the board occasionally, not per track.
+            if dirty and time.monotonic() - last_publish >= ENRICH_PUBLISH_INTERVAL_S:
+                await snapshots.publish()
+                dirty = False
+                last_publish = time.monotonic()
             await asyncio.sleep(ENRICH_DELAY_S)
-
-
-async def publish_snapshot(bus: Bus, conn: sqlite3.Connection, log) -> None:
-    """Publishes the whole library, sorted by title. Small enough (under a
-    thousand tracks, a couple hundred bytes each) to just send in one shot
-    rather than building a page/sort request-response protocol yet -- the UI
-    can slice/sort client-side."""
-    rows = conn.execute(
-        """
-        SELECT title, artist, album, genre, artwork_url, item_path
-        FROM tracks ORDER BY title COLLATE NOCASE
-        """
-    ).fetchall()
-    tracks = [
-        {
-            "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
-            "artwork_url": r[4], "item_path": r[5],
-        }
-        for r in rows
-    ]
-    await bus.publish("jukebox/jb-library/tracks", {"tracks": tracks}, retain=True)
-    log.info("published snapshot: %d tracks", len(tracks))
-
-
-async def snapshot_loop(bus: Bus, conn: sqlite3.Connection, log) -> None:
-    """Republishes periodically while enrichment is still filling in data,
-    so the board visibly picks up artist/art as they arrive."""
-    while True:
-        await asyncio.sleep(20)
-        await publish_snapshot(bus, conn, log)
 
 
 async def main() -> None:
@@ -150,29 +179,33 @@ async def main() -> None:
 
     async with Bus(SERVICE_NAME, host=cfg["mqtt_host"], port=cfg["mqtt_port"]) as bus:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
+        # Subscribe first: crawl-result is retained, so if jb-source-phone
+        # already synced a connected phone before we started, we get it now.
+        messages = await bus.subscribe("jukebox/jb-source-phone/crawl-result")
         asyncio.create_task(bus.run_heartbeat())
-        asyncio.create_task(enrichment_loop(log))
-        asyncio.create_task(snapshot_loop(bus, conn, log))
-        await publish_snapshot(bus, conn, log)
 
-        # Trigger a fresh crawl on our own startup too, in case a phone was
-        # already connected before we started (the "connected" retained
-        # message alone wouldn't tell us to crawl again).
-        await bus.publish("jukebox/jb-source-phone/cmd", {"action": "crawl"})
+        # Serve the cached library right away -- at boot there's usually no
+        # phone connected yet, and we never ask for a crawl ourselves.
+        # jb-source-phone (the connection manager) syncs when a phone connects.
+        snapshots = Snapshots(bus, conn, log)
+        await snapshots.publish()
 
-        async for topic, payload in await bus.subscribe("jukebox/jb-source-phone/#"):
-            if topic.endswith("/connected") and payload.get("connected"):
-                log.info("phone connected (%s), requesting crawl", payload.get("name"))
-                await bus.publish("jukebox/jb-source-phone/cmd", {"action": "crawl"})
-            elif topic.endswith("/crawl-result"):
-                mac = payload["mac"]
-                tracks = payload["tracks"]
-                upsert_tracks(conn, mac, tracks)
-                total = conn.execute(
-                    "SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)
-                ).fetchone()[0]
-                log.info("stored %d tracks for %s (crawl returned %d)", total, mac, len(tracks))
-                await publish_snapshot(bus, conn, log)
+        wake = asyncio.Event()
+        wake.set()  # pick up any enrichment left over from before a restart
+        asyncio.create_task(enrichment_loop(snapshots, wake, log))
+
+        async for _topic, payload in messages:
+            mac = payload.get("mac")
+            tracks = payload.get("tracks")
+            if not mac or tracks is None:
+                continue
+            upsert_tracks(conn, mac, tracks)
+            total = conn.execute(
+                "SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)
+            ).fetchone()[0]
+            log.info("stored %d tracks for %s (sync returned %d)", total, mac, len(tracks))
+            await snapshots.publish()
+            wake.set()
 
 
 if __name__ == "__main__":

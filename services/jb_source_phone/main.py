@@ -145,13 +145,57 @@ async def main() -> None:
     system_bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
     phone: Phone | None = None
+    # This service is the source connection manager: it decides when the
+    # library gets synced, jb-library just stores whatever we hand it. Sync
+    # once per player object -- a new connection, or an AVRCP renegotiation
+    # (BlueZ recreates the player, which invalidates every item_path from the
+    # previous crawl). Never on a timer, never with no phone connected.
+    synced_player_path: str | None = None
+    sync_lock = asyncio.Lock()
+
+    async def sync_library(bus: Bus):
+        nonlocal synced_player_path
+        async with sync_lock:
+            p = phone
+            if p is None:
+                log.warning("library sync requested with no phone connected")
+                return
+            tracks = await p.crawl_songs()
+            if phone is not p:
+                # Superseded mid-crawl by a reconnect/renegotiation -- these
+                # item_paths are already dead. The new player's own sync
+                # (triggered from connect_current_phone) replaces them.
+                log.info("discarding crawl from superseded player %s", p.player_path)
+                return
+            # Retained so jb-library gets it no matter which service started
+            # first (e.g. phone already connected at boot).
+            await bus.publish(
+                f"jukebox/{SERVICE_NAME}/crawl-result",
+                {"mac": p.mac, "tracks": tracks},
+                retain=True,
+            )
+            synced_player_path = p.player_path
+            log.info("library sync complete: %d tracks from %s", len(tracks), p.name)
+
+    async def sync_library_logged(bus: Bus):
+        # Fired as a background task -- log failures instead of letting them
+        # vanish with the unawaited task.
+        try:
+            await sync_library(bus)
+        except Exception:
+            log.exception("library sync failed")
 
     async def connect_current_phone(bus: Bus, retries: int = 5, retry_delay: float = 0.8):
-        nonlocal phone
+        nonlocal phone, synced_player_path
         found = await find_connected_player(system_bus)
         if not found:
             phone = None
+            synced_player_path = None
             await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
+            # Drop the retained crawl too, so a restarting jb-library (or a
+            # reboot, since the broker persists retained messages) never
+            # ingests item_paths from a player that no longer exists.
+            await bus.clear_retained(f"jukebox/{SERVICE_NAME}/crawl-result")
             return
         device_path, player_path = found
         # Right after (re)connect, BlueZ sometimes registers MediaPlayer1
@@ -178,6 +222,8 @@ async def main() -> None:
                 {"connected": True, "name": phone.name, "mac": phone.mac},
                 retain=True,
             )
+            if phone.player_path != synced_player_path:
+                asyncio.create_task(sync_library_logged(bus))
             return
         log.error("phone setup failed after %d attempts, giving up", retries)
         phone = None
@@ -201,24 +247,25 @@ async def main() -> None:
                 log.exception("play_item failed: %r", cmd["item_path"])
                 await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", cmd)
         elif action == "crawl":
-            tracks = await phone.crawl_songs()
-            await bus.publish(
-                f"jukebox/{SERVICE_NAME}/crawl-result",
-                {"mac": phone.mac, "tracks": tracks},
-            )
-            log.info("crawl complete: %d tracks", len(tracks))
+            # Manual re-sync (e.g. from the phone manager UI, after adding
+            # music on the phone). Automatic syncs happen on connect.
+            await sync_library(bus)
         else:
             log.warning("unknown command action: %r", action)
 
     async def poll_now_playing(bus: Bus):
-        last_track_title = None
+        # Publish only on change. While playing, position_ms moves every
+        # poll so the progress bar still updates; paused/idle goes quiet.
+        last_np = None
         while True:
-            if phone is not None:
+            if phone is None:
+                last_np = None  # republish right away on the next connection
+            else:
                 try:
                     np = await phone.now_playing()
-                    if np["title"] != last_track_title:
-                        last_track_title = np["title"]
-                    await bus.publish(f"jukebox/{SERVICE_NAME}/now-playing", np)
+                    if np != last_np:
+                        last_np = np
+                        await bus.publish(f"jukebox/{SERVICE_NAME}/now-playing", np)
                 except Exception:
                     log.exception("failed to read now-playing state")
             await asyncio.sleep(2)
@@ -227,8 +274,8 @@ async def main() -> None:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
 
         # Subscribe before publishing "connected" -- otherwise another
-        # service reacting to that retained message (e.g. jb-library
-        # requesting a crawl) can race ahead of our own subscription and
+        # service reacting to that retained message (e.g. jb-core sending a
+        # play_item on reconnect) can race ahead of our own subscription and
         # have its command silently dropped (QoS0, no retain on /cmd).
         messages = await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
 

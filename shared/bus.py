@@ -27,6 +27,12 @@ class Bus:
     async def publish(self, topic: str, payload: dict, retain: bool = False) -> None:
         await self._client.publish(topic, json.dumps(payload), retain=retain)
 
+    async def clear_retained(self, topic: str) -> None:
+        """Deletes the broker's retained message on this topic (MQTT: an
+        empty retained payload). Subscribers never see the deletion itself --
+        _iter_messages skips empty payloads."""
+        await self._client.publish(topic, b"", retain=True)
+
     async def subscribe(self, topic: str):
         """Subscribes immediately and returns an async iterator of messages.
 
@@ -43,6 +49,8 @@ class Bus:
 
     async def _iter_messages(self):
         async for message in self._client.messages:
+            if not message.payload:
+                continue  # a retained-message deletion, not a real message
             yield message.topic.value, json.loads(message.payload)
 
     async def run_heartbeat(self, interval: float = 2.0) -> None:

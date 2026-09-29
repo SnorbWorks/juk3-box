@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>JUKE.BOX</title>
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<!-- Vendored, pinned copy: the kiosk must boot without internet, and an
+     unpinned CDN URL silently changes versions under us. -->
+<script src="mqtt-5.16.0.min.js"></script>
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
@@ -795,7 +797,18 @@
   client.on('connect', () => {
     statusEl.textContent = 'connected to bus';
     statusEl.className = 'connected';
-    client.subscribe('jukebox/#');
+    // Only what the page uses -- not jukebox/#, which would also pull in
+    // large payloads it ignores (e.g. the retained crawl-result).
+    client.subscribe([
+      'jukebox/+/heartbeat',
+      'jukebox/jb-library/tracks',
+      'jukebox/jb-source-phone/now-playing',
+      'jukebox/jb-source-phone/connected',
+      'jukebox/jb-source-phone/play-error',
+      'jukebox/jb-core/queue',
+      'jukebox/jb-core/notice',
+      'jukebox/jb-audio/state',
+    ]);
   });
 
   client.on('reconnect', () => {
@@ -809,6 +822,18 @@
   });
 
   client.on('message', (topic, payload) => {
+    // mqtt.js calls this synchronously from its stream parser -- an
+    // exception escaping here can tear down the connection itself. One bad
+    // message should cost that message, not the bus.
+    try {
+      handleMessage(topic, payload);
+    } catch (e) {
+      console.error('failed handling', topic, e);
+    }
+    appendDebugLine(topic, payload);
+  });
+
+  function handleMessage(topic, payload) {
     if (topic === 'jukebox/jb-library/tracks') {
       const data = JSON.parse(payload.toString());
       libraryTracks = data.tracks;
@@ -842,17 +867,32 @@
         flashNotice('CONNECT DEVICE', 'Please connect your phone to continue.');
       }
     }
+  }
 
+  // Debug overlay: payloads are truncated -- the library snapshot alone is
+  // ~365KB, and keeping MAX_LINES of those in the DOM is what exhausted the
+  // Pi's memory and made the bus connection flap.
+  const MAX_PAYLOAD_CHARS = 200;
+
+  function appendDebugLine(topic, payload) {
+    let text = payload.toString();
+    if (text.length > MAX_PAYLOAD_CHARS) {
+      text = text.slice(0, MAX_PAYLOAD_CHARS) + '… (' + Math.round(payload.length / 1024) + ' KB)';
+    }
     const line = document.createElement('div');
     line.className = 'line';
-    const time = new Date().toLocaleTimeString();
-    line.innerHTML = '<span class="topic">' + time + ' ' + topic + '</span>' +
-                      '<span class="payload">' + payload.toString() + '</span>';
+    const topicEl = document.createElement('span');
+    topicEl.className = 'topic';
+    topicEl.textContent = new Date().toLocaleTimeString() + ' ' + topic;
+    const payloadEl = document.createElement('span');
+    payloadEl.className = 'payload';
+    payloadEl.textContent = text;
+    line.append(topicEl, payloadEl);
     logEl.prepend(line);
     while (logEl.children.length > MAX_LINES) {
       logEl.removeChild(logEl.lastChild);
     }
-  });
+  }
 </script>
 </body>
 </html>
