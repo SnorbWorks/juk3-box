@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Tell Chromium up front this page is dark, so the moment before first
+     paint is dark too instead of a white flash at kiosk startup. -->
+<meta name="color-scheme" content="dark">
+<style>html { background: #0b0b0f; }</style>
 <title>JUKE.BOX</title>
 <!-- Vendored, pinned copy: the kiosk must boot without internet, and an
      unpinned CDN URL silently changes versions under us. -->
@@ -227,7 +231,7 @@
   <div id="header" class="box">
     <div id="logo">JUKE.BOX</div>
     <div id="tabs">
-      <div class="tab active" data-select="phone" id="sel-phone">Shawn's iPhone</div>
+      <div class="tab" data-select="phone" id="sel-phone">No Phone</div>
       <div class="tab" data-select="library" id="sel-library">Library</div>
       <div class="tab" data-select="spotify" id="sel-spotify">Spotify</div>
     </div>

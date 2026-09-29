@@ -1,0 +1,39 @@
+#!/bin/sh
+# Launches the JUKE.BOX kiosk browser. Started from sway's config:
+#   exec /home/admin/kiosk-chromium.sh [extra chromium flags]
+#
+# The kiosk never exits Chromium cleanly -- it's killed on redeploy, or the
+# Pi just loses power/reboots -- so Chromium always believes it crashed last
+# time and briefly shows crash-recovery browser UI on the next start. Mark
+# the last session as a normal exit before launching.
+PREFS="$HOME/.config/chromium/Default/Preferences"
+if [ -f "$PREFS" ]; then
+  sed -i \
+    -e 's/"exit_type":"[A-Za-z]*"/"exit_type":"Normal"/' \
+    -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
+    "$PREFS"
+fi
+
+# On Wayland, --kiosk alone still first paints a normal browser window
+# (tab strip + address bar) at its remembered size for a second or two
+# before going fullscreen -- visible as a "browser flash" at startup.
+# --app= has no browser UI at all, and starting at full screen size means
+# even that first paint already fills the display. --force-dark-mode (with
+# the page's color-scheme meta) keeps the instant before first paint dark
+# rather than a white flash.
+exec chromium \
+  --kiosk \
+  --app=file:///opt/juk3-box/services/jb_ui/static/index.html \
+  --start-fullscreen \
+  --window-position=0,0 \
+  --window-size=1920,1080 \
+  --force-dark-mode \
+  --ozone-platform=wayland \
+  --noerrdialogs \
+  --disable-infobars \
+  --no-first-run \
+  --hide-crash-restore-bubble \
+  --disable-translate \
+  --disable-features=TranslateUI \
+  --check-for-update-interval=31536000 \
+  "$@"
