@@ -87,7 +87,9 @@
     display: flex; gap: 14px;
     min-height: 0;
     border: 1px solid transparent;
-    border-radius: 0;
+    /* Only shapes the encoder-highlight outline (a border-image isn't
+       clipped by radius); ~matches the frame art's rounded chrome corners. */
+    border-radius: 18px;
     background: none;
     border-image: url(img/songboard_background.png) 80 fill / 40px stretch;
     padding: 26px 32px;
