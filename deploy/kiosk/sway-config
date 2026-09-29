@@ -1,0 +1,12 @@
+# Minimal kiosk config: one fullscreen Chromium, no cursor, no chrome.
+# Installed on the Pi as ~admin/.config/sway/config (see README.md).
+seat * hide_cursor 1
+
+output * bg #0b0b0f solid_color
+
+# In --app mode Chromium's Wayland app_id is "chrome-<url>-Default", not
+# "chromium" -- match both.
+for_window [app_id="^chrom"] fullscreen enable, border none
+
+# Launcher resets Chromium crash state and starts in app mode (no browser UI flash).
+exec /opt/juk3-box/deploy/kiosk/kiosk-chromium.sh
