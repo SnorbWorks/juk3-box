@@ -121,14 +121,16 @@
   .slot .artist { color: #3f4a47; font-size: 10px; font-weight: 500; }
   .slot .artist:empty { display: none; }
 
-  /* bottom row: volume + shuffle + now playing + up next */
+  /* control row: volume + prev/next page + shuffle + now playing + up next */
   #bottom { display: flex; gap: 12px; height: 110px; flex-shrink: 0; }
   #volume-btn,
-  #shuffle-btn {
+  #shuffle-btn,
+  .square-btn {
     flex: 0 0 90px; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 6px;
   }
-  #shuffle-icon { font-size: 28px; opacity: 0.7; }
+  #shuffle-icon, .square-icon { font-size: 28px; opacity: 0.7; }
+  .square-label { font-size: 11px; letter-spacing: 1px; opacity: 0.7; white-space: nowrap; }
   /* pure-CSS speaker icon -- no font glyph coverage needed (the emoji
      speaker showed as a "tofu" box, this Pi has no emoji font installed) */
   #volume-icon {
@@ -174,30 +176,23 @@
   }
   #upnext-empty-msg { margin: auto; font-size: 13px; opacity: 0.5; text-align: center; padding: 0 20px; }
 
-  /* sort row */
-  #sort-row {
-    display: flex; align-items: center; gap: 10px;
-    height: 40px; flex-shrink: 0; padding: 0 12px;
-  }
+  /* sort menu -- lives in the popup, opened by clicking the board */
+  #sort-menu { display: none; gap: 16px; justify-content: center; }
+  #sort-menu.visible { display: flex; }
   .sort-opt {
-    padding: 4px 14px; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px;
-    font-size: 13px; color: rgba(255,255,255,0.6);
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    min-width: 120px; padding: 14px 22px;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 8px;
+    font-size: 22px; color: rgba(255,255,255,0.6);
   }
   .sort-opt.chosen { border-color: #facc15; color: #facc15; }
-  .sort-opt.cursor { outline: 2px solid #7dd3fc; }
+  .sort-opt.cursor { outline: 3px solid #7dd3fc; outline-offset: 2px; }
   .sort-value {
-    font-size: 12px; color: #facc15; opacity: 0.85;
-    margin-left: -4px; max-width: 140px;
+    font-size: 13px; color: #facc15; opacity: 0.85;
+    max-width: 160px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
-  /* paging */
-  #paging { display: flex; justify-content: space-between; flex-shrink: 0; }
-  .page-btn {
-    width: 190px; height: 44px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; letter-spacing: 1px;
-  }
+  .sort-value:empty { display: none; }
 
   /* encoder selection highlight -- rotating the encoder cycles this among
      every [data-select] element; clicking fires that element's action.
@@ -268,6 +263,14 @@
     <div id="volume-btn" class="box" data-select="volume">
       <div id="volume-icon"></div>
     </div>
+    <div id="back-btn" class="box square-btn" data-select="back">
+      <div class="square-icon">&larr;</div>
+      <div class="square-label">PREV PAGE</div>
+    </div>
+    <div id="forward-btn" class="box square-btn" data-select="forward">
+      <div class="square-icon">&rarr;</div>
+      <div class="square-label">NEXT PAGE</div>
+    </div>
     <div id="shuffle-btn" class="box" data-select="shuffle">
       <div id="shuffle-icon">&#8646;</div>
       <div id="shuffle-label">SHUFFLE</div>
@@ -297,23 +300,9 @@
     </div>
   </div>
 
-  <div id="sort-row" class="box" data-select="sort">
-    <span class="box-label">sort</span>
-    <div class="sort-opt" data-sort="title">Song</div>
-    <div class="sort-opt" data-sort="artist">Artist</div>
-    <span class="sort-value" data-sort-value="artist"></span>
-    <div class="sort-opt" data-sort="album">Album</div>
-    <span class="sort-value" data-sort-value="album"></span>
-    <div class="sort-opt" data-sort="genre">Genre</div>
-    <span class="sort-value" data-sort-value="genre"></span>
-  </div>
-
-  <div id="board" class="box"></div>
-
-  <div id="paging">
-    <div class="page-btn box" data-select="back">&larr; PREVIOUS PAGE</div>
-    <div class="page-btn box" data-select="forward">NEXT PAGE &rarr;</div>
-  </div>
+  <!-- The board is itself selectable: clicking it opens the Sort menu
+       (it replaced a separate sort row, to give the board more height). -->
+  <div id="board" class="box" data-select="board"></div>
 
 </div>
 
@@ -321,6 +310,14 @@
   <div id="popup-box">
     <div id="popup-title"></div>
     <div id="popup-body"></div>
+    <!-- Sort menu: persistent elements (not rebuilt per open) so the
+         cursor/chosen highlighting code can keep references to them. -->
+    <div id="sort-menu">
+      <div class="sort-opt" data-sort="title">Song</div>
+      <div class="sort-opt" data-sort="artist">Artist<span class="sort-value" data-sort-value="artist"></span></div>
+      <div class="sort-opt" data-sort="album">Album<span class="sort-value" data-sort-value="album"></span></div>
+      <div class="sort-opt" data-sort="genre">Genre<span class="sort-value" data-sort-value="genre"></span></div>
+    </div>
   </div>
 </div>
 
@@ -597,10 +594,11 @@
   // =========================================================================
   // Encoder-driven navigation: one rotary encoder (rotate + click) drives
   // almost everything. Rotating cycles a highlight through every
-  // [data-select] element (the song board itself is excluded). Clicking
-  // either fires a one-shot action (Back/Forward/Shuffle-toggle/sort
-  // commit) or temporarily repurposes rotation for a secondary function
-  // (Volume's slider, Up Next's side-scroll, Sort's option-cycling) until
+  // [data-select] element (the board as a whole is one of them; its
+  // individual song slots are not). Clicking either fires a one-shot
+  // action (Back/Forward/Shuffle-toggle/sort commit) or temporarily
+  // repurposes rotation for a secondary function (Volume's slider, Up
+  // Next's side-scroll, the board's Sort menu option-cycling) until
   // a period of inactivity times it back out to plain selection.
   //
   // No physical encoder exists yet -- Left/Right arrow keys simulate
@@ -612,10 +610,11 @@
   // (reading top-to-bottom, left-to-right) rather than left implicit via
   // DOM order, so it's obvious this needs updating by hand if the layout
   // changes again. Current layout: header row (Phone/Library/Spotify),
-  // then Volume/Shuffle/Now Playing/Up Next, then Sort, then Back/Forward.
+  // then Volume/Prev/Next/Shuffle/Now Playing/Up Next, then the board
+  // (whose click opens the Sort menu).
   const SELECT_ORDER = [
-    'phone', 'library', 'spotify', 'volume', 'shuffle',
-    'nowplaying', 'upnext', 'sort', 'back', 'forward',
+    'phone', 'library', 'spotify', 'volume', 'back', 'forward', 'shuffle',
+    'nowplaying', 'upnext', 'board',
   ];
   const selectables = SELECT_ORDER.map(
     (key) => document.querySelector('[data-select="' + key + '"]')
@@ -691,6 +690,12 @@
   }
   function hidePopup() {
     document.getElementById('popup-overlay').classList.remove('visible');
+    document.getElementById('sort-menu').classList.remove('visible');
+  }
+
+  function showSortMenu() {
+    showPopup('SORT BY', '');
+    document.getElementById('sort-menu').classList.add('visible');
   }
 
   // A backend-triggered popup (e.g. "connect device") that isn't part of
@@ -803,9 +808,11 @@
         mode = 'upnext-scroll';
         armModeTimeout();
         break;
-      case 'sort':
+      case 'board':
         mode = 'sort';
+        sortCursor = sortFields.indexOf(sortField); // open on the current sort
         updateSortHighlight();
+        showSortMenu();
         armModeTimeout();
         break;
       case 'back':
