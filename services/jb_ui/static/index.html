@@ -53,9 +53,10 @@
   #logo {
     flex: 1;
     display: flex; align-items: center; justify-content: flex-start;
-    padding-left: 16px;
-    font-size: 30px; letter-spacing: 4px; font-weight: bold;
+    height: 100%;
   }
+  /* logo.png is Images/juk3_box logo.png downscaled to 2x display size */
+  #logo img { height: 100%; width: auto; display: block; }
   #tabs {
     flex: 1; display: flex; justify-content: flex-end;
     gap: 6px; padding: 0 10px;
@@ -156,7 +157,28 @@
   #shuffle-label { font-size: 11px; letter-spacing: 1px; opacity: 0.7; }
   #shuffle-btn.active #shuffle-icon,
   #shuffle-btn.active #shuffle-label { color: #facc15; opacity: 1; }
-  #now-playing { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px; }
+  #now-playing {
+    flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px;
+    position: relative; overflow: hidden;
+  }
+  #now-playing > :not(#np-bg) { position: relative; z-index: 1; }
+  /* Backdrop: the current track's cover, blown up and rotated 45deg. A
+     rotated square covers a w x h box once its side >= (w+h)/sqrt(2);
+     at 130% of the box width that holds with lots of margin. A dark
+     gradient over it keeps the text readable. */
+  #np-bg {
+    position: absolute; top: 50%; left: 50%; z-index: 0;
+    width: 130%; aspect-ratio: 1;
+    transform: translate(-50%, -50%) rotate(45deg);
+    background: center / cover no-repeat;
+    opacity: 0; transition: opacity 600ms ease;
+  }
+  #np-bg.visible { opacity: 1; }
+  #np-bg::after {
+    content: ''; position: absolute; inset: 0;
+    transform: rotate(-45deg); /* shade stays level with the box, not the art */
+    background: linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75));
+  }
   #now-playing .art { width: 80px; height: 80px; flex-shrink: 0; background-size: cover; background-position: center; }
   #now-playing .info { flex: 1; min-width: 0; }
   #now-playing .info .label { display: block; }
@@ -165,16 +187,68 @@
   .np-progress-track { flex: 1; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden; }
   #np-progress-bar { height: 100%; width: 0%; background: #facc15; }
   #now-playing .transport { display: flex; gap: 10px; font-size: 20px; opacity: 0.6; }
-  /* horizontally scrollable -- more than 5 can be queued, side-scroll is
-     the intended way to see the rest once gesture input drives it */
-  #up-next { flex: 1; display: flex; gap: 8px; padding: 10px; overflow-x: auto; overflow-y: hidden; }
-  .queue-item { flex: 0 0 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-  .queue-item .art { width: 40px; height: 40px; background-size: cover; background-position: center; }
-  .queue-item .title {
-    font-size: 11px; color: rgba(255,255,255,0.5); text-align: center;
-    max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Up Next, styled after the mockup: amber header + rule, then big-art
+     items (art, amber queue number, title over artist) with dividers.
+     ~3 fit across; the rest side-scroll. The native scrollbar is hidden
+     (it would shift the layout when shown); a thin custom indicator
+     overlays the bottom edge only while the encoder is in scroll mode. */
+  #up-next {
+    flex: 1; min-width: 0; position: relative;
+    display: flex; flex-direction: column;
+    padding: 8px 14px 10px;
   }
+  #up-next-header {
+    flex-shrink: 0;
+    font-size: 12px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;
+    color: #f5a524;
+    padding-bottom: 5px; margin-bottom: 8px;
+    border-bottom: 1px solid rgba(245,165,36,0.45);
+  }
+  #up-next-list {
+    flex: 1; min-height: 0;
+    display: flex; align-items: center;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+  }
+  .queue-item {
+    flex: 0 0 auto; width: 230px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 14px;
+    border-left: 1px solid rgba(245,165,36,0.35);
+  }
+  .queue-item:first-child { border-left: none; padding-left: 0; }
+  .queue-item .art {
+    flex-shrink: 0; width: 56px; height: 56px; box-sizing: border-box;
+    border: 2px solid rgba(255,255,255,0.8); border-radius: 3px;
+    background: rgba(255,255,255,0.06) center / cover no-repeat;
+  }
+  .queue-item:first-child .art { border-color: #f5a524; } /* plays next */
+  .queue-item .num {
+    align-self: flex-start; padding-top: 2px;
+    color: #f5a524; font-size: 17px; font-weight: 600;
+  }
+  .queue-item .meta {
+    min-width: 0; display: flex; flex-direction: column; gap: 3px;
+    text-transform: uppercase; letter-spacing: 1px; line-height: 1.2;
+  }
+  .queue-item .title, .queue-item .artist {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .queue-item .title { color: #f2f2f2; font-size: 12px; font-weight: 600; }
+  .queue-item .artist { color: #9fb3c8; font-size: 10px; -webkit-line-clamp: 1; }
   #upnext-empty-msg { margin: auto; font-size: 13px; opacity: 0.5; text-align: center; padding: 0 20px; }
+  #up-next-scroll {
+    position: absolute; left: 14px; right: 14px; bottom: 4px; height: 3px;
+    border-radius: 2px; background: rgba(255,255,255,0.1);
+    opacity: 0; transition: opacity 300ms ease;
+  }
+  #up-next.scrolling #up-next-scroll { opacity: 1; }
+  #up-next-scroll-thumb {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 100%;
+    border-radius: 2px; background: #f5a524;
+  }
 
   /* sort menu -- lives in the popup, opened by clicking the board */
   #sort-menu { display: none; gap: 16px; justify-content: center; }
@@ -250,8 +324,8 @@
 <div id="scrim"></div>
 <div id="wrap">
 
-  <div id="header" class="box">
-    <div id="logo">JUKE.BOX</div>
+  <div id="header">
+    <div id="logo"><img src="img/logo.png" alt="JUK3.BOX"></div>
     <div id="tabs">
       <div class="tab" data-select="phone" id="sel-phone">Phone</div>
       <div class="tab" data-select="library" id="sel-library">Library</div>
@@ -276,6 +350,7 @@
       <div id="shuffle-label">SHUFFLE</div>
     </div>
     <div id="now-playing" class="box" data-select="nowplaying">
+      <div id="np-bg"></div>
       <div id="np-art" class="art box"></div>
       <div class="info">
         <span class="box-label">now playing</span>
@@ -296,7 +371,9 @@
       </div>
     </div>
     <div id="up-next" class="box" data-select="upnext">
-      <div class="box-label" style="position:absolute">up next</div>
+      <div id="up-next-header">Up Next</div>
+      <div id="up-next-list"></div>
+      <div id="up-next-scroll"><div id="up-next-scroll-thumb"></div></div>
     </div>
   </div>
 
@@ -520,6 +597,7 @@
   // ---- now playing: from jb-source-phone, artwork cross-referenced by
   // title against the library snapshot we already have loaded for the board ----
   const npArt = document.getElementById('np-art');
+  const npBg = document.getElementById('np-bg');
   const npTitle = document.getElementById('np-title');
   const npArtist = document.getElementById('np-artist');
   const npElapsed = document.getElementById('np-elapsed');
@@ -547,6 +625,7 @@
       npProgressBar.style.width = '0%';
       npPlayPause.textContent = '▶';
       npArt.style.backgroundImage = '';
+      npBg.classList.remove('visible');
       return;
     }
 
@@ -559,36 +638,72 @@
     npPlayPause.textContent = '‖';
 
     const match = libraryTracks.find((t) => t.title === np.title);
-    npArt.style.backgroundImage = match && match.artwork_url ? 'url(' + match.artwork_url + ')' : '';
+    const artUrl = match && match.artwork_url ? 'url(' + match.artwork_url + ')' : '';
+    npArt.style.backgroundImage = artUrl;
+    // Only touch the backdrop when the art actually changes -- now-playing
+    // arrives every ~2s while playing (position updates).
+    // (Compare against our own copy: style.backgroundImage reads back
+    // normalized with quotes, so it would never match artUrl.)
+    if (npBg.dataset.art !== artUrl) {
+      npBg.dataset.art = artUrl;
+      npBg.style.backgroundImage = artUrl;
+    }
+    npBg.classList.toggle('visible', !!artUrl);
   }
 
   // ---- up next: the real queue from jb-core ----
   const upNext = document.getElementById('up-next');
+  const upNextList = document.getElementById('up-next-list');
+  const upNextHeader = document.getElementById('up-next-header');
+  const upNextThumb = document.getElementById('up-next-scroll-thumb');
+
+  function el(tag, className, text) {
+    const e = document.createElement(tag);
+    e.className = className;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
 
   function renderUpNext(data) {
-    upNext.innerHTML = '';
+    upNextList.innerHTML = '';
     setShuffleUI(!!data.shuffle_active); // jb-core is the source of truth
     const tracks = data.upcoming || [];
+    // Count only in Singles mode: shuffle keeps a constantly refilled
+    // 20-track buffer, so a number there would always read ~20.
+    upNextHeader.textContent = tracks.length && !data.shuffle_active
+      ? 'Up Next (' + tracks.length + ')' : 'Up Next';
     if (tracks.length === 0) {
-      const msg = document.createElement('div');
+      const msg = el('div', '', 'Select any Single. Or tap Shuffle to auto play.');
       msg.id = 'upnext-empty-msg';
-      msg.textContent = 'Select any Single. Or tap Shuffle to auto play.';
-      upNext.appendChild(msg);
+      upNextList.appendChild(msg);
+      updateUpNextScroll();
       return;
     }
     tracks.forEach((track, i) => {
-      const item = document.createElement('div');
-      item.className = 'queue-item';
-      const art = document.createElement('div');
-      art.className = 'art box';
+      const item = el('div', 'queue-item');
+      const art = el('div', 'art');
       if (track.artwork_url) art.style.backgroundImage = 'url(' + track.artwork_url + ')';
-      const title = document.createElement('div');
-      title.className = 'title';
-      title.textContent = (i + 1) + '. ' + track.title;
-      item.appendChild(art);
-      item.appendChild(title);
-      upNext.appendChild(item);
+      const meta = el('div', 'meta');
+      meta.append(el('div', 'title', track.title), el('div', 'artist', track.artist || ''));
+      item.append(art, el('div', 'num', String(i + 1)), meta);
+      upNextList.appendChild(item);
     });
+    updateUpNextScroll();
+  }
+
+  // Custom scroll indicator: thumb width/position mirror the list's scroll.
+  function updateUpNextScroll() {
+    const { scrollWidth, clientWidth, scrollLeft } = upNextList;
+    const ratio = scrollWidth > 0 ? Math.min(1, clientWidth / scrollWidth) : 1;
+    upNextThumb.style.width = (ratio * 100) + '%';
+    upNextThumb.style.left = (scrollWidth > 0 ? (scrollLeft / scrollWidth) * 100 : 0) + '%';
+  }
+  upNextList.addEventListener('scroll', updateUpNextScroll);
+
+  // One encoder detent scrolls by one queue item.
+  function scrollUpNext(direction) {
+    const item = upNextList.querySelector('.queue-item');
+    upNextList.scrollLeft += direction * (item ? item.offsetWidth : 100);
   }
 
   // =========================================================================
@@ -678,6 +793,7 @@
     modeTimer = null;
     mode = 'select';
     hidePopup();
+    upNext.classList.remove('scrolling');
     updateSortHighlight();
     highlightSelection();
     armHomeTimeout();
@@ -741,7 +857,7 @@
       publishCmd('jukebox/jb-audio/cmd', { action: 'volume_delta', value: direction * 0.05 });
       renderVolumePopup();
     } else if (mode === 'upnext-scroll') {
-      upNext.scrollLeft += direction * 100;
+      scrollUpNext(direction);
     } else if (mode === 'sort') {
       sortCursor = (sortCursor + direction + sortFields.length) % sortFields.length;
       updateSortHighlight();
@@ -806,6 +922,8 @@
         break;
       case 'upnext':
         mode = 'upnext-scroll';
+        upNext.classList.add('scrolling'); // reveals the scroll indicator
+        updateUpNextScroll();
         armModeTimeout();
         break;
       case 'board':
