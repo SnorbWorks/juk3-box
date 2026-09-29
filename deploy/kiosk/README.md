@@ -18,6 +18,11 @@ How the Pi boots straight into the jukebox screen:
    browser fullscreen, and runs the launcher.
 4. **Browser** — `kiosk-chromium.sh`, run straight from the deployed repo
    (`/opt/juk3-box/deploy/kiosk/`), so `deploy.sh` keeps it current.
+5. **Text rendering** — `fontconfig-fonts.conf`, installed at
+   `~admin/.config/fontconfig/fonts.conf`: subpixel (RGB) antialiasing +
+   slight hinting for the Dell P2414H. Raspberry Pi OS defaults to grayscale,
+   which makes the board's small text look soft. Also needs `fonts-noto-cjk`
+   for Japanese/Chinese/Korean titles and artists.
 
 ## Installing on a fresh Pi
 
@@ -26,8 +31,10 @@ sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
 sudo cp /opt/juk3-box/deploy/kiosk/getty-autologin.conf /etc/systemd/system/getty@tty1.service.d/autologin.conf
 mkdir -p ~/.config/sway
 cp /opt/juk3-box/deploy/kiosk/sway-config ~/.config/sway/config
+mkdir -p ~/.config/fontconfig
+cp /opt/juk3-box/deploy/kiosk/fontconfig-fonts.conf ~/.config/fontconfig/fonts.conf
 # then append the ~/.profile snippet above
-sudo apt install sway chromium
+sudo apt install sway chromium fonts-noto-cjk
 ```
 
 ## Reloading after a UI or config change
