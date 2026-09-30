@@ -329,7 +329,7 @@
   <div id="header">
     <div id="logo"><img src="img/logo.png" alt="JUK3.BOX"></div>
     <div id="tabs">
-      <div class="tab" data-select="phone" id="sel-phone">Phone</div>
+      <div class="tab" data-select="phone" id="sel-phone">Bluetooth</div>
       <div class="tab" data-select="library" id="sel-library">Library</div>
       <div class="tab" data-select="spotify" id="sel-spotify">Spotify</div>
     </div>
@@ -770,7 +770,7 @@
   let currentVolume = 0.3;
   let shuffleActive = false;
   let phoneConnected = false;
-  let phoneName = 'Phone';
+  let phoneName = 'Bluetooth';
   const MODE_TIMEOUT_MS = 4000;
   const HOME_TIMEOUT_MS = 12000;
   let homeTimer = null;
@@ -919,7 +919,7 @@
         break;
       case 'phone':
         mode = 'popup';
-        showPopup('PHONE', phoneConnected ? phoneName + '<br>Connected' : 'No phone connected');
+        showPopup('BLUETOOTH', phoneConnected ? phoneName + '<br>Connected' : 'No device connected');
         armModeTimeout();
         break;
       case 'library':
@@ -976,7 +976,15 @@
   const logEl = document.getElementById('log');
   const MAX_LINES = 200;
 
-  const client = mqtt.connect('ws://localhost:9001');
+  // timerVariant 'native': mqtt.js's default ('auto') runs its keepalive
+  // timers in a worker (worker-timers), which breaks when the wall clock
+  // jumps -- and it always does at boot: the Pi has no RTC, starts at its
+  // last-shutdown time, then NTP jumps it forward (by ~a day after an
+  // overnight power-off). With worker timers that produced a "Keepalive
+  // timeout" every 1-3s after each connect, forever: the boot-time
+  // connect/disconnect flapping. Reproduced by backdating
+  // /var/lib/systemd/timesync/clock and rebooting.
+  const client = mqtt.connect('ws://localhost:9001', { timerVariant: 'native' });
 
   client.on('connect', () => {
     statusEl.textContent = 'connected to bus';
@@ -1030,9 +1038,9 @@
     } else if (topic === 'jukebox/jb-source-phone/connected') {
       const data = JSON.parse(payload.toString());
       phoneConnected = !!data.connected;
-      phoneName = data.name || 'Phone';
+      phoneName = data.name || 'Bluetooth';
       const phoneTab = document.getElementById('sel-phone');
-      phoneTab.textContent = phoneConnected ? phoneName : 'Phone';
+      phoneTab.textContent = phoneConnected ? phoneName : 'Bluetooth';
       phoneTab.classList.toggle('active', phoneConnected);
     } else if (topic === 'jukebox/jb-audio/state') {
       const data = JSON.parse(payload.toString());
