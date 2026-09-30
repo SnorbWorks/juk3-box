@@ -2,7 +2,7 @@ import asyncio
 
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
-from dbus_next.errors import DBusError
+from dbus_next.errors import DBusError, InterfaceNotFoundError
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
@@ -50,8 +50,20 @@ class Phone:
         player_intro = await self.system_bus.introspect(BLUEZ, self.player_path)
         player_obj = self.system_bus.get_proxy_object(BLUEZ, self.player_path, player_intro)
         self.player_iface = player_obj.get_interface("org.bluez.MediaPlayer1")
-        self.folder_iface = player_obj.get_interface("org.bluez.MediaFolder1")
         self.player_props_iface = player_obj.get_interface("org.freedesktop.DBus.Properties")
+        # Browsing (MediaFolder1) is optional: iOS doesn't always offer it
+        # when it connects -- seen live on a cold boot, where player0 had only
+        # MediaPlayer1 for minutes. Playback control and now-playing work
+        # without it; only the library sync needs it, and that runs once
+        # MediaFolder1 shows up (see on_interfaces_added).
+        try:
+            self.folder_iface = player_obj.get_interface("org.bluez.MediaFolder1")
+        except InterfaceNotFoundError:
+            self.folder_iface = None
+
+    @property
+    def can_browse(self) -> bool:
+        return self.folder_iface is not None
 
     async def now_playing(self) -> dict:
         props = await self.player_props_iface.call_get_all("org.bluez.MediaPlayer1")
@@ -160,6 +172,9 @@ async def main() -> None:
             if p is None:
                 log.warning("library sync requested with no phone connected")
                 return
+            if not p.can_browse:
+                log.warning("library sync requested but the phone isn't offering browsing yet")
+                return
             tracks = await p.crawl_songs()
             if phone is not p:
                 # Superseded mid-crawl by a reconnect/renegotiation -- these
@@ -222,7 +237,9 @@ async def main() -> None:
                 {"connected": True, "name": phone.name, "mac": phone.mac},
                 retain=True,
             )
-            if phone.player_path != synced_player_path:
+            if not phone.can_browse:
+                log.info("phone has no browsing yet -- library sync will run when it appears")
+            elif phone.player_path != synced_player_path:
                 asyncio.create_task(sync_library_logged(bus))
             return
         log.error("phone setup failed after %d attempts, giving up", retries)
@@ -291,6 +308,11 @@ async def main() -> None:
         def on_interfaces_added(path, interfaces):
             if "org.bluez.MediaPlayer1" in interfaces:
                 log.info("MediaPlayer1 appeared at %s, reconnecting", path)
+                asyncio.create_task(connect_current_phone(bus))
+            elif "org.bluez.MediaFolder1" in interfaces:
+                # Browsing arrived later on an already-connected player --
+                # re-set up so the Phone picks it up and syncs the library.
+                log.info("MediaFolder1 appeared at %s, re-attaching for library sync", path)
                 asyncio.create_task(connect_current_phone(bus))
 
         def on_interfaces_removed(path, interfaces):
