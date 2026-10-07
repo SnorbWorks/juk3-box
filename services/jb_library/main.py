@@ -32,43 +32,102 @@ MIGRATIONS = {
 }
 
 
+# A sync smaller than this fraction of the stored library is treated as a
+# glitch (e.g. Bluetooth dropping mid-crawl) and doesn't remove anything.
+PRUNE_MIN_FRACTION = 0.5
+
+TRACKS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS {name} (
+        phone_mac TEXT NOT NULL,
+        title TEXT NOT NULL,
+        -- Which copy of this title, in the phone's library order (0 = first).
+        -- AVRCP browsing gives titles only and no stable per-track ID, so two
+        -- different songs can share a title (22 such pairs were seen on the
+        -- user's phone); (title, dup) keeps them both.
+        dup INTEGER NOT NULL DEFAULT 0,
+        item_path TEXT,
+        artist TEXT,
+        album TEXT,
+        genre TEXT,
+        artwork_url TEXT,
+        enriched INTEGER DEFAULT 0,
+        play_count INTEGER DEFAULT 0,
+        last_played_at REAL,
+        lastfm_listeners INTEGER,
+        popularity_checked INTEGER DEFAULT 0,
+        PRIMARY KEY (phone_mac, title, dup)
+    )
+"""
+
+
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tracks (
-            phone_mac TEXT NOT NULL,
-            title TEXT NOT NULL,
-            item_path TEXT,
-            artist TEXT,
-            album TEXT,
-            genre TEXT,
-            artwork_url TEXT,
-            enriched INTEGER DEFAULT 0,
-            play_count INTEGER DEFAULT 0,
-            last_played_at REAL,
-            PRIMARY KEY (phone_mac, title)
-        )
-        """
-    )
+    conn.execute(TRACKS_SCHEMA.format(name="tracks"))
     existing = {row[1] for row in conn.execute("PRAGMA table_info(tracks)")}
     for column, decl in MIGRATIONS.items():
         if column not in existing:
             conn.execute(f"ALTER TABLE tracks ADD COLUMN {column} {decl}")
+    if "dup" not in existing:
+        # Old schema keyed on (phone_mac, title): rebuild with the dup column
+        # in the key (SQLite can't change a primary key in place). Existing
+        # rows keep their enrichment and play counts as dup 0.
+        conn.execute(TRACKS_SCHEMA.format(name="tracks_v2"))
+        conn.execute(
+            """
+            INSERT INTO tracks_v2 (phone_mac, title, dup, item_path, artist, album, genre,
+                artwork_url, enriched, play_count, last_played_at, lastfm_listeners, popularity_checked)
+            SELECT phone_mac, title, 0, item_path, artist, album, genre, artwork_url, enriched,
+                play_count, last_played_at, lastfm_listeners, popularity_checked FROM tracks
+            """
+        )
+        conn.execute("DROP TABLE tracks")
+        conn.execute("ALTER TABLE tracks_v2 RENAME TO tracks")
     conn.commit()
     return conn
 
 
-def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list) -> None:
+def number_duplicates(tracks: list) -> list:
+    """[(title, dup, item_path)] in crawl order: the Nth copy of a title gets dup N-1."""
+    seen = {}
+    out = []
+    for t in tracks:
+        dup = seen.get(t["title"], 0)
+        seen[t["title"]] = dup + 1
+        out.append((t["title"], dup, t["item_path"]))
+    return out
+
+
+def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None) -> int:
+    """Stores a sync for one phone and removes songs no longer on it (so no
+    board entry is left pointing at a play path that now belongs to another
+    song). Returns how many were removed."""
+    numbered = number_duplicates(tracks)
     conn.executemany(
         """
-        INSERT INTO tracks (phone_mac, title, item_path)
-        VALUES (:mac, :title, :item_path)
-        ON CONFLICT(phone_mac, title) DO UPDATE SET item_path = excluded.item_path
+        INSERT INTO tracks (phone_mac, title, dup, item_path)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(phone_mac, title, dup) DO UPDATE SET item_path = excluded.item_path
         """,
-        [{"mac": mac, "title": t["title"], "item_path": t["item_path"]} for t in tracks],
+        [(mac, title, dup, path) for title, dup, path in numbered],
     )
+    stored = conn.execute("SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)).fetchone()[0]
+    removed = 0
+    if len(numbered) >= stored * PRUNE_MIN_FRACTION:
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS synced (title TEXT, dup INTEGER)")
+        conn.execute("DELETE FROM synced")
+        conn.executemany("INSERT INTO synced VALUES (?, ?)", [(t, d) for t, d, _ in numbered])
+        removed = conn.execute(
+            """
+            DELETE FROM tracks WHERE phone_mac = ?
+              AND NOT EXISTS (SELECT 1 FROM synced s WHERE s.title = tracks.title AND s.dup = tracks.dup)
+            """,
+            (mac,),
+        ).rowcount
+    elif log:
+        log.warning("sync returned %d tracks but %d are stored -- not removing anything",
+                    len(numbered), stored)
     conn.commit()
+    return removed
 
 
 async def lookup_itunes(session: aiohttp.ClientSession, title: str) -> dict | None:
@@ -297,15 +356,31 @@ class PlayTracker:
                 or np.get("status") != "playing" or pos < PLAY_COUNT_THRESHOLD_MS):
             return False
         self._counted = True
-        cur = self.conn.execute(
+        dup = self._which_copy(title, np.get("artist"))
+        if dup is None:
+            return False
+        self.conn.execute(
             "UPDATE tracks SET play_count = play_count + 1, last_played_at = ?"
-            " WHERE phone_mac = ? AND title = ?",
-            (time.time(), self.mac, title),
+            " WHERE phone_mac = ? AND title = ? AND dup = ?",
+            (time.time(), self.mac, title, dup),
         )
         self.conn.commit()
-        if cur.rowcount:
-            self.log.info("counted play: %s", title)
-        return bool(cur.rowcount)
+        self.log.info("counted play: %s (copy %d)", title, dup)
+        return True
+
+    def _which_copy(self, title, artist):
+        """With duplicate titles, count the copy whose artist matches what's
+        actually playing; otherwise the first copy. None if not in the library."""
+        rows = self.conn.execute(
+            "SELECT dup, artist FROM tracks WHERE phone_mac = ? AND title = ? ORDER BY dup",
+            (self.mac, title),
+        ).fetchall()
+        if not rows:
+            return None
+        for dup, stored_artist in rows:
+            if artist and stored_artist and stored_artist.casefold() == artist.casefold():
+                return dup
+        return rows[0][0]
 
 
 async def main() -> None:
@@ -346,11 +421,12 @@ async def main() -> None:
             tracks = payload.get("tracks")
             if not mac or tracks is None:
                 continue
-            upsert_tracks(conn, mac, tracks)
+            removed = upsert_tracks(conn, mac, tracks, log)
             total = conn.execute(
                 "SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)
             ).fetchone()[0]
-            log.info("stored %d tracks for %s (sync returned %d)", total, mac, len(tracks))
+            log.info("stored %d tracks for %s (sync returned %d, removed %d no longer on the phone)",
+                     total, mac, len(tracks), removed)
             await snapshots.publish()
             wake.set()
 
