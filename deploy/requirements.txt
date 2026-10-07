@@ -1,3 +1,4 @@
 aiomqtt
 dbus-next
 aiohttp
+evdev

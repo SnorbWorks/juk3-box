@@ -1,0 +1,16 @@
+{
+  "device_name": "Jukebox JB Keypad",
+  "device_path": "/dev/input/jb-keypad",
+  "reconnect_s": 2,
+  "grab": true,
+  "gestures": {"reset": [], "knob": []},
+  "push_turn": false,
+  "double_window_ms": 300,
+  "hold_ms": 700,
+  "stuck_ms": 30000,
+  "coalesce_ms": 20,
+  "publish_raw": false,
+  "mqtt_host": "localhost",
+  "mqtt_port": 1883,
+  "actions": {}
+}
