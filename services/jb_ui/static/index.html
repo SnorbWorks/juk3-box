@@ -965,6 +965,22 @@
     }
   }
 
+  // The knob arrives from jb-input over the bus (jukebox/jb-input/gesture):
+  // jb-input grabs the Pico keypad exclusively, so its keys never reach this
+  // page directly -- which also means navigation works whether or not the
+  // kiosk window has keyboard focus. A turn carries signed steps (clockwise
+  // positive); each step is one rotate(), exactly like one detent was before.
+  function handleKnob(data) {
+    if (data.control !== 'knob') return;
+    if (data.gesture === 'turn') {
+      const dir = data.steps > 0 ? 1 : -1;
+      for (let i = 0; i < Math.abs(data.steps); i++) rotate(dir);
+    } else if (data.gesture === 'click') {
+      click();
+    }
+  }
+
+  // A real keyboard still works for development (arrows + Enter).
   document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') rotate(-1);
     else if (e.key === 'ArrowRight') rotate(1);
@@ -1000,6 +1016,7 @@
       'jukebox/jb-core/queue',
       'jukebox/jb-core/notice',
       'jukebox/jb-audio/state',
+      'jukebox/jb-input/gesture',
     ]);
   });
 
@@ -1026,7 +1043,9 @@
   });
 
   function handleMessage(topic, payload) {
-    if (topic === 'jukebox/jb-library/tracks') {
+    if (topic === 'jukebox/jb-input/gesture') {
+      handleKnob(JSON.parse(payload.toString()));
+    } else if (topic === 'jukebox/jb-library/tracks') {
       const data = JSON.parse(payload.toString());
       libraryTracks = data.tracks;
       applySort();
