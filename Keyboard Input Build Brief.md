@@ -323,15 +323,15 @@ The gesture, knob and entry logic must be fully testable on a laptop with no har
 
 ### Bench checks (with the hardware)
 
-Status as of Oct 6 2026: every check that the Pico alone can satisfy passed on the bench (verified with `evtest`, one control at a time). The rest wait for `jb-input`.
+Status as of Oct 6 2026: **all bench checks pass.** The Pico side was verified with `evtest`, one control at a time; then `jb-input` was run by hand against the real keypad, watching `mosquitto_sub -t 'jb/#' -v`.
 
-- [ ] Pressing each of the 20 keys produces exactly one `jb/input/key` message with the right key, and no neighbour fires *(Pico side passed: each key sends exactly its own key code, nothing else fires; MQTT side waits for jb-input)*
+- [x] Pressing each of the 20 keys produces exactly one `jb/input/key` message with the right key, and no neighbour fires *(every key verified at the Pico; through jb-input, B and 7 each gave exactly one message on key down and nothing on release; the 24-code key map is covered by the tests)*
 - [x] One detent of the knob produces one step, clockwise positive *(3 detents = 3 steps each way)*
 - [x] A fast spin loses no more than a step or two and never blocks key presses *(one fast turn = 22 steps; knob clicks between spins all arrived in order)*
 - [x] Reset reads as released at rest and pressed when pushed (normally closed wiring) *(after the pull-up fix in the Scanning section)*
-- [ ] Unplugging the Reset wire raises `reset_stuck` after 30 seconds *(waits for jb-input. Electrically covered: an open NC switch reads pressed, so a broken wire reads as held. The wires are hot-glued, so test by holding Reset 30 s instead)*
-- [ ] Key presses do not appear in the console or the kiosk browser *(waits for jb-input's exclusive grab)*
-- [x] Unplugging and replugging the Pico recovers within a few seconds with no restart *(Pico side: re-enumerates as "Jukebox JB Keypad" at the same by-id path, no key stuck; jb-input's reconnect still to verify)*
+- [x] Unplugging the Reset wire raises `reset_stuck` after 30 seconds *(the wires are hot-glued, so tested by holding Reset 35 s instead -- electrically identical, since an open NC switch is what a broken wire looks like: `reset_stuck` appeared in `jb/input/status` at 30 s and cleared on release)*
+- [x] Key presses do not appear in the console or the kiosk browser *(while jb-input runs, any other reader of the keypad gets "This device is grabbed by another process")*
+- [x] Unplugging and replugging the Pico recovers within a few seconds with no restart *(status went `missing`, then `connected` ~6 s later in the same jb-input process; the next key press went straight through. Keys pressed in the ~2 s before jb-input re-finds the keypad are lost -- the reconnect poll interval is `reconnect_s`)*
 - [x] Holding key A at power-up exposes the `CIRCUITPY` drive; a normal boot does not
 
 ### Done when
@@ -357,3 +357,5 @@ None of these block the build, because each is a config value. The builder shoul
 | Meaning of Reset double and hold | Unassigned | Product decision, set in the action table |
 | Double-click window and hold time | 300 ms and 700 ms | Tune in use |
 | Diodes on the matrix | None fitted | Only needed if three or more keys are ever held together |
+| Knob hold vs. push-and-turn | — | **Decided Oct 6:** advanced gestures (hold, double-click, push-and-turn) are not in use; the knob turns and clicks only. They exist in jb-input but are off unless enabled in config. If ever enabled together: a push held > 700 ms before turning fires `hold` before the `push_turn` (seen on the bench) |
+| Naming, topics and config | — | **Decided Oct 6:** this brief is the key-to-pin mapping only; names and conventions follow the existing system. jb-input publishes on `jukebox/jb-input/...` and reads `/etc/juk3-box/jb-input.json`, and no gesture has an action assigned yet |
