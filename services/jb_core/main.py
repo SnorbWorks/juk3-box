@@ -1,10 +1,14 @@
 import asyncio
 import random
+import time
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
+from shared.jb_entry.entry import Entry, EntryChanged, Selection
 
 SERVICE_NAME = "jb-core"
+ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
+ENTRY_TICK_S = 0.25
 
 SHUFFLE_BUFFER_TARGET = 20
 
@@ -27,6 +31,11 @@ class Queue:
         self.library_tracks: list[dict] = []
         self.expected_title: str | None = None
         self.last_seen_title: str | None = None
+        # Whether the phone is currently playing (from now-playing status),
+        # so a selection made while idle starts right away instead of
+        # waiting in the queue. Set optimistically when we command a play so
+        # a second quick selection queues behind it instead of replacing it.
+        self.playing = False
         # Readiness check before playing anything -- what this means
         # depends on the active source. Only the phone source exists so
         # far; Library/Spotify (Phases 9/10+, not built) will need their
@@ -71,6 +80,7 @@ async def try_autoplay(bus: Bus, q: Queue, log, delay: float = 0.0) -> None:
             {"action": "play_item", "item_path": next_track["item_path"]},
         )
         q.expected_title = next_track["title"]
+        q.playing = True
         await publish_queue(bus, q)
 
 
@@ -96,6 +106,24 @@ async def publish_queue(bus: Bus, q: Queue) -> None:
     )
 
 
+async def publish_entry_events(bus: Bus, events, log) -> None:
+    """Selection entry output -> bus. The kiosk turns a selected slot into
+    the track currently shown there (it owns the board's page and sort) and
+    sends it back as a normal "select" command."""
+    for e in events:
+        if isinstance(e, EntryChanged):
+            await bus.publish("jukebox/jb-core/entry", e.payload(), retain=True)
+        elif isinstance(e, Selection):
+            log.info("keypad selection: %s (slot %d)", e.slot, e.index)
+            await bus.publish("jukebox/jb-core/selection", e.payload())
+
+
+async def entry_timeouts(bus: Bus, entry: Entry, log) -> None:
+    while True:
+        await publish_entry_events(bus, entry.tick(time.monotonic()), log)
+        await asyncio.sleep(ENTRY_TICK_S)
+
+
 async def main() -> None:
     log = jb_logging.setup(SERVICE_NAME)
     cfg = config.load(SERVICE_NAME)
@@ -106,9 +134,16 @@ async def main() -> None:
         messages = await bus.subscribe("jukebox/#")
         asyncio.create_task(bus.run_heartbeat())
         await publish_queue(bus, q)
+        entry = Entry(ENTRY_TIMEOUT_MS)
+        await bus.publish("jukebox/jb-core/entry", {"state": "idle", "letter": None, "reason": None}, retain=True)
+        asyncio.create_task(entry_timeouts(bus, entry, log))
 
         async for topic, payload in messages:
-            if topic == "jukebox/jb-library/tracks":
+            if topic == "jukebox/jb-input/key":
+                # Keypad letters and digits -> slot selections (letter first).
+                await publish_entry_events(bus, entry.key(payload["key"], time.monotonic()), log)
+
+            elif topic == "jukebox/jb-library/tracks":
                 q.library_tracks = payload.get("tracks", [])
 
             elif topic == "jukebox/jb-source-phone/connected":
@@ -135,9 +170,11 @@ async def main() -> None:
                 # forever. Drop the expectation and try the next queued track.
                 log.warning("play_item failed on the bus, advancing queue: %r", payload.get("item_path"))
                 q.expected_title = None
+                q.playing = False
                 await try_autoplay(bus, q, log)
 
             elif topic == "jukebox/jb-source-phone/now-playing":
+                q.playing = payload.get("status") == "playing"
                 title = payload.get("title")
                 if not title:
                     continue
@@ -182,7 +219,13 @@ async def main() -> None:
                         log.info("queued manual selection: %s", track.get("title"))
                         if not q.phone_connected:
                             await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
-                        await publish_queue(bus, q)
+                            await publish_queue(bus, q)
+                        elif not q.playing:
+                            # Idle jukebox: a selection starts playing now,
+                            # rather than waiting for a track to end.
+                            await try_autoplay(bus, q, log)
+                        else:
+                            await publish_queue(bus, q)
                 elif action == "shuffle_on":
                     q.shuffle_active = True
                     q.refill_shuffle()

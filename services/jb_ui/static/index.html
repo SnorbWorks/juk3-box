@@ -1017,6 +1017,7 @@
       'jukebox/jb-core/notice',
       'jukebox/jb-audio/state',
       'jukebox/jb-input/gesture',
+      'jukebox/jb-core/selection',
     ]);
   });
 
@@ -1045,6 +1046,15 @@
   function handleMessage(topic, payload) {
     if (topic === 'jukebox/jb-input/gesture') {
       handleKnob(JSON.parse(payload.toString()));
+    } else if (topic === 'jukebox/jb-core/selection') {
+      // A keypad selection (letter then digit) from jb-core. Slot index
+      // 0-99 is A1..K0 in board order; this page owns which track is
+      // shown at each slot (current page and sort), so it resolves the
+      // slot here and queues it exactly like picking the slot directly.
+      const data = JSON.parse(payload.toString());
+      if (Number.isInteger(data.index) && data.index >= 0 && data.index < PAGE_SIZE) {
+        selectSlot(data.index);
+      }
     } else if (topic === 'jukebox/jb-library/tracks') {
       const data = JSON.parse(payload.toString());
       libraryTracks = data.tracks;
