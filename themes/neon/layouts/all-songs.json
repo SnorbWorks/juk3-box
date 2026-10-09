@@ -1,0 +1,10 @@
+{
+  "class": "all-songs",
+  "children": [
+    { "class": "board-bar", "children": [
+      { "block": "page-info" },
+      { "block": "pager", "focus": "pager" }
+    ]},
+    { "block": "board" }
+  ]
+}

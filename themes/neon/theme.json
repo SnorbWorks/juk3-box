@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "neon",
+  "name": "Neon",
+  "version": "0.1.0",
+  "author": "JUKE.BOX",
+  "license": "GPL-3.0",
+  "description": "Purple sidebar, dark song cards with red codes, over a neon video.",
+  "styles": ["theme.css"],
+  "background": { "type": "video", "src": "assets/background.mp4" },
+  "sizing": { "mode": "fluid" }
+}

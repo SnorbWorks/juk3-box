@@ -122,3 +122,11 @@ export function openFilter(field, value) {
   state = { sort: field, filter: { field, value }, page: 0, categoryPage: 0 };
   changed();
 }
+
+// Cover art found among a sort's songs (for Browse cards without a
+// picture of their own).
+export function coversFor(sort) {
+  const tracks = store.get('tracks') || [];
+  const pool = SORTS[sort]?.category ? tracks : songsFor(tracks, sort, null);
+  return [...new Set(pool.map(t => t.artwork_url).filter(Boolean))];
+}

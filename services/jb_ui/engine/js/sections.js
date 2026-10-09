@@ -2,7 +2,7 @@
 // Song cards pick their song; link cards open the board their way.
 
 import { bind, fromTemplate, slot } from './bind.js';
-import { SORTS } from './board.js';
+import { SORTS, coversFor } from './board.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
@@ -17,6 +17,25 @@ const BROWSE_DESCRIPTIONS = {
   'top-100': "The world's favorites",
   'most-played': 'Played most here',
 };
+
+// A Browse card with no picture from the theme shows a random cover from
+// its own songs. Kept until the featured artist changes (every 30 minutes),
+// so cards don't change on every re-render.
+const browseCovers = new Map();
+let coversFeatured;
+
+function randomCover(sort) {
+  const featured = store.get('featured');
+  if (featured !== coversFeatured) {
+    browseCovers.clear();
+    coversFeatured = featured;
+  }
+  const pool = coversFor(sort);
+  if (!browseCovers.has(sort) || !pool.includes(browseCovers.get(sort))) {
+    browseCovers.set(sort, pool[Math.floor(Math.random() * pool.length)] || '');
+  }
+  return browseCovers.get(sort);
+}
 
 // Each type: its heading, card kind, default card count, and its cards.
 const SECTIONS = {
@@ -57,7 +76,7 @@ const SECTIONS = {
     items: (tracks, ctx) => ctx.settings.browse.map(sort => ({
       label: SORTS[sort]?.label || sort,
       description: BROWSE_DESCRIPTIONS[sort] || '',
-      image: ctx.browseImages[sort] || '',
+      image: ctx.browseImages[sort] || sized(randomCover(sort), 600),
       open: () => ctx.actions.openSort(sort),
     })),
   },

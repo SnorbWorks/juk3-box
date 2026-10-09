@@ -259,7 +259,7 @@ A **track** (song cards, song tiles, queue, now playing):
 
 **Now playing** adds `elapsed` (e.g. 1:12) and `state` (`playing`, `paused`, `stopped`).
 
-A **link card** has `label` (e.g. "Most Played"), `description` and `image`. Browse cards take their image from the theme: `assets/browse/most-played.jpg`, named after the sort. Featured artist cards use a cover from that artist.
+A **link card** has `label` (e.g. "Most Played"), `description` and `image`. Browse cards take their image from the theme, named after the sort: `assets/browse/most-played.jpg` (JPG, PNG or WebP). Without one, the card shows a random cover from that sort's own songs, changing every 30 minutes. Featured artist cards use a cover from that artist.
 
 A **section** has `title` (e.g. "New") and `count`, the number of cards in it. An empty section (nothing new yet, nothing played yet) has `data-empty`; hide it or show a message, your choice.
 

@@ -3,3 +3,6 @@ __pycache__/
 venv/
 .DS_Store
 Images/
+# Stock footage licensed for this jukebox only (Vecteezy); it can't be
+# redistributed in the repo. Deployed from the working copy by deploy.sh.
+themes/neon/assets/background.mp4

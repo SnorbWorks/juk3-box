@@ -1,0 +1,289 @@
+/* Neon: the JUKE.BOX default look, from the Sep 2026 mockups
+   (Images/Theme/home mockup, browse all mockup). Fluid: sizes are in vh/vw
+   so it fits any screen; measured against 1920x1080. */
+
+:root {
+  --purple-deep: #2a0d43;
+  --purple: #3b1460;
+  --purple-hi: #9d2ff0;
+  --lilac: #d9a7ff;
+  --heading: #d58cff;
+  --red: #e5384f;
+  --card: rgba(18, 20, 32, 0.86);
+  --card-line: rgba(255, 255, 255, 0.08);
+  --text: #f4f0fa;
+  --muted: rgba(244, 240, 250, 0.6);
+  --focus: #ffd54f;
+}
+
+html, body { color: var(--text); }
+
+/* A dark wash over the video keeps text readable. */
+#jb-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 4, 20, 0.45);
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 14.4vw 1fr;
+  height: 100%;
+}
+
+/* ---- Sidebar ---- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6vh;
+  min-height: 0;
+  padding: 3.5vh 0.9vw 2vh;
+  background: linear-gradient(180deg, var(--purple) 0%, var(--purple-deep) 100%);
+  box-shadow: 0.3vw 0 1.5vw rgba(0, 0, 0, 0.5);
+}
+
+jb-logo { display: block; text-align: center; }
+jb-logo img { max-width: 75%; max-height: 9vh; }
+.jb-logo-text {
+  font-size: 1.9vw;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  color: var(--text);
+}
+
+jb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6vh;
+  padding-bottom: 1.6vh;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.jb-nav-item {
+  padding: 1vh 1.2vw;
+  border-radius: 0.8vh;
+  outline: 0.35vh solid transparent;
+  outline-offset: 0.2vh;
+  transition: outline-color 300ms, background 300ms;
+}
+.jb-nav-item[data-active] { background: var(--purple-hi); }
+.jb-nav-button { display: flex; align-items: center; gap: 1vw; }
+.jb-nav-icon { width: 3.2vh; height: 3.2vh; }
+.jb-nav-label { font-size: 2.5vh; color: var(--lilac); }
+.jb-nav-item[data-active] .jb-nav-label { color: #fff; }
+.jb-nav-item[data-on] .jb-nav-label { color: var(--focus); }
+
+/* Now Playing */
+jb-now-playing { display: block; min-height: 0; }
+.jb-np-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 22vh;
+  object-fit: cover;
+  border-radius: 0.4vh;
+  box-shadow: 0 0.6vh 1.6vh rgba(0, 0, 0, 0.5);
+}
+.jb-np-text { margin-top: 1.2vh; }
+.jb-np-title { font-size: 2.2vh; font-weight: bold; }
+.jb-np-artist { font-size: 1.7vh; color: var(--muted); }
+.jb-np-album { font-size: 1.5vh; font-style: italic; color: var(--muted); }
+.jb-np-title, .jb-np-artist, .jb-np-album { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-np-idle { font-size: 1.8vh; color: var(--muted); }
+.jb-np-progress { height: 0.5vh; margin-top: 1.2vh; border-radius: 0.25vh; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.jb-np-progress-fill { height: 100%; width: calc(var(--jb-progress) * 100%); background: #6ab4ff; }
+.jb-np-times { display: flex; justify-content: space-between; margin-top: 0.4vh; font-size: 1.3vh; color: var(--muted); }
+jb-now-playing[data-state="stopped"] .jb-np-progress,
+jb-now-playing[data-state="stopped"] .jb-np-times { display: none; }
+
+/* Up Next */
+jb-up-next {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 1.2vh 0.6vw;
+  border-radius: 0.6vh;
+  background: rgba(0, 0, 0, 0.2);
+}
+.jb-up-next-title { font-size: 1.3vh; letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-bottom: 1vh; }
+.jb-up-next-cards { display: flex; flex-direction: column; gap: 0.8vh; }
+.jb-up-next-empty { font-size: 1.5vh; color: var(--muted); }
+.jb-queue-card { display: flex; align-items: center; gap: 0.6vw; }
+.jb-queue-cover { width: 4.6vh; height: 4.6vh; object-fit: cover; border-radius: 0.3vh; flex: none; }
+.jb-queue-position { order: 1; font-size: 1.4vh; color: var(--muted); }
+.jb-queue-text { order: 2; min-width: 0; }
+.jb-queue-title { font-size: 1.4vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-queue-artist { font-size: 1.2vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Main area ---- */
+
+.main { min-height: 0; padding: 4vh 2.5vw 3vh; }
+.main jb-screen, .home, .all-songs { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* Home sections: New and Featured Artist share the top row. */
+jb-sections {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3.5vh 2vw;
+  min-height: 0;
+  overflow: hidden;
+}
+jb-section { flex: 1 1 100%; min-width: 0; }
+jb-section[type="new"] { flex: 3 1 0; }
+jb-section[type="featured-artist"] { flex: 1 1 0; }
+jb-section[data-empty] { display: none; }
+.jb-section-title {
+  margin: 0 0 1.4vh;
+  font-size: 4.4vh;
+  font-weight: normal;
+  font-stretch: condensed;
+  text-transform: uppercase;
+  color: var(--heading);
+}
+.jb-section-cards { display: flex; gap: 1.4vw; }
+
+.jb-card {
+  min-width: 0;
+  border-radius: 0.6vh;
+  outline: 0.4vh solid transparent;
+  outline-offset: 0.4vh;
+  transition: outline-color 300ms;
+}
+
+/* New: big covers with the title beside them. */
+jb-section[type="new"] .jb-card { flex: 1 1 0; max-width: 50%; }
+jb-section[type="new"] .jb-song-tile { display: grid; grid-template-columns: 22vh 1fr; column-gap: 1.6vw; align-items: center; }
+jb-section[type="new"] .jb-tile-cover { width: 22vh; height: 22vh; grid-row: span 2; }
+jb-section[type="new"] .jb-tile-title { align-self: end; font-size: 3.6vh; text-transform: uppercase; white-space: normal; }
+jb-section[type="new"] .jb-tile-artist { align-self: start; font-size: 2vh; }
+
+/* Recents and other song rows: covers with text below. */
+.jb-card-song { flex: 0 0 15vh; }
+.jb-tile-cover { display: block; width: 15vh; height: 15vh; object-fit: cover; border-radius: 0.4vh; box-shadow: 0 0.6vh 1.6vh rgba(0, 0, 0, 0.5); }
+.jb-tile-blank { background: rgba(255, 255, 255, 0.08); }
+.jb-tile-title { margin-top: 0.8vh; font-size: 1.6vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-tile-artist { font-size: 1.3vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Browse and Featured Artist: photo cards with a dark caption band. */
+.jb-card-link { flex: 1 1 0; }
+.jb-link-card {
+  position: relative;
+  height: 20vh;
+  border-radius: 0.6vh;
+  overflow: hidden;
+  background: var(--card);
+  box-shadow: 0 0.8vh 2vh rgba(0, 0, 0, 0.5);
+}
+jb-section[type="featured-artist"] .jb-link-card { height: 22vh; }
+.jb-link-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.jb-link-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1.6vh 1vw;
+  background: rgba(14, 16, 26, 0.88);
+}
+.jb-link-label { font-size: 1.8vh; font-weight: bold; letter-spacing: 0.15em; text-transform: uppercase; }
+.jb-link-description { margin-top: 0.4vh; font-size: 1.3vh; color: var(--muted); }
+.jb-link-text::after {
+  content: "\2192";
+  position: absolute;
+  right: 1vw;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3vh;
+  height: 3vh;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 1.7vh;
+  line-height: 3vh;
+  text-align: center;
+}
+
+/* ---- All Songs ---- */
+
+.board-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.6vh; }
+.jb-page-info { display: flex; align-items: baseline; gap: 1.2vw; font-size: 3.2vh; text-transform: uppercase; color: var(--heading); }
+.jb-page-count { font-size: 1.8vh; color: var(--muted); text-transform: none; }
+jb-pager { display: flex; gap: 0.8vw; }
+.jb-pager-item {
+  padding: 0.8vh 1.2vw;
+  border-radius: 0.8vh;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  font-size: 1.7vh;
+  outline: 0.35vh solid transparent;
+  outline-offset: 0.2vh;
+  transition: outline-color 300ms;
+}
+
+/* Five columns, each a letter over the next (A over B, C over D, ...);
+   each letter a bordered panel of its slots. */
+jb-board {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: 1.2vh 0.9vw;
+  min-height: 0;
+  padding: 1.4vh 0.9vw;
+  border-radius: 0.8vh;
+  background: rgba(10, 10, 18, 0.55);
+}
+.jb-letter {
+  display: grid;
+  grid-template-rows: repeat(var(--jb-digits), minmax(0, 1fr));
+  min-height: 0;
+  padding: 0.4vh 0.5vw;
+  border: 1px solid var(--card-line);
+  border-radius: 0.8vh;
+  background: var(--card);
+  transition: box-shadow 200ms;
+}
+.jb-letter[data-entry] { box-shadow: 0 0 0 0.35vh var(--focus); }
+.jb-slot { min-height: 0; overflow: hidden; border-bottom: 1px solid var(--card-line); }
+.jb-slot:last-child { border-bottom: 0; }
+.jb-song-card { display: flex; align-items: center; gap: 0.5vw; height: 100%; }
+.jb-song-code {
+  flex: none;
+  width: 3.2vh;
+  height: 3.2vh;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 1.3vh;
+  font-weight: bold;
+  line-height: 3.2vh;
+  text-align: center;
+}
+.jb-song-cover { flex: none; height: 80%; aspect-ratio: 1; object-fit: cover; border-radius: 0.3vh; }
+.jb-song-text { flex: 1; min-width: 0; }
+.jb-song-title { font-size: 1.4vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-song-artist { font-size: 1.15vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-song-length { flex: none; font-size: 1.15vh; color: var(--muted); }
+.jb-slot[data-empty] .jb-song-code { opacity: 0.35; }
+
+/* ---- Popups ---- */
+
+#jb-popup-layer { background: rgba(8, 2, 16, 0.6); }
+.jb-popup {
+  min-width: 26vw;
+  padding: 3.5vh 2.5vw;
+  border-radius: 1.2vh;
+  background: linear-gradient(180deg, var(--purple) 0%, var(--purple-deep) 100%);
+  box-shadow: 0 1.5vh 4vh rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+.jb-popup-title { margin-bottom: 2.4vh; font-size: 3.4vh; text-transform: uppercase; color: var(--heading); }
+.jb-volume-bar { height: 1.8vh; border-radius: 0.9vh; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); background: var(--purple-hi); }
+.jb-volume-value { margin-top: 1.6vh; font-size: 3vh; }
+.jb-notice { font-size: 2vh; }
+
+/* The knob highlight. Last so it wins over each item's own outline. */
+[data-focused] { outline-color: var(--focus); }

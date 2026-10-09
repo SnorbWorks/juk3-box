@@ -1,0 +1,14 @@
+{
+  "class": "frame",
+  "children": [
+    { "class": "sidebar", "children": [
+      { "block": "logo", "src": "assets/logo.png" },
+      { "block": "nav", "focus": "nav", "focus-flow": "down-from-rest" },
+      { "block": "now-playing" },
+      { "block": "up-next", "limit": 5 }
+    ]},
+    { "class": "main", "children": [
+      { "block": "screen" }
+    ]}
+  ]
+}
