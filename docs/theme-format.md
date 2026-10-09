@@ -199,6 +199,7 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | File | Used for |
 | --- | --- |
 | `song-card.html` | Each song board slot |
+| `up-next.html` | The Up Next frame (title, a place for its cards, a message when the queue is empty) |
 | `queue-card.html` | Each Up Next item |
 | `now-playing.html` | Now Playing |
 | `nav-button.html` | Each nav button |
@@ -255,6 +256,8 @@ A **track** (song cards, song tiles, queue, now playing):
 A **link card** has `label` (e.g. "Most Played"), `description` and `image`. Browse cards take their image from the theme: `assets/browse/most-played.jpg`, named after the sort. Featured artist cards use a cover from that artist.
 
 A **section** has `title` (e.g. "New").
+
+**Up Next** (`up-next.html`) has `count`, the number of songs queued: `data-if-not="count"` shows an element only when the queue is empty.
 
 A **nav button** has `label` and `icon`.
 

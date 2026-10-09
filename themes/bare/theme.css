@@ -52,3 +52,40 @@ html[data-theme-fallback]::after {
   content: "Theme \"" attr(data-theme-fallback) "\" couldn't load, showing Bare";
   color: #ff8a80;
 }
+
+/* Now Playing */
+jb-now-playing {
+  display: flex;
+  flex-direction: column;
+  gap: 1vmin;
+  padding: 1.5vmin;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+.jb-np-cover { width: 100%; max-height: 50%; aspect-ratio: 1; object-fit: cover; }
+.jb-np-title { font-size: 2.2vmin; font-weight: bold; }
+.jb-np-artist, .jb-np-album, .jb-np-idle { font-size: 1.7vmin; opacity: 0.7; }
+.jb-np-progress { height: 0.5vmin; background: rgba(255, 255, 255, 0.15); }
+.jb-np-progress-fill { height: 100%; width: calc(var(--jb-progress) * 100%); background: #fff; }
+.jb-np-times { display: flex; justify-content: space-between; font: 1.4vmin monospace; opacity: 0.7; }
+jb-now-playing[data-state="stopped"] .jb-np-progress,
+jb-now-playing[data-state="stopped"] .jb-np-times { visibility: hidden; }
+
+/* Up Next */
+jb-up-next {
+  padding: 1.5vmin;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+.jb-up-next-title { font-size: 1.6vmin; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.7; margin-bottom: 1vmin; }
+.jb-up-next-cards { display: flex; flex-direction: column; gap: 1vmin; }
+.jb-up-next-empty { font-size: 1.6vmin; opacity: 0.6; }
+.jb-queue-card { display: flex; align-items: center; gap: 1vmin; }
+.jb-queue-position { font: 1.5vmin monospace; opacity: 0.6; min-width: 2ch; }
+.jb-queue-cover { width: 5vmin; height: 5vmin; object-fit: cover; }
+.jb-queue-title { font-size: 1.6vmin; }
+.jb-queue-artist { font-size: 1.3vmin; opacity: 0.7; }

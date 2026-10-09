@@ -52,3 +52,9 @@ html, body {
   font: 2vmin/1.5 monospace;
   white-space: pre-wrap;
 }
+
+/* data-if / data-if-not hide with the hidden attribute; a theme's own
+   display rule mustn't bring hidden elements back. */
+[hidden] {
+  display: none !important;
+}

@@ -6,7 +6,8 @@ client. Phone/laptop admin is jb-admin's job, on its own port.
 Routes:
   /                    the engine page
   /engine/...          engine scripts and styles
-  /api/theme           the active theme: manifest + layouts, validated
+  /api/theme           the active theme: manifest, layouts and block
+                       markup, validated and cleaned
   /themes/<id>/...     files from that theme's folder
   /legacy/...          the first-build song board, kept until the engine
                        can do everything it did
@@ -18,7 +19,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, logging as jb_logging
-from services.jb_ui import themes
+from services.jb_ui import markup, themes
 
 SERVICE_NAME = "jb-ui"
 HERE = Path(__file__).resolve().parent
@@ -89,11 +90,13 @@ class App:
 
     async def api_theme(self, request: web.Request) -> web.Response:
         theme, fallback = self.active_theme()
+        base = f"/themes/{theme.id}/"
         return web.json_response({
             "id": theme.id,
-            "base": f"/themes/{theme.id}/",
+            "base": base,
             "manifest": theme.manifest,
             "layouts": theme.layouts,
+            "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
             "warnings": theme.warnings,
             "fallback": fallback,
         })
