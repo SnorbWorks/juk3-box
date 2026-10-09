@@ -76,3 +76,16 @@ def test_play_count_goes_to_the_copy_whose_artist_matches(db):
     assert tracker.on_now_playing({"title": "Animal", "artist": "neon trees", "status": "playing",
                                    "position_ms": 31_000}) is True
     assert db.execute("SELECT dup, play_count FROM tracks ORDER BY dup").fetchall() == [(0, 0), (1, 1)]
+
+
+def added(db):
+    return dict(db.execute("SELECT title, added_at FROM tracks").fetchall())
+
+
+def test_songs_added_after_the_first_sync_are_stamped(db):
+    lib.upsert_tracks(db, MAC, crawl("Animal", "Sweater Weather"), now=100.0)
+    assert added(db) == {"Animal": None, "Sweater Weather": None}  # there from the start
+    lib.upsert_tracks(db, MAC, crawl("Animal", "Sweater Weather", "Dreams"), now=200.0)
+    assert added(db) == {"Animal": None, "Sweater Weather": None, "Dreams": 200.0}
+    lib.upsert_tracks(db, MAC, crawl("Animal", "Sweater Weather", "Dreams"), now=300.0)
+    assert added(db)["Dreams"] == 200.0  # a resync doesn't make it new again

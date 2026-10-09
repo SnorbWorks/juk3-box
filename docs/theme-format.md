@@ -188,9 +188,9 @@ Each section is a row of cards. There are two kinds of card:
 
 | Section | Cards | Click |
 | --- | --- | --- |
-| `new` | Songs that appeared on the last phone sync | Plays the song |
-| `recents` | Recently played songs | Plays the song |
-| `featured-artist` | An artist the engine picks at random, changing now and then | Opens the board filtered to that artist |
+| `new` | Songs added to the phone since the jukebox first synced it, newest first | Plays the song |
+| `recents` | Songs played for at least 30 seconds, most recent first | Plays the song |
+| `featured-artist` | An artist the engine picks at random, at startup and every 30 minutes | Opens the board filtered to that artist |
 | `browse` | Shortcuts: Artist, Album, Genre, Top 100, Most Played, Recently Added and so on, chosen in Settings | Opens the board in that sort |
 
 More section types will come with later format versions and plugins. A theme that doesn't style a new type gets the engine's plain look for it.
@@ -261,7 +261,7 @@ A **track** (song cards, song tiles, queue, now playing):
 
 A **link card** has `label` (e.g. "Most Played"), `description` and `image`. Browse cards take their image from the theme: `assets/browse/most-played.jpg`, named after the sort. Featured artist cards use a cover from that artist.
 
-A **section** has `title` (e.g. "New").
+A **section** has `title` (e.g. "New") and `count`, the number of cards in it. An empty section (nothing new yet, nothing played yet) has `data-empty`; hide it or show a message, your choice.
 
 **Up Next** (`up-next.html`) has `count`, the number of songs queued: `data-if-not="count"` shows an element only when the queue is empty.
 
@@ -284,6 +284,7 @@ The engine sets attributes; style them in your CSS.
 | Board slot | `data-entry` | Its letter has been pressed, waiting for a digit |
 | Now playing | `data-state` | `playing`, `paused` or `stopped` |
 | Section | `data-type` | `new`, `recents`, `featured-artist`, `browse` |
+| Section | `data-empty` | No cards (e.g. no new songs yet) |
 | `<html>` | `data-screen` | Current screen name |
 | `<html>` | `data-mode` | `select`, or a knob mode such as `volume` |
 | `<html>` | `data-phone` | `connected` or `disconnected` |

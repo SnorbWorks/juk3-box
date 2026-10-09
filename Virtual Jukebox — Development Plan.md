@@ -345,10 +345,10 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 
 ### Backend additions
 
-- [ ] Recents: track recently played songs (jb-library already counts plays)
-- [ ] New: songs that appear on a phone reconnect that weren't in the previous sync (order TBD: date, alphabetical or random)
+- [x] Recents: songs played 30s or more, most recent first (jb-library's last_played_at)
+- [x] New: songs that appear on a later sync than the phone's first (jb-library's added_at), newest first, then alphabetical
 - [ ] Song length and album year from the iTunes lookup
-- [ ] Featured Artist: a random artist pick that changes now and then
+- [x] Featured Artist: a random artist with a cover, at startup and every 30 minutes
 - [ ] Favorites: an owner-built list (e.g. "favorite" from the Now Playing click). Check whether the phone's Playlists folder over AVRCP exposes iOS's Favorite Songs or Most Played playlists to seed it
 - [ ] Owner setting: a pick interrupts the current song (off by default)
 

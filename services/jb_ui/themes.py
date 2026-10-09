@@ -226,15 +226,26 @@ def _check_node(node, where: str, problems: list[str], warnings: list[str]) -> i
 
 
 ICON_TYPES = (".svg", ".png", ".webp")
+PHOTO_TYPES = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def named_assets(root: Path, folder: str, types: tuple[str, ...]) -> dict[str, str]:
+    """Files in assets/<folder>/, by name (`home.svg` -> "home"), as paths
+    relative to the theme folder."""
+    found: dict[str, str] = {}
+    path = root / "assets" / folder
+    if path.is_dir():
+        for f in sorted(path.iterdir()):
+            if f.suffix.lower() in types and ID_RE.match(f.stem) and f.stem not in found:
+                found[f.stem] = f"assets/{folder}/{f.name}"
+    return found
 
 
 def icons(root: Path) -> dict[str, str]:
-    """Icon files in assets/icons/, by name (`home.svg` -> "home"), as
-    paths relative to the theme folder."""
-    folder = root / "assets" / "icons"
-    found: dict[str, str] = {}
-    if folder.is_dir():
-        for path in sorted(folder.iterdir()):
-            if path.suffix in ICON_TYPES and ID_RE.match(path.stem) and path.stem not in found:
-                found[path.stem] = f"assets/icons/{path.name}"
-    return found
+    """Nav and pager icons: assets/icons/home.svg and so on."""
+    return named_assets(root, "icons", ICON_TYPES)
+
+
+def browse_images(root: Path) -> dict[str, str]:
+    """Browse card pictures, named after the sort: assets/browse/artist.jpg."""
+    return named_assets(root, "browse", PHOTO_TYPES)

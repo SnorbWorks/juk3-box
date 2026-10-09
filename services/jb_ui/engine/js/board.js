@@ -114,3 +114,11 @@ export function pick(index) {
   }
   return slot.item;
 }
+
+// Straight to one artist's (album's, genre's) songs, e.g. from the
+// Featured Artist card. Backing up lands on the full list of them.
+export function openFilter(field, value) {
+  if (!SORTS[field]?.category) return;
+  state = { sort: field, filter: { field, value }, page: 0, categoryPage: 0 };
+  changed();
+}

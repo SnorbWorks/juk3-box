@@ -1,8 +1,9 @@
 // JUKE.BOX UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { pick, setSort } from './board.js';
+import { openFilter, pick, setSort } from './board.js';
 import { connectBus, publish } from './bus.js';
+import { startFeatured } from './featured.js';
 import { click, currentMode, enterMode, goToRest, refocus, rotate } from './focus.js';
 import { renderLayout } from './layout.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
@@ -27,10 +28,30 @@ const actions = {
       showScreen(name);
     }
   },
+  // A song card or a keypad pick: jb-core plays it now if nothing is
+  // playing, otherwise queues it.
+  pick(track) {
+    publish('jukebox/jb-core/cmd', { action: 'select', track });
+  },
+  openSort(sort) {
+    setSort(sort);
+    showScreen('all-songs');
+  },
+  openFilter(field, value) {
+    openFilter(field, value);
+    showScreen('all-songs');
+  },
 };
 
 function context() {
-  return { base: theme.base, blocks: theme.blocks, icons: theme.icons, settings: theme.settings, actions };
+  return {
+    base: theme.base,
+    blocks: theme.blocks,
+    icons: theme.icons,
+    browseImages: theme.browse_images,
+    settings: theme.settings,
+    actions,
+  };
 }
 
 function showScreen(name) {
@@ -110,7 +131,7 @@ function watchSystem() {
   store.watch(html, 'selection', s => {
     if (!Number.isInteger(s?.index)) return;
     const track = pick(s.index);
-    if (track) publish('jukebox/jb-core/cmd', { action: 'select', track });
+    if (track) actions.pick(track);
   });
 }
 
@@ -143,6 +164,7 @@ async function start() {
   initPopups(theme.blocks);
   watchSystem();
   watchIdle();
+  startFeatured();
   document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context()));
   showScreen('home');
   goToRest();

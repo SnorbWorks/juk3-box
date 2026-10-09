@@ -110,3 +110,13 @@ def test_owner_board_and_idle_settings_are_cleaned():
         assert main.owner_settings({"songs_per_page": bad})["songs_per_page"] == 100, bad
     for bad in (-1, "5", None, False):
         assert main.owner_settings({"idle_home_minutes": bad})["idle_home_minutes"] == 5, bad
+
+
+def test_owner_home_and_browse_settings_are_cleaned():
+    s = main.owner_settings({})
+    assert s["home_sections"] == main.DEFAULT_HOME_SECTIONS
+    assert s["browse"] == ["artist", "album", "top-100", "most-played"]
+    s = main.owner_settings({"home_sections": ["recents", "bogus", "recents"], "browse": ["genre"]})
+    assert (s["home_sections"], s["browse"]) == (["recents"], ["genre"])
+    assert main.owner_settings({"home_sections": []})["home_sections"] == []  # spartan is allowed
+    assert main.owner_settings({"browse": "artist"})["browse"] == main.DEFAULT_BROWSE

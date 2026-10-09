@@ -68,6 +68,21 @@ def read_settings(path: Path) -> dict:
 NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings")
 DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
 
+# Home sections and Browse cards the engine knows (docs/theme-format.md,
+# "Home sections").
+HOME_SECTIONS = ("new", "featured-artist", "browse", "recents")
+DEFAULT_HOME_SECTIONS = ["new", "featured-artist", "browse", "recents"]
+BROWSE_SORTS = ("title", "artist", "album", "genre", "top-100", "most-played")
+DEFAULT_BROWSE = ["artist", "album", "top-100", "most-played"]
+
+
+def _choice_list(value, known, default):
+    """An owner's list of choices, unknown ones and repeats dropped. An empty
+    list is a real choice (show none); anything not a list is the default."""
+    if not isinstance(value, list):
+        return default
+    return list(dict.fromkeys(v for v in value if v in known))
+
 
 def owner_settings(raw: dict) -> dict:
     """The owner's choices the engine needs, with anything unusable
@@ -89,7 +104,13 @@ def owner_settings(raw: dict) -> dict:
     if not (isinstance(idle, (int, float)) and not isinstance(idle, bool) and idle >= 0):
         idle = 5
 
-    return {"nav": nav, "songs_per_page": per_page, "idle_home_minutes": idle}
+    return {
+        "nav": nav,
+        "songs_per_page": per_page,
+        "idle_home_minutes": idle,
+        "home_sections": _choice_list(raw.get("home_sections"), HOME_SECTIONS, DEFAULT_HOME_SECTIONS),
+        "browse": _choice_list(raw.get("browse"), BROWSE_SORTS, DEFAULT_BROWSE),
+    }
 
 
 class App:
@@ -127,6 +148,7 @@ class App:
             "layouts": theme.layouts,
             "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
             "icons": {name: base + path for name, path in themes.icons(theme.root).items()},
+            "browse_images": {name: base + path for name, path in themes.browse_images(theme.root).items()},
             "settings": settings,
             "warnings": theme.warnings,
             "fallback": fallback,

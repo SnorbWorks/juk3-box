@@ -29,6 +29,9 @@ PLAY_COUNT_THRESHOLD_MS = 30_000
 MIGRATIONS = {
     "lastfm_listeners": "INTEGER",            # global popularity: distinct Last.fm listeners
     "popularity_checked": "INTEGER DEFAULT 0",
+    # When a song first showed up in a sync after this phone's first one
+    # (the UI's "New"). NULL for songs that were there from the start.
+    "added_at": "REAL",
 }
 
 
@@ -55,6 +58,7 @@ TRACKS_SCHEMA = """
         last_played_at REAL,
         lastfm_listeners INTEGER,
         popularity_checked INTEGER DEFAULT 0,
+        added_at REAL,
         PRIMARY KEY (phone_mac, title, dup)
     )
 """
@@ -97,18 +101,21 @@ def number_duplicates(tracks: list) -> list:
     return out
 
 
-def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None) -> int:
+def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None, now: float | None = None) -> int:
     """Stores a sync for one phone and removes songs no longer on it (so no
     board entry is left pointing at a play path that now belongs to another
-    song). Returns how many were removed."""
+    song). Songs this sync adds to an already-synced phone are stamped with
+    `added_at`. Returns how many were removed."""
     numbered = number_duplicates(tracks)
+    had_songs = conn.execute("SELECT 1 FROM tracks WHERE phone_mac=? LIMIT 1", (mac,)).fetchone() is not None
+    added_at = (now if now is not None else time.time()) if had_songs else None
     conn.executemany(
         """
-        INSERT INTO tracks (phone_mac, title, dup, item_path)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tracks (phone_mac, title, dup, item_path, added_at)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(phone_mac, title, dup) DO UPDATE SET item_path = excluded.item_path
         """,
-        [(mac, title, dup, path) for title, dup, path in numbered],
+        [(mac, title, dup, path, added_at) for title, dup, path in numbered],
     )
     stored = conn.execute("SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)).fetchone()[0]
     removed = 0
@@ -206,7 +213,7 @@ class Snapshots:
         rows = self.conn.execute(
             """
             SELECT title, artist, album, genre, artwork_url, item_path,
-                   lastfm_listeners, play_count, last_played_at
+                   lastfm_listeners, play_count, last_played_at, added_at
             FROM tracks ORDER BY title COLLATE NOCASE
             """
         ).fetchall()
@@ -215,6 +222,7 @@ class Snapshots:
                 "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
                 "artwork_url": r[4], "item_path": r[5],
                 "popularity": r[6], "play_count": r[7] or 0, "last_played_at": r[8],
+                "added_at": r[9],
             }
             for r in rows
         ]

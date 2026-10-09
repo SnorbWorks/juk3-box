@@ -175,6 +175,50 @@ jb-board {
 .jb-song-length { opacity: 0.6; }
 .jb-slot[data-empty] { opacity: 0.25; }
 
+/* Home sections: New and Featured Artist share the top row, Browse and
+   Recents get full rows. Empty sections (nothing new yet) are hidden. */
+jb-sections {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3vmin 2vmin;
+  min-height: 0;
+  overflow: hidden;
+}
+jb-section { flex: 1 1 100%; min-width: 0; }
+jb-section[type="new"] { flex: 3 1 0; }
+jb-section[type="featured-artist"] { flex: 1 1 0; }
+jb-section[data-empty] { display: none; }
+.jb-section-title { margin: 0 0 1.2vmin; font-size: 2.4vmin; letter-spacing: 0.1em; text-transform: uppercase; }
+.jb-section-cards { display: flex; gap: 1.5vmin; }
+
+.jb-card {
+  min-width: 0;
+  border-radius: 6px;
+  outline: 0.4vmin solid transparent;
+  outline-offset: 0.3vmin;
+  transition: outline-color 300ms;
+}
+.jb-card-song { flex: 0 0 17vmin; }
+.jb-tile-cover { display: block; width: 17vmin; height: 17vmin; object-fit: cover; border-radius: 4px; }
+.jb-tile-blank { background: rgba(255, 255, 255, 0.08); }
+.jb-tile-title { margin-top: 0.8vmin; font-size: 1.6vmin; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-tile-artist { font-size: 1.3vmin; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.jb-card-link { flex: 1 1 0; }
+.jb-link-card {
+  position: relative;
+  height: 17vmin;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+.jb-link-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
+.jb-link-text { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.5vmin; background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); }
+.jb-link-label { font-size: 2vmin; font-weight: bold; }
+.jb-link-description { font-size: 1.4vmin; opacity: 0.75; }
+
 /* The knob highlight. Last in the file so it wins over each item's own
    (transparent) outline. */
 [data-focused] { outline-color: #ffd54f; }

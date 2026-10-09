@@ -5,6 +5,7 @@
 import { bind, fromTemplate, slot } from './bind.js';
 import { turnPage, upLevel, view } from './board.js';
 import { makeStop } from './focus.js';
+import { fillSection, fillSections } from './sections.js';
 import { store } from './store.js';
 import { formatMs, sized, toTrack } from './tracks.js';
 
@@ -16,8 +17,8 @@ export const BLOCKS = {
   'now-playing': fillNowPlaying,
   'up-next': fillUpNext,
   board: fillBoard,
-  sections: null,
-  section: null,
+  sections: fillSections,
+  section: fillSection,
   'page-info': fillPageInfo,
   pager: fillPager,
 };
