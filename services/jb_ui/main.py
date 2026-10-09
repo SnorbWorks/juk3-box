@@ -33,7 +33,7 @@ DEFAULTS = {
     # Themes that ship with JUKE.BOX first, then themes the owner added
     # (outside /opt/juk3-box, which every deploy replaces).
     "theme_dirs": [str(REPO_DIR / "themes"), "/var/lib/juk3-box/themes"],
-    # Owner choices (active theme, later Home sections, nav buttons, ...).
+    # Owner choices: active theme, nav buttons (later Home sections, ...).
     "settings_path": "/var/lib/juk3-box/settings.json",
     "default_theme": "bare",
     # Always shipped; used when the chosen theme can't load.
@@ -64,6 +64,21 @@ def read_settings(path: Path) -> dict:
         return {}
 
 
+# Nav buttons the engine knows (docs/theme-format.md, "Nav buttons").
+NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings")
+DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
+
+
+def owner_settings(raw: dict) -> dict:
+    """The owner's choices the engine needs, with anything unusable
+    replaced by the default."""
+    nav = raw.get("nav")
+    nav = list(dict.fromkeys(b for b in nav if b in NAV_BUTTONS)) if isinstance(nav, list) else None
+    if not nav:
+        nav = DEFAULT_NAV
+    return {"nav": nav}
+
+
 class App:
     def __init__(self, cfg: dict, log):
         self.cfg = cfg
@@ -90,6 +105,7 @@ class App:
 
     async def api_theme(self, request: web.Request) -> web.Response:
         theme, fallback = self.active_theme()
+        settings = owner_settings(read_settings(self.settings_path))
         base = f"/themes/{theme.id}/"
         return web.json_response({
             "id": theme.id,
@@ -97,6 +113,8 @@ class App:
             "manifest": theme.manifest,
             "layouts": theme.layouts,
             "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
+            "icons": {name: base + path for name, path in themes.icons(theme.root).items()},
+            "settings": settings,
             "warnings": theme.warnings,
             "fallback": fallback,
         })

@@ -3,6 +3,7 @@
 // Keep the names in step with KNOWN_BLOCKS in services/jb_ui/themes.py.
 
 import { bind, fromTemplate, slot } from './bind.js';
+import { makeStop } from './focus.js';
 import { store } from './store.js';
 import { formatMs, toTrack } from './tracks.js';
 
@@ -10,7 +11,7 @@ export const BLOCKS = {
   // The engine puts the current screen into this element itself.
   screen: () => {},
   logo: fillLogo,
-  nav: null,
+  nav: fillNav,
   'now-playing': fillNowPlaying,
   'up-next': fillUpNext,
   board: null,
@@ -90,4 +91,44 @@ function fillUpNext(el, node, ctx) {
 
   store.watch(el, 'queue', render);
   store.watch(el, 'library', render);
+}
+
+const NAV_LABELS = {
+  home: 'Home',
+  volume: 'Volume',
+  shuffle: 'Shuffle',
+  'all-songs': 'All Songs',
+  settings: 'Settings',
+};
+
+// The owner picks which buttons show, and their order (Settings). Each
+// button sits in a .jb-nav-item, which carries its states.
+function fillNav(el, node, ctx) {
+  const items = ctx.settings.nav.map(name => {
+    const item = document.createElement('div');
+    item.className = 'jb-nav-item';
+    item.dataset.button = name;
+    item.append(fromTemplate(ctx.blocks['nav-button']));
+    makeStop(item, `nav:${name}`, () => ctx.actions.nav(name));
+    return item;
+  });
+  el.replaceChildren(...items);
+
+  const render = () => {
+    const shuffle = !!store.get('queue')?.shuffle_active;
+    const screen = store.get('screen');
+    for (const item of items) {
+      const name = item.dataset.button;
+      const on = name === 'shuffle' && shuffle;
+      // Shuffle on reads "Singles": the label says what a click does.
+      bind(item, {
+        label: on ? 'Singles' : NAV_LABELS[name],
+        icon: (on && ctx.icons['shuffle-on']) || ctx.icons[name] || '',
+      });
+      item.toggleAttribute('data-active', name === screen);
+      if (name === 'shuffle') item.toggleAttribute('data-on', on);
+    }
+  };
+  store.watch(el, 'queue', render);
+  store.watch(el, 'screen', render);
 }

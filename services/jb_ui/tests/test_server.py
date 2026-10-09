@@ -72,3 +72,30 @@ def test_legacy_page_has_no_csp(tmp_path):
         assert r.status == 200
         assert "Content-Security-Policy" not in r.headers
     run(tmp_path, check)
+
+
+def test_owner_nav_settings_are_cleaned():
+    assert main.owner_settings({})["nav"] == main.DEFAULT_NAV
+    assert main.owner_settings({"nav": ["settings", "bogus", "home", "home"]})["nav"] == ["settings", "home"]
+    assert main.owner_settings({"nav": ["bogus"]})["nav"] == main.DEFAULT_NAV
+    assert main.owner_settings({"nav": "home"})["nav"] == main.DEFAULT_NAV
+
+
+def test_api_includes_settings_and_icons(tmp_path):
+    def setup(added):
+        d = added / "iconic"
+        shutil.copytree(SHIPPED / "bare", d)
+        m = json.loads((d / "theme.json").read_text())
+        m["id"] = "iconic"
+        (d / "theme.json").write_text(json.dumps(m))
+        (d / "assets" / "icons").mkdir(parents=True)
+        (d / "assets" / "icons" / "home.svg").write_text("<svg></svg>")
+        (d / "assets" / "icons" / "notes.txt").write_text("not an icon")
+
+    async def check(client):
+        data = await (await client.get("/api/theme")).json()
+        assert data["id"] == "iconic"
+        assert data["icons"] == {"home": "/themes/iconic/assets/icons/home.svg"}
+        assert data["settings"]["nav"] == main.DEFAULT_NAV
+        assert "nav-button" in data["blocks"] and "popup-volume" in data["blocks"]
+    run(tmp_path, check, theme="iconic", setup=setup)

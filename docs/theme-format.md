@@ -174,7 +174,9 @@ The engine knows these nav buttons. The owner picks which show, and in what orde
 | `volume` | Turn the knob to change the volume |
 | `shuffle` | Shuffle on or off |
 
-A theme gives each button its look with an icon file named after it: `assets/icons/home.svg`, `assets/icons/volume.svg` and so on. Labels come from the engine.
+A theme gives each button its look with an icon file named after it (SVG, PNG or WebP): `assets/icons/home.svg`, `assets/icons/volume.svg` and so on. An optional `shuffle-on` icon replaces `shuffle` while shuffle is on. Labels come from the engine; while shuffle is on, its label reads "Singles", which is what a click switches to.
+
+Each button sits in a `.jb-nav-item` element, which carries its states (see States you can style).
 
 ### Home sections
 
@@ -208,6 +210,7 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | `link-card.html` | Link cards in Home sections |
 | `popup.html` | The frame of every popup |
 | `popup-volume.html` | The volume popup's content |
+| `popup-notice.html` | The content of short notices, such as "Connect your phone" |
 
 A section can use its own card markup by type: `song-tile-new.html` overrides `song-tile.html` for the New section only.
 
@@ -261,6 +264,8 @@ A **section** has `title` (e.g. "New").
 
 A **nav button** has `label` and `icon`.
 
+A **popup** frame has `title`. The volume popup has `percent` (0 to 100); a notice has `message`.
+
 **Every track field may be empty except `title`.** The phone only sends titles; the rest comes from online lookups that can miss. Design for a song with no cover and no artist.
 
 ### States you can style
@@ -270,8 +275,8 @@ The engine sets attributes; style them in your CSS.
 | Where | Attribute | Meaning |
 | --- | --- | --- |
 | Any focusable item | `data-focused` | The knob highlight is here |
-| Nav button | `data-active` | Its screen is showing |
-| Nav button | `data-on` | Shuffle is on |
+| Nav button (`.jb-nav-item`) | `data-active` | Its screen is showing |
+| Nav button (`.jb-nav-item`) | `data-on` | Shuffle is on |
 | Board slot | `data-empty` | No song in this slot |
 | Board slot | `data-entry` | Its letter has been pressed, waiting for a digit |
 | Now playing | `data-state` | `playing`, `paused` or `stopped` |

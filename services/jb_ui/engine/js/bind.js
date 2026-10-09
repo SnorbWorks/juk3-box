@@ -38,6 +38,6 @@ export function slot(root, name) {
 function own(root, selector) {
   return [...root.querySelectorAll(selector)].filter(el => {
     const s = el.closest('[data-slot]');
-    return !s || !root.contains(s);
+    return !s || s === root || !root.contains(s);
   });
 }

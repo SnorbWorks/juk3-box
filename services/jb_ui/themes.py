@@ -223,3 +223,18 @@ def _check_node(node, where: str, problems: list[str], warnings: list[str]) -> i
         if not SETTING_RE.match(key) or not isinstance(value, (str, int, float, bool)):
             problems.append(f"{where}: container setting {key!r} must be a simple value")
     return sum(_check_node(child, where, problems, warnings) for child in children)
+
+
+ICON_TYPES = (".svg", ".png", ".webp")
+
+
+def icons(root: Path) -> dict[str, str]:
+    """Icon files in assets/icons/, by name (`home.svg` -> "home"), as
+    paths relative to the theme folder."""
+    folder = root / "assets" / "icons"
+    found: dict[str, str] = {}
+    if folder.is_dir():
+        for path in sorted(folder.iterdir()):
+            if path.suffix in ICON_TYPES and ID_RE.match(path.stem) and path.stem not in found:
+                found[path.stem] = f"assets/icons/{path.name}"
+    return found

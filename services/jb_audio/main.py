@@ -28,7 +28,8 @@ async def get_state() -> dict:
 
 async def publish_state(bus: Bus, log) -> None:
     state = await get_state()
-    await bus.publish(f"jukebox/{SERVICE_NAME}/state", state)
+    # Retained, so a screen that loads later still knows the volume.
+    await bus.publish(f"jukebox/{SERVICE_NAME}/state", state, retain=True)
     log.info("state: %s", state)
 
 
