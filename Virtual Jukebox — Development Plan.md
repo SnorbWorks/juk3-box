@@ -284,19 +284,70 @@ The buttons and cabinet respond to what the jukebox is doing. Subscribes to jb-c
 
 Done when: a full select, confirm and reset sequence plays on the keys within about 20 ms of each press.
 
-## Phase 7: Song board UI (jb-ui)
+## Phase 7: UI platform (jb-ui)
 
-The mockup made live: a web app in a Chromium kiosk that mirrors the bus in real time.
+**Goal: the UI is a platform, not a theme, built the way WordPress is.** JUKE.BOX is meant for public release. Anyone can install it, apply a theme to change the look and the layout, and later add plugins for new abilities. The aim is to be a big step above fruitbox: easy install, easy modification, and the Bluetooth phone link.
 
-- [ ] Header: logo; source tabs driven by active adapters (phone tab shows the connected phone's name, dims to PHONE with a pair prompt when none); sort-mode indicator
-- [ ] Board: 5 columns × 20 title strips labeled A1–K0; entered letter's block highlighted
-- [ ] Now-playing strip: artwork, title, artist, progress bar, play state
-- [ ] Up-next strip: queue with artwork where available
-- [ ] Legend strip: what each control does in the current mode
-- [ ] Screens: menu, phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
-- [ ] Kiosk: cage + Chromium on boot
+The first build (Sep 27–Oct 6) proved the behavior on real hardware: song board, Now Playing, Up Next, sort drill-down, knob navigation and keypad selection. That page has its look and logic mixed together and is replaced by this design. The behavior carries over.
 
-Done when: the board tracks the system in real time on the real monitor.
+Mockups for the default theme are in `Images/Theme/` ("home mockup", "browse all mockup"). Their labels, song counts and logo are placeholders.
+
+### Three layers
+
+| Layer | What it is | Who makes it |
+| --- | --- | --- |
+| Platform | The services, plus a UI engine in the kiosk that owns all behavior: bus data, the knob highlight and focus order, letter + digit selection, screen changes, popups, the return-to-Home timer | The project |
+| Theme | A folder with no code: layouts per screen, block templates, colors, fonts, images, background. Changes the look and the arrangement | Anyone |
+| Plugin | Adds abilities: quick sorts, blocks, sources, light shows. Code, so it gets an API and a trust model | Later |
+
+A theme never talks to the bus or reads the knob. It places blocks; the engine fills them with live data and makes them selectable.
+
+### Rules
+
+- Themes can rearrange screens, not just restyle them.
+- Responsive: one theme fits any monitor size and aspect ratio. Size with relative units and grid, never fixed pixels for the screen.
+- Themes are data only (HTML templates, CSS, images, a manifest), so installing one can't run code. Plugins come later with their own rules.
+- Not gatekept: the theme format is documented, and the default theme is the worked example to copy.
+- The knob's focus order comes from the layout's reading order (left to right, top to bottom), computed by the engine. No hand-kept order lists.
+- Every block copes with missing data: no cover, no artist, no length, no phone connected.
+- Lean: plain HTML/CSS/JS, no framework and no build step. Chromium runs on a 1 GB Pi.
+- Public-ready: no personal details in code (network, names, keys live in config), a theme format version number. License: GPL-3.0 (decided 2026-10-08), so distributed copies stay open source.
+
+### Blocks (first set)
+
+Nav bar, Now Playing, Up Next, song board (100 slots, A–K × 1–0), song card, featured card (New), quick-sort card (Browse), recents card, popup.
+
+### Default theme (the mockups)
+
+- Left sidebar: logo, Home / Volume / All Songs / Settings, Now Playing (cover, title, artist, album + year, progress), Up Next list.
+- Home: New (featured cards), Browse (four quick-sort cards, which sorts TBD), Recents (row of cards).
+- All Songs: the 100-slot board as dark cards (code, cover, title, artist, length).
+- Neon tunnel background.
+
+### Navigation
+
+- Home is the resting point (replaces Volume). After idle, focus returns to Home.
+- From Home, clockwise moves into the Home page's Browse cards, scanning left to right, top to bottom. Counter-clockwise moves down through the nav bar.
+- Click is the only knob gesture for now. Letter + digit selects a board slot.
+
+### Backend additions
+
+- [ ] Recents: track recently played songs (jb-library already counts plays)
+- [ ] New: songs that appear on a phone reconnect that weren't in the previous sync (order TBD: date, alphabetical or random)
+- [ ] Song length and album year from the iTunes lookup
+
+### Build order
+
+- [ ] Theme format spec: manifest, layouts, block templates, style variables, format version
+- [ ] UI engine: bus data, focus/knob, selection, screens, popups
+- [ ] Blocks above, unstyled but working
+- [ ] Default theme from the mockups
+- [ ] Prove it: a second, deliberately different test theme rearranges the screens with no engine changes; test at two monitor sizes
+- [ ] Screens from the old plan, still needed: phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
+- [ ] Settings: sources, theme picker
+- [ ] Later: plugin API, theme install from Settings, installer/setup wizard
+
+Done when: the default theme matches the mockups on the real monitor, and a second theme can rearrange it without touching the engine.
 
 ## Phase 8: Appliance behavior
 
@@ -329,7 +380,7 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 | Button and gesture mapping | Phase 2b config | Deferred. Draft: knob turn = volume, push + turn = paging, Reset = cancel/back, plus the click/double-click/hold mapping in Phase 2b's "Gesture-to-function mapping" section. Lives in config, costs nothing to change |
 | Up Next: removing a queued item | Phase 6/7 | Undecided — click vs. hold once an item is reachable via Up Next's scroll mode; see Phase 2b's gesture-to-function mapping |
 | Connection policy: takeover vs. locked | Phase 4 | Locked: switching only from the jukebox menu |
-| Monitor size, resolution, aspect | Phase 7 | Mockup is 4:3 |
+| Monitor size, resolution, aspect | Phase 7 | Decided: the UI is responsive, so any monitor works; the default theme mockups are 16:10 |
 | Coin-return retrofit feasibility | Phase 2a | Fallback: separate panel knob, still fits the pin budget |
 | Queue, artwork, "recent" strategies | Phase 4–6 | Come out of the Phase 3 findings |
 | LED board header height | Phase 2c | Depends on DAC Pro jack height; measure first |
