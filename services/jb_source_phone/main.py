@@ -17,6 +17,12 @@ BLUEZ = "org.bluez"
 DBUS_RETRY_ATTEMPTS = 5
 DBUS_RETRY_DELAY_S = 0.5
 
+# A whole library crawl normally takes well under a minute. BlueZ calls have
+# no timeout of their own, and a crawl that hung when the phone switched
+# apps mid-way held the sync lock forever, so no later sync ever ran (seen
+# 2026-10-09). Give up and let the next player change try again.
+CRAWL_TIMEOUT_S = 120
+
 
 async def _dbus_retry(coro_fn):
     last_error = None
@@ -80,48 +86,39 @@ class Phone:
             "number_of_tracks": track.get("NumberOfTracks").value if "NumberOfTracks" in track else None,
         }
 
-    async def _enter_folder_by_name(self, name_suffix: str):
-        items = await self.folder_iface.call_list_items({})
-        for path, props in items.items():
-            name = props["Name"].value if "Name" in props else ""
-            if name.endswith(name_suffix):
-                await self.folder_iface.call_change_folder(path)
-                return
-        raise RuntimeError(f"folder not found: {name_suffix}")
-
     async def crawl_songs(self) -> list:
-        """Navigate Filesystem > My Music > Songs and list every track (title only, per AVRCP limits).
-        The AVRCP browse position is stateful server-side in bluetoothd, not in
-        our process, and ChangeFolder can only move one level at a time (down
-        into a listed child; BlueZ rejects an arbitrary jump straight back to
-        root with "Invalid arguments", confirmed live). We used to track our
-        own belief about the position and persist it across restarts, but that
-        broke badly after a full reboot: BlueZ's player path numbering restarts
-        from player0 too, so a persisted "we're already in Songs" belief from a
-        previous, unrelated session got silently applied to a brand-new player
-        that was actually still sitting at Filesystem root -- the crawl listed
-        the top-level folders as if they were songs, and every subsequent
-        play_item failed with "interface not found". Ask BlueZ's own Name
-        property where we actually are instead of trusting anything remembered
-        -- it can't go stale since it's queried fresh every time."""
-        current = await _dbus_retry(lambda: self.player_props_iface.call_get("org.bluez.MediaFolder1", "Name"))
-        current = current.value
-        if current == "/Filesystem":
-            await _dbus_retry(lambda: self._enter_folder_by_name("/My Music"))
-            await _dbus_retry(lambda: self._enter_folder_by_name("/Songs"))
-        elif current == "/Filesystem/My Music":
-            await _dbus_retry(lambda: self._enter_folder_by_name("/Songs"))
-        elif current != "/Filesystem/My Music/Songs":
-            raise RuntimeError(f"can't navigate to Songs from unexpected browse position {current!r}")
-        items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
-        # Defensive: every entry here should be a playable track, not a
-        # sub-folder -- but this is exactly the assumption that silently broke
-        # before, so verify it instead of trusting it blindly.
-        return [
-            {"item_path": path, "title": props["Name"].value if "Name" in props else None}
-            for path, props in items.items()
-            if props.get("Type", None) is None or props["Type"].value != "folder"
-        ]
+        """Navigate Filesystem > My Music > Songs and list every track (title
+        only, per AVRCP limits).
+
+        The AVRCP browse position lives on the phone, and ChangeFolder can only
+        move one level down at a time (BlueZ rejects a jump back to root with
+        "Invalid arguments", confirmed live). Where we are has gone wrong two
+        ways before: a position we remembered ourselves went stale across a
+        reboot (and the top-level folders got stored as songs), and BlueZ's own
+        MediaFolder1.Name went stale too -- when the phone switches apps BlueZ
+        recreates the player and its Name resets to "/Filesystem" while the
+        phone is still sitting in Songs (seen 2026-10-09; the crawl then looked
+        for "My Music" in a list of 910 songs and failed). So decide from what
+        the current folder actually holds: folders mean go deeper (Songs if
+        it's listed, else My Music), playable tracks mean we're in Songs."""
+        for _ in range(3):
+            items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
+            folders, tracks = {}, []
+            for path, props in items.items():
+                name = props["Name"].value if "Name" in props else ""
+                kind = props["Type"].value if "Type" in props else None
+                if kind == "folder":
+                    folders[name] = path
+                else:
+                    tracks.append({"item_path": path, "title": name or None})
+            if not folders:
+                return tracks
+            target = next((path for name, path in folders.items() if name.endswith("Songs")), None) \
+                or next((path for name, path in folders.items() if name.endswith("My Music")), None)
+            if target is None:
+                raise RuntimeError(f"can't find My Music or Songs among {sorted(folders)}")
+            await _dbus_retry(lambda: self.folder_iface.call_change_folder(target))
+        raise RuntimeError("still not in a list of songs after navigating three levels")
 
     async def play_item(self, item_path: str):
         item_intro = await self.system_bus.introspect(BLUEZ, item_path)
@@ -175,7 +172,7 @@ async def main() -> None:
             if not p.can_browse:
                 log.warning("library sync requested but the phone isn't offering browsing yet")
                 return
-            tracks = await p.crawl_songs()
+            tracks = await asyncio.wait_for(p.crawl_songs(), CRAWL_TIMEOUT_S)
             if phone is not p:
                 # Superseded mid-crawl by a reconnect/renegotiation -- these
                 # item_paths are already dead. The new player's own sync
