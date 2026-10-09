@@ -161,9 +161,12 @@ async def main() -> None:
     # previous crawl). Never on a timer, never with no phone connected.
     synced_player_path: str | None = None
     sync_lock = asyncio.Lock()
+    # The last crawl, in the phone's order: lets a pick whose play path went
+    # stale be found again in a fresh crawl (see replay_after_resync).
+    last_tracks: list = []
 
     async def sync_library(bus: Bus):
-        nonlocal synced_player_path
+        nonlocal synced_player_path, last_tracks
         async with sync_lock:
             p = phone
             if p is None:
@@ -187,6 +190,7 @@ async def main() -> None:
                 retain=True,
             )
             synced_player_path = p.player_path
+            last_tracks = tracks
             log.info("library sync complete: %d tracks from %s", len(tracks), p.name)
 
     async def sync_library_logged(bus: Bus):
@@ -259,13 +263,49 @@ async def main() -> None:
                 await phone.play_item(cmd["item_path"])
             except Exception:
                 log.exception("play_item failed: %r", cmd["item_path"])
-                await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", cmd)
+                if not await replay_after_resync(bus, cmd):
+                    await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", cmd)
         elif action == "crawl":
             # Manual re-sync (e.g. from the phone manager UI, after adding
             # music on the phone). Automatic syncs happen on connect.
             await sync_library(bus)
         else:
             log.warning("unknown command action: %r", action)
+
+    async def replay_after_resync(bus: Bus, cmd: dict) -> bool:
+        """A pick failed, most likely because its play path belongs to a
+        player BlueZ has since replaced (the phone switched apps and the
+        re-sync hasn't happened or was missed). Re-sync now, find the same
+        song in the fresh crawl, and play that -- the pick plays a few
+        seconds late instead of being dropped. Returns whether it played."""
+        stale = cmd["item_path"]
+        old = [t for t in last_tracks if t["item_path"] == stale]
+        title = old[0]["title"] if old else cmd.get("title")
+        if not title:
+            return False
+        # Which copy of the title (the library keeps same-title songs apart).
+        copy = 0
+        if old:
+            copy = sum(1 for t in last_tracks[:last_tracks.index(old[0])] if t["title"] == title)
+        log.info("play path looks stale; re-syncing to retry %r", title)
+        try:
+            await sync_library(bus)
+        except Exception:
+            log.exception("re-sync for a stale play path failed")
+            return False
+        fresh = [t["item_path"] for t in last_tracks if t["title"] == title]
+        if not fresh or phone is None:
+            return False
+        path = fresh[min(copy, len(fresh) - 1)]
+        if path == stale:
+            return False  # the path was current; something else is wrong
+        try:
+            await phone.play_item(path)
+        except Exception:
+            log.exception("retry after re-sync failed: %r", path)
+            return False
+        log.info("played %r after re-sync", title)
+        return True
 
     async def poll_now_playing(bus: Bus):
         # Publish only on change. While playing, position_ms moves every
@@ -313,6 +353,12 @@ async def main() -> None:
                 asyncio.create_task(connect_current_phone(bus))
 
         def on_interfaces_removed(path, interfaces):
+            nonlocal synced_player_path
+            # BlueZ reuses player names (player1 can go away and come back
+            # as a brand-new object), so a name that's gone is no longer
+            # "synced" -- whatever appears next under it needs its own sync.
+            if "org.bluez.MediaPlayer1" in interfaces and str(path) == synced_player_path:
+                synced_player_path = None
             if phone is not None and "org.bluez.MediaPlayer1" in interfaces and str(path) == phone.player_path:
                 log.info("MediaPlayer1 disappeared at %s", path)
                 asyncio.create_task(connect_current_phone(bus))

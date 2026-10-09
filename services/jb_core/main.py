@@ -77,7 +77,7 @@ async def try_autoplay(bus: Bus, q: Queue, log, delay: float = 0.0) -> None:
         log.info("autoplay: %s", next_track["title"])
         await bus.publish(
             "jukebox/jb-source-phone/cmd",
-            {"action": "play_item", "item_path": next_track["item_path"]},
+            {"action": "play_item", "item_path": next_track["item_path"], "title": next_track["title"]},
         )
         q.expected_title = next_track["title"]
         q.playing = True
@@ -198,7 +198,7 @@ async def main() -> None:
                     log.info("overriding auto-advance with queued track: %s", next_track["title"])
                     await bus.publish(
                         "jukebox/jb-source-phone/cmd",
-                        {"action": "play_item", "item_path": next_track["item_path"]},
+                        {"action": "play_item", "item_path": next_track["item_path"], "title": next_track["title"]},
                     )
                     q.expected_title = next_track["title"]
                 else:
