@@ -306,7 +306,9 @@ A theme never talks to the bus or reads the knob. It places blocks; the engine f
 
 - Themes can rearrange screens, not just restyle them.
 - Responsive: one theme fits any monitor size and aspect ratio. Size with relative units and grid, never fixed pixels for the screen.
-- Themes are data only (HTML templates, CSS, images, a manifest), so installing one can't run code. Plugins come later with their own rules.
+- Themes are data only (JSON layouts, HTML block templates, CSS, images, a manifest), so installing one can't run code. Plugins come later with their own rules.
+- Layouts are structured data (a JSON tree of containers and blocks), not free-form HTML, so a drag-and-drop page builder can open and save them (Phase 7c). The owner's edits are saved separately from the theme; resetting brings back the theme's default.
+- Three parties, like WordPress: the engine decides behavior, the theme decides look and arrangement, the owner decides what's switched on (Home sections, nav buttons, songs per page, active theme).
 - Not gatekept: the theme format is documented, and the default theme is the worked example to copy.
 - The knob's focus order comes from the layout's reading order (left to right, top to bottom), computed by the engine. No hand-kept order lists.
 - Every block copes with missing data: no cover, no artist, no length, no phone connected.
@@ -315,7 +317,16 @@ A theme never talks to the bus or reads the knob. It places blocks; the engine f
 
 ### Blocks (first set)
 
-Nav bar, Now Playing, Up Next, song board (100 slots, A–K × 1–0), song card, featured card (New), quick-sort card (Browse), recents card, popup.
+Nav bar, Now Playing, Up Next, song board (10 to 100 slots per page, owner setting; codes always match the keypad), Home sections (New, Recents, Featured Artist, Browse), song card, popup. Full spec: `docs/theme-format.md`.
+
+Home cards are knob stops. Song cards (New, Recents) pick the song like the keypad does. Link cards (Browse sorts, Featured Artist, which the engine picks at random) open the board in that sort or filter.
+
+### Picking a song (keypad or card)
+
+- Nothing playing: it plays now.
+- Something playing: it joins the queue.
+- Shuffle on: it goes to the front, ahead of shuffle's own picks.
+- Owner setting, off by default: a pick interrupts and plays immediately.
 
 ### Default theme (the mockups)
 
@@ -327,7 +338,7 @@ Nav bar, Now Playing, Up Next, song board (100 slots, A–K × 1–0), song card
 ### Navigation
 
 - Home is the resting point (replaces Volume). After idle, focus returns to Home.
-- From Home, clockwise moves into the Home page's Browse cards, scanning left to right, top to bottom. Counter-clockwise moves down through the nav bar.
+- From Home, clockwise moves into the Home page's cards, scanning left to right, top to bottom. Counter-clockwise moves down through the nav bar.
 - Click is the only knob gesture for now. Letter + digit selects a board slot.
 
 ### Backend additions
@@ -335,6 +346,9 @@ Nav bar, Now Playing, Up Next, song board (100 slots, A–K × 1–0), song card
 - [ ] Recents: track recently played songs (jb-library already counts plays)
 - [ ] New: songs that appear on a phone reconnect that weren't in the previous sync (order TBD: date, alphabetical or random)
 - [ ] Song length and album year from the iTunes lookup
+- [ ] Featured Artist: a random artist pick that changes now and then
+- [ ] Favorites: an owner-built list (e.g. "favorite" from the Now Playing click). Check whether the phone's Playlists folder over AVRCP exposes iOS's Favorite Songs or Most Played playlists to seed it
+- [ ] Owner setting: a pick interrupts the current song (off by default)
 
 ### Build order
 
@@ -344,10 +358,34 @@ Nav bar, Now Playing, Up Next, song board (100 slots, A–K × 1–0), song card
 - [ ] Default theme from the mockups
 - [ ] Prove it: a second, deliberately different test theme rearranges the screens with no engine changes; test at two monitor sizes
 - [ ] Screens from the old plan, still needed: phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
-- [ ] Settings: sources, theme picker
-- [ ] Later: plugin API, theme install from Settings, installer/setup wizard
+- [ ] Cabinet Settings screen (knob-friendly quick toggles): theme switcher, Home sections, nav buttons, songs per page, and the jb-admin address with a QR code
+- [ ] Later: plugin API
 
 Done when: the default theme matches the mockups on the real monitor, and a second theme can rearrange it without touching the engine.
+
+## Phase 7b: Admin (jb-admin)
+
+Setup and management from a phone or laptop browser, like Sidecar's admin page. A separate service from jb-ui: the kiosk server only listens on the Pi itself, while jb-admin is reachable on the network behind a login. If jb-admin crashes, the jukebox keeps playing.
+
+- [ ] Login; the service listens on the network, the kiosk server doesn't
+- [ ] First-time setup wizard over a Wi-Fi hotspot: name the jukebox, join Wi-Fi, pair the first phone. Reuse Sidecar's lessons (WMM off for this Wi-Fi chip in AP mode; phones reset captive-portal pages, so progress is kept on the Pi)
+- [ ] Themes: upload as a zip, check the format, strip scripts, preview, activate, delete
+- [ ] Settings: everything on the cabinet's Settings screen, plus sources, Browse card sorts, idle timeout, volume limits, New ordering, the pick-interrupts setting, API keys
+- [ ] Phones: pair, forget, switch, re-sync the library
+- [ ] Maintenance: software updates, logs, restart, reboot
+- [ ] Later: an installer, so anyone can set up JUKE.BOX on their own Pi
+
+Done when: a fresh Pi can be set up, themed and configured from a phone without SSH.
+
+## Phase 7c: Page builder
+
+Drag-and-drop layout editing in jb-admin, like WordPress's page builder: start from a blank page or the theme's layout, add, remove and reorder blocks, preview live with the real engine, save. Possible because layouts are JSON (Phase 7). Start simple (rows of blocks, reorder, add/remove) and grow.
+
+- [ ] Edit Home first, then any screen and the frame
+- [ ] Live preview using the kiosk engine
+- [ ] Owner layouts saved apart from the theme; reset to the theme default
+
+Done when: an owner can rebuild the Home screen on a phone and see it on the cabinet without editing a file.
 
 ## Phase 8: Appliance behavior
 
