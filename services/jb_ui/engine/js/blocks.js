@@ -3,9 +3,10 @@
 // Keep the names in step with KNOWN_BLOCKS in services/jb_ui/themes.py.
 
 import { bind, fromTemplate, slot } from './bind.js';
+import { turnPage, upLevel, view } from './board.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
-import { formatMs, toTrack } from './tracks.js';
+import { formatMs, sized, toTrack } from './tracks.js';
 
 export const BLOCKS = {
   // The engine puts the current screen into this element itself.
@@ -14,10 +15,11 @@ export const BLOCKS = {
   nav: fillNav,
   'now-playing': fillNowPlaying,
   'up-next': fillUpNext,
-  board: null,
+  board: fillBoard,
   sections: null,
   section: null,
-  'page-info': null,
+  'page-info': fillPageInfo,
+  pager: fillPager,
 };
 
 function fillLogo(el, node, ctx) {
@@ -84,7 +86,8 @@ function fillUpNext(el, node, ctx) {
     if (!cards) return;
     cards.replaceChildren(...upcoming.slice(0, limit).map((raw, i) => {
       const card = fromTemplate(ctx.blocks['queue-card']);
-      bind(card, { ...toTrack(raw, library), position: i + 1 });
+      const track = toTrack(raw, library);
+      bind(card, { ...track, cover: sized(track.cover, 200), position: i + 1 });
       return card;
     }));
   };
@@ -131,4 +134,100 @@ function fillNav(el, node, ctx) {
   };
   store.watch(el, 'queue', render);
   store.watch(el, 'screen', render);
+}
+
+// The song board: one page of slots, grouped by letter. Slot codes match
+// the keypad; how they're arranged is the theme's CSS.
+function fillBoard(el, node, ctx) {
+  const groups = new Map();
+
+  const render = () => {
+    const v = view();
+    el.style.setProperty('--jb-digits', v.digits);
+    el.toggleAttribute('data-category', v.isCategory);
+    groups.clear();
+    for (const slotInfo of v.slots) {
+      let group = groups.get(slotInfo.letter);
+      if (!group) {
+        group = document.createElement('div');
+        group.className = 'jb-letter';
+        group.dataset.letter = slotInfo.letter;
+        groups.set(slotInfo.letter, group);
+      }
+      const s = document.createElement('div');
+      s.className = 'jb-slot';
+      s.dataset.code = slotInfo.code;
+      s.append(fromTemplate(ctx.blocks['song-card']));
+      const item = slotInfo.item;
+      if (!item) {
+        s.dataset.empty = '';
+        bind(s, { code: slotInfo.code });
+      } else if (item.category !== undefined) {
+        // An artist, album or genre: picking it shows its songs.
+        bind(s, { code: slotInfo.code, title: item.category });
+      } else {
+        const track = toTrack(item);
+        bind(s, { ...track, cover: sized(track.cover, 200), code: slotInfo.code });
+      }
+      group.append(s);
+    }
+    el.replaceChildren(...groups.values());
+    showEntry();
+  };
+
+  // A letter pressed on the keypad, waiting for its digit.
+  const showEntry = () => {
+    const e = store.get('entry');
+    const waiting = e?.state === 'partial' ? e.letter : null;
+    for (const [letter, group] of groups) {
+      const on = letter === waiting;
+      group.toggleAttribute('data-entry', on);
+      for (const s of group.children) s.toggleAttribute('data-entry', on);
+    }
+  };
+
+  store.watch(el, 'tracks', render);
+  store.watch(el, 'board', render);
+  store.watch(el, 'entry', showEntry);
+}
+
+function fillPageInfo(el, node, ctx) {
+  el.append(fromTemplate(ctx.blocks['page-info']));
+  const render = () => {
+    const v = view();
+    bind(el, { sort: v.sortLabel, filter: v.filter?.value || '', page: v.page + 1, pages: v.pages });
+  };
+  store.watch(el, 'tracks', render);
+  store.watch(el, 'board', render);
+}
+
+// Knob stops for paging the board, and for backing out of an artist's
+// (album's, genre's) songs to the list of them.
+const PAGER = {
+  prev: { label: () => 'Previous Page', click: () => turnPage(-1) },
+  up: { label: v => `All ${v.sortLabel}`, click: upLevel },
+  next: { label: () => 'Next Page', click: () => turnPage(1) },
+};
+
+function fillPager(el, node, ctx) {
+  const items = Object.entries(PAGER).map(([name, b]) => {
+    const item = document.createElement('div');
+    item.className = 'jb-pager-item';
+    item.dataset.button = name;
+    item.append(fromTemplate(ctx.blocks['pager-button']));
+    makeStop(item, `pager:${name}`, b.click);
+    return item;
+  });
+  el.replaceChildren(...items);
+  const render = () => {
+    const v = view();
+    for (const item of items) {
+      const name = item.dataset.button;
+      bind(item, { label: PAGER[name].label(v), icon: ctx.icons[`page-${name}`] || '' });
+      // Only there while inside an artist (album, genre).
+      if (name === 'up') item.hidden = !v.filter;
+    }
+  };
+  store.watch(el, 'tracks', render);
+  store.watch(el, 'board', render);
 }

@@ -29,3 +29,10 @@ export function toTrack(raw, library) {
     cover: raw.artwork_url || known.artwork_url || '',
   };
 }
+
+// Apple's artwork URLs end in a size ("…/600x600bb.jpg") and the server
+// scales to whatever size is asked for. Small thumbnails keep a full board
+// of covers within the Pi's memory.
+export function sized(url, px) {
+  return url ? url.replace(/\/\d+x\d+bb\./, `/${px}x${px}bb.`) : url;
+}

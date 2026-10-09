@@ -340,6 +340,8 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 - Home is the resting point (replaces Volume). After idle, focus returns to Home.
 - From Home, clockwise moves into the Home page's cards, scanning left to right, top to bottom. Counter-clockwise moves down through the nav bar.
 - Click is the only knob gesture for now. Letter + digit selects a board slot.
+- The highlight returns to Home after a short idle (12s); the screen stays where it is (a sorted board stays sorted). Only when nothing is playing and the jukebox has been idle for the owner's set time (`idle_home_minutes`, default 5, 0 = never) does the screen go back to Home.
+- A keypad letter brings up the board if it isn't showing.
 
 ### Backend additions
 
@@ -406,7 +408,7 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 ## Phase 10+: Features
 
 - Spotify source: Web API for browsing, librespot for playback, requires Premium
-- Attract mode
+- Attract mode / screen saver (after long idle, beyond the return to Home)
 - Credit/coin logic
 - Playlist views
 - Admin settings screen

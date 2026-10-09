@@ -160,7 +160,8 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `board` | The song board | |
 | `sections` | The owner's chosen Home sections | |
 | `section` | One Home section, placed by the layout | `type`, `limit` |
-| `page-info` | Board page and current sort, e.g. "Artist · 3 of 9" | |
+| `page-info` | Board page and current sort, e.g. "Artists · Queen  1 of 2" | |
+| `pager` | Knob stops for the board: Previous Page, Next Page, and (inside an artist, album or genre) a way back up to the full list | |
 
 ### Nav buttons
 
@@ -211,6 +212,8 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | `popup.html` | The frame of every popup |
 | `popup-volume.html` | The volume popup's content |
 | `popup-notice.html` | The content of short notices, such as "Connect your phone" |
+| `page-info.html` | The board's page info: `sort`, `filter`, `page`, `pages` |
+| `pager-button.html` | Each pager button: `label`, `icon` (from `assets/icons/page-prev`, `page-next`, `page-up`) |
 
 A section can use its own card markup by type: `song-tile-new.html` overrides `song-tile.html` for the New section only.
 
@@ -315,6 +318,10 @@ The engine wraps each letter's slots in a group, so you can lay the board out by
 ```
 
 How the slots are arranged on screen is up to your CSS. Use `--jb-digits` so the board fits whatever page size the owner picks.
+
+In an artist, album or genre sort, the board first lists the artists (albums, genres) themselves, one per slot, with the name as the card's `title`; `<jb-board>` then has `data-category`. Picking one shows its songs.
+
+Pressing a letter on the keypad brings up the All Songs screen if it isn't showing, so the guest sees what they're picking.
 
 ### Popups
 

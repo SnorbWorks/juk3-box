@@ -13,7 +13,12 @@ const HANDLERS = {
   'jukebox/jb-source-phone/now-playing': np => store.set('nowPlaying', np),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
   'jukebox/jb-core/queue': q => store.set('queue', q),
-  'jukebox/jb-library/tracks': lib => store.set('library', libraryIndex(lib.tracks || [])),
+  'jukebox/jb-library/tracks': lib => {
+    store.set('library', libraryIndex(lib.tracks || []));
+    store.set('tracks', lib.tracks || []);
+  },
+  'jukebox/jb-core/entry': e => { activity(); store.set('entry', e); },
+  'jukebox/jb-core/selection': s => store.set('selection', s),
   'jukebox/jb-audio/state': v => store.set('volume', v),
   'jukebox/jb-core/notice': n => store.set('notice', n),
   'jukebox/jb-input/gesture': knob,
@@ -24,8 +29,14 @@ const HANDLERS = {
 // A turn carries signed steps, clockwise positive.
 function knob(g) {
   if (g.control !== 'knob') return;
+  activity();
   if (g.gesture === 'turn' && Number.isInteger(g.steps)) rotate(g.steps);
   else if (g.gesture === 'click') click();
+}
+
+// Someone is using the jukebox (knob or keypad).
+function activity() {
+  store.set('activity', Date.now());
 }
 
 export function publish(topic, payload) {

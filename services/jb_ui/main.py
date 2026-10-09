@@ -76,7 +76,20 @@ def owner_settings(raw: dict) -> dict:
     nav = list(dict.fromkeys(b for b in nav if b in NAV_BUTTONS)) if isinstance(nav, list) else None
     if not nav:
         nav = DEFAULT_NAV
-    return {"nav": nav}
+
+    # Songs per board page: 10 to 100 in steps of 10, so every letter gets
+    # the same number of slots and the codes always match the keypad.
+    per_page = raw.get("songs_per_page")
+    if not (isinstance(per_page, int) and not isinstance(per_page, bool) and 10 <= per_page <= 100 and per_page % 10 == 0):
+        per_page = 100
+
+    # Idle minutes, with nothing playing, before the screen goes back to
+    # Home. 0 = never.
+    idle = raw.get("idle_home_minutes")
+    if not (isinstance(idle, (int, float)) and not isinstance(idle, bool) and idle >= 0):
+        idle = 5
+
+    return {"nav": nav, "songs_per_page": per_page, "idle_home_minutes": idle}
 
 
 class App:

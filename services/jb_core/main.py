@@ -93,7 +93,9 @@ async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
     plays automatically once a phone actually connects (see the
     "connected" handler)."""
     await asyncio.sleep(SHUFFLE_AUTOPLAY_DELAY_S)
-    if not q.shuffle_active or not q.phone_connected:
+    # Something may have started in the meantime (e.g. a keypad pick right
+    # after turning shuffle on) -- don't replace it.
+    if not q.shuffle_active or not q.phone_connected or q.playing:
         return
     await try_autoplay(bus, q, log)
 

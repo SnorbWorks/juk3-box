@@ -27,6 +27,9 @@
   gap: 2vmin;
   height: 100%;
 }
+.main,
+.main jb-screen,
+.all-songs { min-height: 0; }
 .home jb-sections,
 .all-songs jb-board { flex: 1; }
 
@@ -66,6 +69,7 @@ jb-now-playing {
 .jb-np-cover { width: 100%; max-height: 50%; aspect-ratio: 1; object-fit: cover; }
 .jb-np-title { font-size: 2.2vmin; font-weight: bold; }
 .jb-np-artist, .jb-np-album, .jb-np-idle { font-size: 1.7vmin; opacity: 0.7; }
+.jb-np-title, .jb-np-artist, .jb-np-album { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .jb-np-progress { height: 0.5vmin; background: rgba(255, 255, 255, 0.15); }
 .jb-np-progress-fill { height: 100%; width: calc(var(--jb-progress) * 100%); background: #fff; }
 .jb-np-times { display: flex; justify-content: space-between; font: 1.4vmin monospace; opacity: 0.7; }
@@ -105,9 +109,6 @@ jb-nav { display: flex; flex-direction: column; gap: 0.6vmin; }
 .jb-nav-item[data-active] { background: rgba(255, 255, 255, 0.12); }
 .jb-nav-item[data-on] .jb-nav-label { color: #ffd54f; }
 
-/* The knob highlight */
-[data-focused] { outline-color: #ffd54f; }
-
 /* Popups */
 #jb-popup-layer { background: rgba(0, 0, 0, 0.6); }
 .jb-popup {
@@ -123,3 +124,57 @@ jb-nav { display: flex; flex-direction: column; gap: 0.6vmin; }
 .jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); background: #ffd54f; }
 .jb-volume-value { margin-top: 1.5vmin; font: 3vmin monospace; }
 .jb-notice { font-size: 2vmin; }
+
+/* All Songs: page info and pager in a bar above the board */
+.board-bar { display: flex; align-items: center; justify-content: space-between; gap: 2vmin; }
+.jb-page-info { font-size: 1.8vmin; display: flex; gap: 2vmin; }
+.jb-page-count { opacity: 0.6; }
+jb-pager { display: flex; gap: 1vmin; }
+.jb-pager-item {
+  padding: 0.6vmin 1.4vmin;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  font-size: 1.6vmin;
+  outline: 0.4vmin solid transparent;
+  outline-offset: 0.2vmin;
+  transition: outline-color 300ms;
+}
+
+/* The board: five columns, each holding two letters (A over B, C over D,
+   ...), each letter a stack of its slots. Fits any songs-per-page. */
+jb-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  grid-auto-flow: column;
+  gap: 1vmin;
+  min-height: 0;
+}
+.jb-letter {
+  display: grid;
+  grid-template-rows: repeat(var(--jb-digits), minmax(0, 1fr));
+  gap: 0.3vmin;
+  min-height: 0;
+  border-radius: 4px;
+}
+.jb-letter[data-entry] { background: rgba(255, 213, 79, 0.15); }
+.jb-slot { min-height: 0; overflow: hidden; }
+.jb-song-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6vmin;
+  height: 100%;
+  font-size: 1.2vmin;
+}
+.jb-song-code { font: bold 1.2vmin monospace; color: #ff8a80; min-width: 3ch; }
+.jb-song-cover { height: 100%; width: auto; aspect-ratio: 1; object-fit: cover; flex: none; }
+.jb-song-text { min-width: 0; flex: 1; }
+.jb-song-title, .jb-song-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-song-artist { opacity: 0.6; font-size: 1vmin; }
+.jb-song-length { opacity: 0.6; }
+.jb-slot[data-empty] { opacity: 0.25; }
+
+/* The knob highlight. Last in the file so it wins over each item's own
+   (transparent) outline. */
+[data-focused] { outline-color: #ffd54f; }
