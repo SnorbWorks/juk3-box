@@ -14,6 +14,16 @@ if [ -f "$PREFS" ]; then
     "$PREFS"
 fi
 
+# The page comes from jb-ui, which may still be starting at boot. Wait for
+# it (up to ~30s) rather than open a "can't connect" page. If it never
+# answers, launch anyway: the engine page retries on its own once loaded,
+# and agetty restarts this whole kiosk if Chromium exits.
+KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8090/}"
+for _ in $(seq 1 60); do
+  curl -sf -o /dev/null "$KIOSK_URL" && break
+  sleep 0.5
+done
+
 # On Wayland, --kiosk alone still first paints a normal browser window
 # (tab strip + address bar) at its remembered size for a second or two
 # before going fullscreen -- visible as a "browser flash" at startup.
@@ -23,7 +33,7 @@ fi
 # rather than a white flash.
 exec chromium \
   --kiosk \
-  --app=file:///opt/juk3-box/services/jb_ui/static/index.html \
+  --app="$KIOSK_URL" \
   --start-fullscreen \
   --window-position=0,0 \
   --window-size=1920,1080 \

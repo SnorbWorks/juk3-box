@@ -1,0 +1,54 @@
+/* Bare: plain outlines of every block, laid out fluidly. */
+
+.frame {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18vw) 1fr;
+  gap: 2vmin;
+  height: 100%;
+  padding: 2vmin;
+  box-sizing: border-box;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2vmin;
+  min-height: 0;
+}
+.sidebar jb-nav { flex: 0 0 25%; }
+.sidebar jb-now-playing { flex: 0 0 30%; }
+.sidebar jb-up-next { flex: 1; }
+
+.main,
+.main jb-screen,
+.home,
+.all-songs {
+  display: flex;
+  flex-direction: column;
+  gap: 2vmin;
+  height: 100%;
+}
+.home jb-sections,
+.all-songs jb-board { flex: 1; }
+
+jb-logo { display: block; text-align: center; }
+jb-logo img { max-width: 100%; }
+.jb-logo-text {
+  font: bold 4vmin/1 sans-serif;
+  letter-spacing: 0.1em;
+}
+
+/* Which theme is showing, bottom right. */
+html::after {
+  content: "Theme: " attr(data-theme-name);
+  position: fixed;
+  right: 2vmin;
+  bottom: 1vmin;
+  z-index: 2;
+  font: 1.6vmin monospace;
+  color: rgba(255, 255, 255, 0.5);
+}
+html[data-theme-fallback]::after {
+  content: "Theme \"" attr(data-theme-fallback) "\" couldn't load, showing Bare";
+  color: #ff8a80;
+}

@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "bare",
+  "name": "Bare",
+  "version": "0.1.0",
+  "author": "JUKE.BOX",
+  "license": "GPL-3.0",
+  "description": "Plain outlines of every block. The engine's test theme and its fallback when another theme can't load.",
+  "styles": ["theme.css"],
+  "background": { "type": "none" },
+  "sizing": { "mode": "fluid" }
+}

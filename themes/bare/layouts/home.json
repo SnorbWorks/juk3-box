@@ -1,0 +1,6 @@
+{
+  "class": "home",
+  "children": [
+    { "block": "sections", "focus": "home" }
+  ]
+}

@@ -1,0 +1,54 @@
+/* The engine's own styles: only what every theme needs underneath it.
+   Themes style everything else. */
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0b0f;
+  color: #f2f2f2;
+  font-family: sans-serif;
+  cursor: none;
+}
+
+#jb-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+#jb-background > img,
+#jb-background > video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#jb-root {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* Blocks this engine doesn't fill yet: a labeled outline, so a theme's
+   layout can be checked before every block exists. */
+[data-placeholder] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2em;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.5);
+  font: 14px/1.2 monospace;
+}
+[data-placeholder]::before {
+  content: attr(data-placeholder);
+}
+
+/* Shown when the theme couldn't load at all. */
+#jb-error {
+  padding: 4vmin;
+  font: 2vmin/1.5 monospace;
+  white-space: pre-wrap;
+}

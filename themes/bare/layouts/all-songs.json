@@ -1,0 +1,7 @@
+{
+  "class": "all-songs",
+  "children": [
+    { "block": "page-info" },
+    { "block": "board" }
+  ]
+}
