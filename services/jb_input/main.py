@@ -32,17 +32,35 @@ async def main(config_path=None) -> None:
         loop.add_signal_handler(sig, stop.set)
 
     async with Bus(config.SERVICE_NAME, host=settings.mqtt_host, port=settings.mqtt_port) as bus:
-        heartbeat = asyncio.create_task(bus.run_heartbeat())
         publisher = Publisher(bus, settings.publish_raw)
         pipeline = Pipeline(settings)
         runner = Runner(settings, pipeline, publisher, lambda: open_keypad(settings), log)
-        task = asyncio.create_task(runner.run())
-        await stop.wait()
-        for t in (task, heartbeat):
+        workers = {
+            asyncio.create_task(runner.run(), name="runner"),
+            asyncio.create_task(bus.run_heartbeat(), name="heartbeat"),
+        }
+        stopping = asyncio.create_task(stop.wait(), name="stop")
+
+        # Supervise: these tasks should run forever. If any one ends -- e.g.
+        # the broker drops the connection, which it does to every client
+        # when the clock jumps forward at boot (NTP after a power-off) --
+        # exit non-zero so systemd restarts us cleanly. Previously a dead
+        # task was ignored: the service stayed "active", kept the keypad
+        # grabbed, and silently swallowed every key press.
+        done, _ = await asyncio.wait(workers | {stopping}, return_when=asyncio.FIRST_COMPLETED)
+        for t in workers | {stopping}:
             t.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+        for t in workers:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await t
-        await publisher.status(pipeline.faults, time.monotonic(), online=False)
+        if stopping not in done:
+            failed = next(iter(done))
+            exc = None if failed.cancelled() else failed.exception()
+            log.error("%s task ended unexpectedly (%r) -- exiting so systemd restarts jb-input",
+                      failed.get_name(), exc)
+            raise SystemExit(1)
+        with contextlib.suppress(Exception):
+            await publisher.status(pipeline.faults, time.monotonic(), online=False)
         log.info("stopped")
 
 
