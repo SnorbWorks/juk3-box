@@ -288,11 +288,34 @@ jb-section[type="new"][data-empty] + jb-section[type="featured-artist"] .jb-sect
   border-radius: 1vh;
   font-size: 1.6vh;
   color: var(--ink-soft);
-  transition: background 260ms var(--ease), color 260ms var(--ease), transform 180ms var(--ease);
+  transition: background 260ms var(--ease), color 260ms var(--ease), box-shadow 260ms var(--ease), transform 260ms var(--ease);
 }
 .jb-see-all-icon { display: flex; font-size: 1.8vh; }
-.jb-see-all[data-focused] { color: var(--ink); background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
-.jb-see-all[data-pressed] { transform: scale(0.96); }
+/* Focused, See All becomes a small version of the active nav pill: the
+   blue-violet gradient, a cyan-to-pink edge, glow inside and out, and a
+   lift, so it's easy to spot while the page scrolls. */
+.jb-see-all { position: relative; transform-origin: right center; }
+.jb-see-all::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(100deg, rgba(150, 220, 255, 0.95), rgba(170, 182, 255, 0.45) 45%, rgba(240, 165, 240, 0.75));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  pointer-events: none;
+}
+.jb-see-all[data-focused] {
+  color: #fff;
+  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
+  box-shadow: inset 0 0 1.4vh rgba(175, 198, 255, 0.45), 0 0 2.2vh rgba(90, 115, 255, 0.55), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4);
+  transform: scale(1.15);
+}
+.jb-see-all[data-focused]::before { opacity: 1; }
+.jb-see-all[data-pressed] { transform: scale(1.05); }
 
 .jb-section-cards { display: flex; gap: 1.3vw; }
 jb-section[type="recents"] .jb-section-cards,
