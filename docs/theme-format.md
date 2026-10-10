@@ -307,6 +307,7 @@ A **track** (song cards, song tiles, queue, now playing):
 | `cover` | (image URL) | May be empty |
 | `code` | A1 | Song board only |
 | `position` | 1 | Queue only: place in line |
+| `backdrop` | (image URL) | Home song and feature cards: a tiny (24px) copy of the art. Stretched, it looks blurred with no filter: use it for soft backgrounds |
 
 **Now playing** adds `elapsed` (e.g. 1:12) and `state` (`playing`, `paused`, `stopped`).
 
@@ -411,6 +412,16 @@ Themes must fit any monitor size and shape. There are two ways.
 ```json
 "sizing": { "mode": "canvas", "width": 2000, "height": 1250 }
 ```
+
+## Performance
+
+JUKE.BOX runs on a Raspberry Pi with a video playing behind your theme. Measured there:
+
+- Animate only `transform` and `opacity`. Animating `box-shadow`, `background` or `filter` repaints every frame; on focus changes it kept the page busy 70% of the time. For a focus look that changes a shadow or glow, pre-draw it on a `::before`/`::after` layer and fade that layer's opacity, and give the layer `will-change: opacity` so the fade happens on the GPU (without it, fading a layer on a big card still repainted the card and dropped 25% of the video's frames).
+- No `backdrop-filter` over the video: it's recomputed every frame and halved the frame rate.
+- No `filter: blur()` on anything that moves or scales (a focused card): the blur is redone every frame and the video stalls. For a blurred picture, use the `backdrop` field.
+- Static effects are cheap: rounded corners, masked gradient rims, box-shadows that don't animate, gradients.
+- Keep `will-change: transform` on elements that scale when focused.
 
 ## Rules
 

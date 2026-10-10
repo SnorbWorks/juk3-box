@@ -431,6 +431,10 @@ jb-section[type="featured-artist"] .jb-card { --lift: 1.03; }
   opacity: 0;
   transition: opacity 420ms var(--ease);
   pointer-events: none;
+  /* Their own GPU surface, so fading them doesn't repaint the card. On the
+     big Featured Artist card that repaint dropped 25% of the video's
+     frames; with this, 5% (the same as moving through the nav). */
+  will-change: opacity;
 }
 .jb-card::after {
   z-index: -1;
@@ -473,13 +477,17 @@ jb-section[type="new"] .jb-card-song::after { bottom: 0; border-radius: var(--ra
   border-radius: inherit;
   background: var(--navy-1);
 }
+/* The soft backdrop is the engine's tiny 24px copy of the art, stretched:
+   it looks blurred with no filter. (A live blur filter here stalled the
+   video every time the card scaled on focus.) Darkened by opacity over the
+   card's navy, not by a brightness filter. */
 .feature-backdrop {
   position: absolute;
-  inset: -8%;
-  width: 116%;
-  height: 116%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  filter: blur(3vh) saturate(1.3) brightness(0.55);
+  opacity: 0.5;
 }
 .feature-art {
   position: absolute;

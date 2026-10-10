@@ -83,6 +83,7 @@ const SECTIONS = {
         label: f.artist,
         description: `${count} song${count === 1 ? '' : 's'}`,
         image: sized(f.artwork_url, 600),
+        backdrop: sized(f.artwork_url, 24),
         open: () => ctx.actions.openFilter('artist', f.artist),
       }];
     },
@@ -125,7 +126,9 @@ function makeCard(item, type, def, template, ctx) {
   card.append(fromTemplate(template));
   if (def.kind === 'song') {
     const track = toTrack(item);
-    bind(card, { ...track, cover: sized(track.cover, 600), playIcon: ctx.icons.play });
+    // backdrop: a tiny copy that looks blurred when stretched, so themes
+    // needn't use a filter (a blur filter on a moving card stalls the Pi).
+    bind(card, { ...track, cover: sized(track.cover, 600), backdrop: sized(track.cover, 24), playIcon: ctx.icons.play });
     makeStop(card, `card:${type}:${item.title}`, () => ctx.actions.pick(item));
   } else {
     bind(card, { ...item, openIcon: ctx.icons['card-open'] });
