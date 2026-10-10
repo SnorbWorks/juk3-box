@@ -349,7 +349,8 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 - [x] New: songs that appear on a later sync than the phone's first (jb-library's added_at), newest first, then alphabetical
 - [ ] Song length and album year from the iTunes lookup
 - [x] Featured Artist: a random artist with a cover, at startup and every 30 minutes
-- [ ] Favorites: an owner-built list (e.g. "favorite" from the Now Playing click). Check whether the phone's Playlists folder over AVRCP exposes iOS's Favorite Songs or Most Played playlists to seed it
+- [x] Favorites: marked from the Now Playing overlay (jb-library `favorite`, `jukebox/jb-library/cmd`)
+- [ ] Favorites as a Home section and a sort. Check whether the phone's Playlists folder over AVRCP exposes iOS's Favorite Songs to seed it
 - [ ] Owner setting: a pick interrupts the current song (off by default)
 
 ### Build order
@@ -359,6 +360,9 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 - [ ] Blocks above, unstyled but working
 - [ ] Default theme from the mockups
 - [ ] Prove it: a second, deliberately different test theme rearranges the screens with no engine changes; test at two monitor sizes
+- [x] Now Playing overlay (full-screen glass; Favorite, Close), See All views, header with Back, EQ Now Playing icon, Lucide icons (Iconify format, bundled), art-sampled card glows
+- [ ] Phone badge (top right): manage phones from it -- connect, switch, forget. Stubbed for now (shows who's connected); built with the phone connection manager
+- [ ] When a pick fails because another app (audiobook, video) has the phone's audio, the screen says to open Music. Better: detect it before the pick
 - [ ] Screens from the old plan, still needed: phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
 - [ ] Cabinet Settings screen (knob-friendly quick toggles): theme switcher, Home sections, nav buttons, songs per page, and the jb-admin address with a QR code
 - [ ] Later: plugin API

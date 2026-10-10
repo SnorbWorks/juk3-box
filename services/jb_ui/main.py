@@ -19,7 +19,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, logging as jb_logging
-from services.jb_ui import markup, themes
+from services.jb_ui import icons, markup, themes
 
 SERVICE_NAME = "jb-ui"
 HERE = Path(__file__).resolve().parent
@@ -65,8 +65,8 @@ def read_settings(path: Path) -> dict:
 
 
 # Nav buttons the engine knows (docs/theme-format.md, "Nav buttons").
-NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings")
-DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
+NAV_BUTTONS = ("home", "volume", "all-songs", "settings", "now-playing", "shuffle")
+DEFAULT_NAV = ["home", "volume", "all-songs", "settings", "now-playing", "shuffle"]
 
 # Home sections and Browse cards the engine knows (docs/theme-format.md,
 # "Home sections").
@@ -147,7 +147,10 @@ class App:
             "manifest": theme.manifest,
             "layouts": theme.layouts,
             "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
-            "icons": {name: base + path for name, path in themes.icons(theme.root).items()},
+            "icons": icons.resolve(
+                theme.manifest.get("icons", {}),
+                {name: base + path for name, path in themes.icons(theme.root).items()},
+            ),
             "browse_images": {name: base + path for name, path in themes.browse_images(theme.root).items()},
             "settings": settings,
             "warnings": theme.warnings,

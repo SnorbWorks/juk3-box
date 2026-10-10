@@ -2,11 +2,23 @@
   "format": 1,
   "id": "neon",
   "name": "Neon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "JUKE.BOX",
   "license": "GPL-3.0",
-  "description": "Purple sidebar, dark song cards with red codes, over a neon video.",
+  "description": "Dark navy glass over a neon video: glowing cards that take their colors from the art.",
   "styles": ["theme.css"],
+  "fonts": [
+    { "family": "Google Sans Flex", "src": "assets/fonts/GoogleSansFlex.ttf", "weight": "1 1000", "stretch": "25% 151%" }
+  ],
+  "icons": {
+    "home": "lucide:house",
+    "volume": "lucide:volume-2",
+    "all-songs": "lucide:music",
+    "settings": "lucide:settings",
+    "now-playing": "jb:eq",
+    "shuffle": "lucide:shuffle",
+    "shuffle-on": "lucide:list-music"
+  },
   "background": { "type": "video", "src": "assets/background.mp4" },
   "sizing": { "mode": "fluid" }
 }

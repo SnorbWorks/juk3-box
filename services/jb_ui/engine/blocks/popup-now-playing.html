@@ -1,0 +1,19 @@
+<div class="jb-np-overlay" data-art-scope="">
+  <img class="jb-npo-cover" data-src="cover" data-if="cover" alt="">
+  <div class="jb-npo-info">
+    <div class="jb-npo-title" data-text="song"></div>
+    <div class="jb-npo-artist" data-text="artist"></div>
+    <div class="jb-npo-album" data-if="album"><span data-text="album"></span><span data-if="year"> (<span data-text="year"></span>)</span></div>
+    <div class="jb-npo-idle" data-if-not="song">Nothing playing</div>
+    <div class="jb-npo-progress" data-if="song"><div class="jb-npo-progress-fill"></div></div>
+    <div class="jb-npo-times" data-if="song"><span data-text="elapsed"></span><span data-text="length"></span></div>
+    <div class="jb-npo-actions">
+      <div class="jb-npo-button jb-npo-favorite" data-stop="favorite" data-if="song">
+        <span data-icon="favoriteIcon"></span><span data-text="favoriteLabel"></span>
+      </div>
+      <div class="jb-npo-button jb-npo-close" data-stop="close">
+        <span data-icon="closeIcon"></span><span>Close</span>
+      </div>
+    </div>
+  </div>
+</div>

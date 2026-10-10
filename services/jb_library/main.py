@@ -32,6 +32,8 @@ MIGRATIONS = {
     # When a song first showed up in a sync after this phone's first one
     # (the UI's "New"). NULL for songs that were there from the start.
     "added_at": "REAL",
+    # Marked by the owner from the Now Playing overlay.
+    "favorite": "INTEGER DEFAULT 0",
 }
 
 
@@ -59,6 +61,7 @@ TRACKS_SCHEMA = """
         lastfm_listeners INTEGER,
         popularity_checked INTEGER DEFAULT 0,
         added_at REAL,
+        favorite INTEGER DEFAULT 0,
         PRIMARY KEY (phone_mac, title, dup)
     )
 """
@@ -213,7 +216,7 @@ class Snapshots:
         rows = self.conn.execute(
             """
             SELECT title, artist, album, genre, artwork_url, item_path,
-                   lastfm_listeners, play_count, last_played_at, added_at
+                   lastfm_listeners, play_count, last_played_at, added_at, favorite
             FROM tracks ORDER BY title COLLATE NOCASE
             """
         ).fetchall()
@@ -222,7 +225,7 @@ class Snapshots:
                 "title": r[0], "artist": r[1], "album": r[2], "genre": r[3],
                 "artwork_url": r[4], "item_path": r[5],
                 "popularity": r[6], "play_count": r[7] or 0, "last_played_at": r[8],
-                "added_at": r[9],
+                "added_at": r[9], "favorite": bool(r[10]),
             }
             for r in rows
         ]
@@ -326,6 +329,20 @@ async def _enrich_lastfm(conn, session, api_key: str, mac: str, title: str, arti
     return listeners is not None
 
 
+def set_favorite(conn: sqlite3.Connection, title: str, artist: str | None, value: bool) -> int:
+    """Marks or unmarks a song as a favorite. The Now Playing overlay only
+    knows the title and artist: with repeated titles, the copies whose
+    artist matches are marked, else every copy. Returns rows changed."""
+    rows = conn.execute("SELECT phone_mac, dup, artist FROM tracks WHERE title = ?", (title,)).fetchall()
+    matching = [r for r in rows if artist and r[2] and r[2].casefold() == artist.casefold()] or rows
+    conn.executemany(
+        "UPDATE tracks SET favorite = ? WHERE phone_mac = ? AND title = ? AND dup = ?",
+        [(1 if value else 0, mac, title, dup) for mac, dup, _ in matching],
+    )
+    conn.commit()
+    return len(matching)
+
+
 class PlayTracker:
     """Counts jukebox plays from jb-source-phone's now-playing stream.
 
@@ -404,6 +421,7 @@ async def main() -> None:
         messages = await bus.subscribe("jukebox/jb-source-phone/crawl-result")
         await bus.subscribe("jukebox/jb-source-phone/connected")
         await bus.subscribe("jukebox/jb-source-phone/now-playing")
+        await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -418,6 +436,12 @@ async def main() -> None:
         plays = PlayTracker(conn, log)
 
         async for topic, payload in messages:
+            if topic.endswith("/cmd"):
+                if payload.get("action") == "favorite" and payload.get("title"):
+                    n = set_favorite(conn, payload["title"], payload.get("artist"), bool(payload.get("value")))
+                    log.info("favorite %s: %s (%d rows)", "on" if payload.get("value") else "off", payload["title"], n)
+                    await snapshots.publish()
+                continue
             if topic.endswith("/connected"):
                 plays.on_connected(payload)
                 continue

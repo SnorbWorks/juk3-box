@@ -19,7 +19,7 @@ REQUIRED_LAYOUTS = ("frame", "home", "all-songs")
 # as nothing.
 KNOWN_BLOCKS = {
     "screen", "logo", "nav", "now-playing", "up-next", "board",
-    "sections", "section", "page-info", "pager",
+    "sections", "section", "page-info", "pager", "header", "connection", "collection",
 }
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -166,6 +166,11 @@ def _check_manifest(m: dict, theme_id: str, root: Path, problems: list[str]) -> 
             problems.append("background.type must be image, video or none")
         elif bg["type"] != "none":
             _check_file(root, bg.get("src"), "background", problems)
+
+    theme_icons = m.get("icons", {})
+    if not isinstance(theme_icons, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in theme_icons.items()):
+        problems.append('icons must map names to icon names, e.g. {"home": "lucide:house"}')
 
     sizing = m.get("sizing")
     if sizing is not None:

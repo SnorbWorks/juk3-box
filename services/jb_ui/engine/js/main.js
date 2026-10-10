@@ -1,27 +1,39 @@
 // JUKE.BOX UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { openFilter, pick, setSort } from './board.js';
+import { openFilter, pick, setSort, upLevel } from './board.js';
 import { connectBus, publish } from './bus.js';
 import { startFeatured } from './featured.js';
-import { click, currentMode, enterMode, goToRest, refocus, rotate } from './focus.js';
+import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, rotate } from './focus.js';
 import { renderLayout } from './layout.js';
+import { nowPlayingData, playingLibraryTrack } from './np.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
+import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
+import { sized } from './tracks.js';
 
 const VOLUME_STEP = 0.05;   // per knob detent
 const NOTICE_MS = 4000;
 const IDLE_CHECK_MS = 10000;
+const OVERLAY_TICK_MS = 500;
+
+// Used when a theme has no layout for the See All view.
+const DEFAULT_COLLECTION_LAYOUT = {
+  class: 'jb-collection-screen',
+  children: [{ block: 'header' }, { block: 'collection', focus: 'collection' }],
+};
 
 let theme = null;
 const startedAt = Date.now();
 const html = document.documentElement;
+const history = [];  // screens to go Back to
 
 const actions = {
   nav(name) {
     if (name === 'volume') volumeMode();
     else if (name === 'shuffle') toggleShuffle();
+    else if (name === 'now-playing') openNowPlaying();
     else {
       // All Songs means all of them: a plain title list, from page 1.
       if (name === 'all-songs') setSort('title');
@@ -41,6 +53,19 @@ const actions = {
     openFilter(field, value);
     showScreen('all-songs');
   },
+  openCollection(type) {
+    const view = sectionView(type, context());
+    if (!view) return;
+    store.set('collection', view);
+    showScreen('collection');
+  },
+  // Back: out of an artist (album, genre) to the list of them, else to the
+  // previous screen, else Home.
+  back() {
+    if (store.get('screen') === 'all-songs' && upLevel()) return;
+    showScreen(history.pop() || 'home', { remember: false });
+  },
+  phones,
 };
 
 function context() {
@@ -54,10 +79,13 @@ function context() {
   };
 }
 
-function showScreen(name) {
+function showScreen(name, { remember = true } = {}) {
   const holder = document.querySelector('jb-screen');
   if (!holder) return;
-  const layout = theme.layouts[name];
+  const from = store.get('screen');
+  if (name === 'home') history.length = 0;
+  else if (remember && from && from !== name) history.push(from);
+  const layout = theme.layouts[name] || (name === 'collection' ? DEFAULT_COLLECTION_LAYOUT : null);
   if (layout) {
     holder.replaceChildren(renderLayout(layout, context()));
   } else {
@@ -104,8 +132,60 @@ function toggleShuffle() {
   publish('jukebox/jb-core/cmd', { action: on ? 'shuffle_off' : 'shuffle_on' });
 }
 
+// The Now Playing overlay: the song large, over everything, with Favorite
+// and Close. The knob stays inside it until it closes.
+function openNowPlaying() {
+  const returnTo = currentStopKey();
+  const render = () => {
+    const d = nowPlayingData();
+    const fav = !!playingLibraryTrack()?.favorite;
+    updatePopup('now-playing', {
+      ...d,
+      title: 'Now Playing',
+      song: d.title || '',
+      cover: sized(d.cover, 800),
+      favorite: fav,
+      favoriteLabel: fav ? 'Favorite' : 'Add to Favorites',
+      favoriteIcon: theme.icons.favorite,
+      closeIcon: theme.icons.close,
+    }, { '--jb-progress': d.progress.toFixed(4) });
+    document.querySelector('.jb-npo-favorite')?.toggleAttribute('data-on', fav);
+  };
+  const timer = setInterval(() => popupOpen() === 'now-playing' && render(), OVERLAY_TICK_MS);
+  openPopup('now-playing', { title: 'Now Playing' }, {
+    stops: {
+      favorite: () => {
+        const t = playingLibraryTrack();
+        if (!t) return;
+        publish('jukebox/jb-library/cmd', { action: 'favorite', title: t.title, artist: t.artist, value: !t.favorite });
+      },
+      close: () => closePopup('now-playing'),
+    },
+    onClose: () => {
+      clearInterval(timer);
+      focusKey(returnTo);
+    },
+  });
+  render();
+  refocus();
+}
+
+// The phone badge. Managing phones (connect, switch, forget) comes with
+// the phone connection manager; for now it shows who's connected.
+function phones() {
+  const p = store.get('phone');
+  openPopup('phones', {
+    title: 'Phone',
+    name: p?.connected ? p.name : 'No phone connected',
+    status: p?.connected ? 'Connected over Bluetooth' : 'Connect your phone in its Bluetooth settings.',
+  });
+  setTimeout(() => closePopup('phones'), NOTICE_MS);
+}
+
 function watchSystem() {
   store.watch(html, 'phone', p => { html.dataset.phone = p?.connected ? 'connected' : 'disconnected'; });
+  // Lets themes animate things (the EQ icon) while a song plays.
+  store.watch(html, 'nowPlaying', np => html.toggleAttribute('data-playing', np?.status === 'playing'));
 
   // While the knob is setting the volume, its own running total is what's
   // shown: a confirmation for an older step can arrive after newer steps
@@ -121,12 +201,26 @@ function watchSystem() {
     setTimeout(() => closePopup('notice'), NOTICE_MS);
   });
 
+  // A pick the phone couldn't play. Usually another app (an audiobook, a
+  // video) has the phone's audio: the jukebox can only browse and play
+  // from the Music app.
+  store.watch(html, 'playError', e => {
+    if (!e || currentMode() !== 'select' || popupOpen()) return;
+    openPopup('notice', {
+      title: 'Couldn\'t play that song',
+      message: 'Open the Music app on your phone, then pick it again.',
+    });
+    setTimeout(() => closePopup('notice'), NOTICE_MS + 2000);
+  });
+
   // The keypad: a letter brings up the board (so you can see what you're
   // picking), and letter + digit picks that slot. Picking an artist
   // (album, genre) opens its songs; picking a song sends it to jb-core,
   // which plays it now or queues it.
   store.watch(html, 'entry', e => {
-    if (e?.state === 'partial' && store.get('screen') !== 'all-songs') showScreen('all-songs');
+    if (e?.state !== 'partial') return;
+    if (popupOpen() === 'now-playing') closePopup('now-playing');
+    if (store.get('screen') !== 'all-songs') showScreen('all-songs');
   });
   store.watch(html, 'selection', s => {
     if (!Number.isInteger(s?.index)) return;
@@ -141,10 +235,12 @@ function watchSystem() {
 function watchIdle() {
   setInterval(() => {
     const minutes = theme.settings.idle_home_minutes;
-    if (!minutes || store.get('screen') === 'home') return;
+    if (!minutes || (store.get('screen') === 'home' && !popupOpen())) return;
     if (store.get('nowPlaying')?.status === 'playing') return;
     const last = Math.max(store.get('activity') || 0, startedAt);
-    if (Date.now() - last >= minutes * 60000) showScreen('home');
+    if (Date.now() - last < minutes * 60000) return;
+    closePopup();
+    showScreen('home');
   }, IDLE_CHECK_MS);
 }
 

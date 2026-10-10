@@ -20,8 +20,14 @@ export function makeStop(el, key, onClick) {
   el.jbClick = onClick;
 }
 
-// Stops in knob order, clockwise, and the resting stop.
+// Stops in knob order, clockwise, and the resting stop. While an overlay
+// that holds stops is open (e.g. Now Playing), the knob stays inside it.
 export function ring() {
+  const modal = document.querySelector('[data-modal]');
+  if (modal) {
+    const stops = stopsIn(modal);
+    return { stops, rest: stops[0] || null };
+  }
   const groups = [...document.querySelectorAll('[focus]')];
   const restGroup = groups.find(g => g.getAttribute('focus-flow') === 'down-from-rest');
   if (!restGroup) {
@@ -54,7 +60,32 @@ function setCurrent(el) {
   if (current && current !== el) delete current.dataset.focused;
   current = el;
   currentKey = el?.dataset.focusStop ?? null;
-  if (el) el.dataset.focused = '';
+  if (el) {
+    el.dataset.focused = '';
+    reveal(el);
+  }
+}
+
+// Bring a stop below (or above) the fold into view by smoothly scrolling
+// the area it sits in, with room around it for the theme's focus effect.
+function reveal(el) {
+  const scroller = scrollerOf(el);
+  if (!scroller) return;
+  const box = scroller.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const margin = Math.min(box.height * 0.12, 120);
+  let top = scroller.scrollTop;
+  if (r.bottom + margin > box.bottom) top += r.bottom + margin - box.bottom;
+  else if (r.top - margin < box.top) top -= box.top - (r.top - margin);
+  if (top !== scroller.scrollTop) scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
+function scrollerOf(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
 }
 
 // After the page changes (a new screen), keep the highlight on the same
@@ -65,8 +96,23 @@ export function refocus() {
   setCurrent(same || rest);
 }
 
+// Put the highlight on a particular stop (by key), e.g. back on the button
+// that opened an overlay once it closes.
+export function focusKey(key) {
+  const { stops, rest } = ring();
+  setCurrent(stops.find(el => el.dataset.focusStop === key) || rest);
+}
+
+export function currentStopKey() {
+  return currentKey;
+}
+
 export function goToRest() {
   setCurrent(ring().rest);
+  // Back at rest, the screen's content scrolls back to its top.
+  for (const s of document.querySelectorAll('jb-screen *')) {
+    if (s.scrollTop) s.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 export function rotate(steps) {
@@ -90,7 +136,13 @@ export function click() {
     return;
   }
   if (!current?.isConnected) refocus();
-  current?.jbClick?.();
+  // A short "pressed" state for the theme, like a button going down.
+  const pressed = current;
+  if (pressed) {
+    pressed.dataset.pressed = '';
+    setTimeout(() => delete pressed.dataset.pressed, 220);
+  }
+  pressed?.jbClick?.();
   armRestTimer();
 }
 

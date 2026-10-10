@@ -5,6 +5,8 @@
 // every change, so nothing flickers and a theme's elements keep their
 // state (e.g. CSS transitions).
 
+import { watchArt } from './art.js';
+
 export function fromTemplate(html) {
   const t = document.createElement('template');
   t.innerHTML = html || '';
@@ -20,13 +22,43 @@ export function bind(root, data) {
   for (const el of own(root, '[data-src]')) {
     const v = data[el.dataset.src];
     if (v) {
-      if (el.getAttribute('src') !== v) el.setAttribute('src', v);
+      if (el.getAttribute('src') !== v) {
+        // Readable pixels (for art colors) need CORS; set before the src.
+        el.crossOrigin = 'anonymous';
+        el.setAttribute('src', v);
+      }
+      watchArt(el);
     } else {
       el.removeAttribute('src');
     }
   }
+  for (const el of own(root, '[data-icon]')) setIcon(el, data[el.dataset.icon]);
   for (const el of own(root, '[data-if]')) el.hidden = !data[el.dataset.if];
   for (const el of own(root, '[data-if-not]')) el.hidden = !!data[el.dataset.ifNot];
+}
+
+// An icon from the engine's icon list: library SVG (already cleaned by
+// jb-ui), a theme's own image file, or one the engine draws itself.
+export function setIcon(el, icon) {
+  const key = icon ? JSON.stringify(icon) : '';
+  if (el.jbIcon === key) return;
+  el.jbIcon = key;
+  if (!icon) {
+    el.replaceChildren();
+  } else if (icon.svg) {
+    el.innerHTML = icon.svg;
+  } else if (icon.url) {
+    const img = document.createElement('img');
+    img.src = icon.url;
+    img.alt = '';
+    el.replaceChildren(img);
+  } else if (icon.builtin === 'eq') {
+    // Equalizer bars; the theme animates them while html[data-playing].
+    const eq = document.createElement('span');
+    eq.className = 'jb-eq';
+    for (let i = 0; i < 4; i++) eq.append(document.createElement('i'));
+    el.replaceChildren(eq);
+  }
 }
 
 export function slot(root, name) {

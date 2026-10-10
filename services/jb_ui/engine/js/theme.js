@@ -25,9 +25,12 @@ export async function applyTheme(theme) {
   applySizing(manifest.sizing);
 }
 
-async function loadFont({ family, src }, base) {
+async function loadFont({ family, src, weight, stretch, style }, base) {
   try {
-    const face = new FontFace(family, `url("${base}${src}")`);
+    // A variable font declares its ranges, e.g. weight "100 1000" and
+    // stretch "25% 151%", so bold and condensed use its real axes.
+    const descriptors = Object.fromEntries(Object.entries({ weight, stretch, style }).filter(([, v]) => v));
+    const face = new FontFace(family, `url("${base}${src}")`, descriptors);
     document.fonts.add(await face.load());
   } catch (e) {
     console.warn(`font ${family} didn't load:`, e);

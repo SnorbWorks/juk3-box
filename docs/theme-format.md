@@ -43,6 +43,7 @@ my-theme/
     home.json         one layout per screen (home and all-songs required)
     all-songs.json
     settings.json
+    collection.json   optional: the See All view
   blocks/             optional: your own markup for any block or popup
     song-card.html
   theme.css           your styles (required)
@@ -82,7 +83,8 @@ Themes live in two places:
 | `name`, `version`, `author` | yes | Shown in the theme picker |
 | `license`, `description` | no | Shown in the theme picker |
 | `styles` | yes | CSS files, loaded in order |
-| `fonts` | no | Font files to load |
+| `fonts` | no | Font files to load. A variable font can give its ranges, e.g. `"weight": "1 1000", "stretch": "25% 151%"`, so bold and condensed use its real axes |
+| `icons` | no | Library icons for the engine's buttons, e.g. `{"home": "lucide:house"}` (see Icons) |
 | `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS |
 | `sizing` | no | `fluid` (default) or `canvas`; see Fitting any screen |
 
@@ -161,7 +163,10 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `sections` | The owner's chosen Home sections | |
 | `section` | One Home section, placed by the layout | `type`, `limit` |
 | `page-info` | Board page and current sort, e.g. "Artists · Queen  1 of 2" | |
-| `pager` | Knob stops for the board: Previous Page, Next Page, and (inside an artist, album or genre) a way back up to the full list | |
+| `pager` | Knob stops for the board: Previous Page and Next Page | |
+| `header` | The screen's title and subtitle ("Browse by Genre" / "Classic Rock", or "All Songs" / "Page 1 of 10") and a Back button. Back leaves an artist (album, genre) for the list of them, else returns to the previous screen | |
+| `connection` | The phone badge: connected or not, and the phone's name. A knob stop; clicking it will manage phones once the phone connection manager exists (for now it shows who's connected) | |
+| `collection` | A section's See All view: all its cards in a grid (every Browse option, the last 100 played, every new song) | |
 
 ### Nav buttons
 
@@ -173,9 +178,10 @@ The engine knows these nav buttons. The owner picks which show, and in what orde
 | `all-songs` | Go to the song board |
 | `settings` | Go to Settings |
 | `volume` | Turn the knob to change the volume |
+| `now-playing` | Opens the Now Playing overlay |
 | `shuffle` | Shuffle on or off |
 
-A theme gives each button its look with an icon file named after it (SVG, PNG or WebP): `assets/icons/home.svg`, `assets/icons/volume.svg` and so on. An optional `shuffle-on` icon replaces `shuffle` while shuffle is on. Labels come from the engine; while shuffle is on, its label reads "Singles", which is what a click switches to.
+The default order is Home, Volume, All Songs, Settings, Now Playing, Shuffle. Labels come from the engine; while shuffle is on, its label reads "Single Play", which is what a click switches to. Icons: see Icons.
 
 Each button sits in a `.jb-nav-item` element, which carries its states (see States you can style).
 
@@ -193,7 +199,37 @@ Each section is a row of cards. There are two kinds of card:
 | `featured-artist` | An artist the engine picks at random, at startup and every 30 minutes | Opens the board filtered to that artist |
 | `browse` | Shortcuts: Artist, Album, Genre, Top 100, Most Played, Recently Added and so on, chosen in Settings | Opens the board in that sort |
 
+Default card counts: New 2, Featured Artist 1, Browse the owner's chosen sorts, Recents 18 (a layout's `limit` changes them; later, the page builder). When a section has more than it shows, its header's See All (`data-stop="see-all"` in `section.html`) opens the `collection` screen: every Browse option, the last 100 played, or every new song, as cards. A theme lays that screen out in `layouts/collection.json`; without one, the engine uses a header plus the cards.
+
+The Home sections area should scroll (`overflow-y: auto`): when the knob moves to a card below the fold, the engine scrolls it smoothly into view, and back to the top when the highlight returns to rest.
+
 More section types will come with later format versions and plugins. A theme that doesn't style a new type gets the engine's plain look for it.
+
+### Icons
+
+JUKE.BOX bundles open-source icon sets in [Iconify](https://iconify.design)'s format, starting with [Lucide](https://lucide.dev) (ISC license). They live on the jukebox, so they work offline. More sets can be added as files (and later downloaded from jb-admin).
+
+Every button the engine draws has an icon name: `home`, `volume`, `all-songs`, `settings`, `now-playing`, `shuffle`, `shuffle-on` (while shuffle is on), `back`, `page-prev`, `page-next`, `see-all`, `card-open`, `play`, `favorite`, `close`, `connection`, `dropdown`. For each, the engine uses the first of:
+
+1. A file in your theme: `assets/icons/<name>.svg` (or PNG, WebP).
+2. Your choice in theme.json: `"icons": {"home": "lucide:house"}`. Any icon in a bundled set, as `set:name`.
+3. The engine's default.
+
+`jb:eq` is an icon the engine draws itself: equalizer bars (`<span class="jb-eq"><i></i>...</span>`) for you to animate while `<html data-playing>`. It's the default for `now-playing`.
+
+Library icons are inline SVG drawn in `currentColor`, so `color` and `font-size` style them.
+
+### Art colors
+
+The engine samples every picture a template shows through `data-src` and sets three CSS variables on the closest element with `data-art-scope` (else the image's parent):
+
+| Variable | Is |
+| --- | --- |
+| `--jb-art-1` | The picture's most vivid color |
+| `--jb-art-2` | A second vivid color, different in hue (or a lighter first color) |
+| `--jb-art-dark` | Its edges' average color, darkened |
+
+Use them for glows, gradient edges and vignettes that match whatever art a card shows, with a fallback for while it loads: `var(--jb-art-1, #4f6dff)`. Cards, board slots, the Now Playing block and Up Next items are scopes already.
 
 ### Block markup
 
@@ -212,6 +248,10 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | `popup.html` | The frame of every popup |
 | `popup-volume.html` | The volume popup's content |
 | `popup-notice.html` | The content of short notices, such as "Connect your phone" |
+| `popup-now-playing.html` | The Now Playing overlay: `song`, `artist`, `album`, `year`, `cover`, `elapsed`, `length`, `favorite`, `favoriteLabel`, and stops `favorite` and `close` |
+| `popup-phones.html` | The phone badge's popup: `name`, `status` |
+| `header.html` | The screen header: `title`, `subtitle`, `canGoBack`, and the stop `back` |
+| `connection.html` | The phone badge: `status`, `name`, `icon`, `moreIcon` |
 | `page-info.html` | The board's page info: `sort`, `filter`, `page`, `pages` |
 | `pager-button.html` | Each pager button: `label`, `icon` (from `assets/icons/page-prev`, `page-next`, `page-up`) |
 
@@ -227,6 +267,9 @@ Fill in data with attributes:
 | `data-if-not="cover"` | Shows the element only when that field is empty |
 | `data-slot="cards"` | Where the cards go (in `section.html`) |
 | `data-slot="content"` | Where the content goes (in `popup.html`) |
+| `data-icon="icon"` | Puts that field's icon inside the element |
+| `data-stop="name"` | Makes the element a knob stop the engine knows by that name (e.g. `see-all` in `section.html`, `favorite` in the overlay) |
+| `data-art-scope` | Where that card's art colors are set (see Art colors) |
 
 ```html
 <!-- blocks/song-card.html -->
@@ -278,6 +321,7 @@ The engine sets attributes; style them in your CSS.
 | Where | Attribute | Meaning |
 | --- | --- | --- |
 | Any focusable item | `data-focused` | The knob highlight is here |
+| Any focusable item | `data-pressed` | Just clicked (for about 0.2s), for a press effect |
 | Nav button (`.jb-nav-item`) | `data-active` | Its screen is showing |
 | Nav button (`.jb-nav-item`) | `data-on` | Shuffle is on |
 | Board slot | `data-empty` | No song in this slot |
@@ -289,6 +333,8 @@ The engine sets attributes; style them in your CSS.
 | `<html>` | `data-mode` | `select`, or a knob mode such as `volume` |
 | `<html>` | `data-phone` | `connected` or `disconnected` |
 | `<html>` | `data-popup` | Which popup is open, if any |
+| `<html>` | `data-playing` | A song is playing (e.g. to animate `.jb-eq`) |
+| Popup frame | `data-modal` | The popup holds knob stops; the knob stays inside it |
 
 The engine also sets CSS variables you can use:
 
@@ -326,7 +372,7 @@ Pressing a letter on the keypad brings up the All Songs screen if it isn't showi
 
 ### Popups
 
-Popups (volume, notices such as "connect your phone") open over everything. The engine supplies their content and behavior. A theme can restyle them like any block: `popup.html` for the frame every popup shares, and `popup-volume.html` for the volume popup's content.
+Popups (volume, notices such as "connect your phone", the phone badge, the Now Playing overlay) open over everything. The engine supplies their content and behavior. A theme can restyle them like any block: `popup.html` for the frame every popup shares, and `popup-<name>.html` for each one's content. The Now Playing overlay holds knob stops (Favorite, Close); while it's open the knob stays inside it.
 
 ## The knob
 

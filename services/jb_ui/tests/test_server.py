@@ -95,7 +95,9 @@ def test_api_includes_settings_and_icons(tmp_path):
     async def check(client):
         data = await (await client.get("/api/theme")).json()
         assert data["id"] == "iconic"
-        assert data["icons"] == {"home": "/themes/iconic/assets/icons/home.svg"}
+        assert data["icons"]["home"] == {"url": "/themes/iconic/assets/icons/home.svg"}  # the theme's file wins
+        assert "<svg" in data["icons"]["volume"]["svg"]                              # engine default
+        assert data["icons"]["now-playing"] == {"builtin": "eq"}
         assert data["settings"]["nav"] == main.DEFAULT_NAV
         assert "nav-button" in data["blocks"] and "popup-volume" in data["blocks"]
     run(tmp_path, check, theme="iconic", setup=setup)

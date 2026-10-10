@@ -3,11 +3,12 @@
 // Keep the names in step with KNOWN_BLOCKS in services/jb_ui/themes.py.
 
 import { bind, fromTemplate, slot } from './bind.js';
-import { turnPage, upLevel, view } from './board.js';
+import { SORTS, turnPage, view } from './board.js';
 import { makeStop } from './focus.js';
-import { fillSection, fillSections } from './sections.js';
+import { nowPlayingData } from './np.js';
+import { fillCollection, fillSection, fillSections } from './sections.js';
 import { store } from './store.js';
-import { formatMs, sized, toTrack } from './tracks.js';
+import { sized, toTrack } from './tracks.js';
 
 export const BLOCKS = {
   // The engine puts the current screen into this element itself.
@@ -19,8 +20,11 @@ export const BLOCKS = {
   board: fillBoard,
   sections: fillSections,
   section: fillSection,
+  collection: fillCollection,
   'page-info': fillPageInfo,
   pager: fillPager,
+  header: fillHeader,
+  connection: fillConnection,
 };
 
 function fillLogo(el, node, ctx) {
@@ -39,39 +43,31 @@ function fillLogo(el, node, ctx) {
   el.append(img);
 }
 
-// The phone reports its position every few seconds; between reports the
-// elapsed time and progress run on locally so the bar moves smoothly.
+// Elements in a template marked data-stop="name" become knob stops.
+export function stopsFrom(root, keyPrefix, handlers) {
+  for (const el of root.querySelectorAll('[data-stop]')) {
+    const handler = handlers[el.dataset.stop];
+    if (handler) makeStop(el, `${keyPrefix}:${el.dataset.stop}`, handler);
+  }
+}
+
 const TICK_MS = 500;
 
 function fillNowPlaying(el, node, ctx) {
   el.append(fromTemplate(ctx.blocks['now-playing']));
-  let np = null;
-  let receivedAt = 0;
-
+  el.dataset.artScope = '';
   const render = () => {
-    const state = np?.status === 'playing' ? 'playing' : np?.status === 'paused' ? 'paused' : 'stopped';
-    const track = np?.title ? toTrack(np, store.get('library')) : {};
-    let position = np?.position_ms ?? 0;
-    if (state === 'playing') position += Date.now() - receivedAt;
-    const duration = np?.duration_ms;
-    if (duration) position = Math.min(position, duration);
-
-    el.dataset.state = state;
-    el.style.setProperty('--jb-progress', duration ? (position / duration).toFixed(4) : '0');
-    bind(el, { ...track, state, elapsed: np?.title ? formatMs(position) : '' });
+    const d = nowPlayingData();
+    el.dataset.state = d.state;
+    el.style.setProperty('--jb-progress', d.progress.toFixed(4));
+    bind(el, d);
   };
-
-  store.watch(el, 'nowPlaying', value => {
-    np = value || null;
-    receivedAt = Date.now();
-    render();
-  });
+  store.watch(el, 'nowPlaying', render);
   // Covers arrive with the library, possibly after the song started.
   store.watch(el, 'library', render);
-
   const timer = setInterval(() => {
     if (!el.isConnected) return clearInterval(timer);
-    if (np?.status === 'playing') render();
+    if (store.get('nowPlaying')?.status === 'playing') render();
   }, TICK_MS);
 }
 
@@ -86,7 +82,10 @@ function fillUpNext(el, node, ctx) {
     bind(el, { count: upcoming.length });
     if (!cards) return;
     cards.replaceChildren(...upcoming.slice(0, limit).map((raw, i) => {
-      const card = fromTemplate(ctx.blocks['queue-card']);
+      const card = document.createElement('div');
+      card.className = 'jb-queue-item';
+      card.dataset.artScope = '';
+      card.append(fromTemplate(ctx.blocks['queue-card']));
       const track = toTrack(raw, library);
       bind(card, { ...track, cover: sized(track.cover, 200), position: i + 1 });
       return card;
@@ -95,46 +94,6 @@ function fillUpNext(el, node, ctx) {
 
   store.watch(el, 'queue', render);
   store.watch(el, 'library', render);
-}
-
-const NAV_LABELS = {
-  home: 'Home',
-  volume: 'Volume',
-  shuffle: 'Shuffle',
-  'all-songs': 'All Songs',
-  settings: 'Settings',
-};
-
-// The owner picks which buttons show, and their order (Settings). Each
-// button sits in a .jb-nav-item, which carries its states.
-function fillNav(el, node, ctx) {
-  const items = ctx.settings.nav.map(name => {
-    const item = document.createElement('div');
-    item.className = 'jb-nav-item';
-    item.dataset.button = name;
-    item.append(fromTemplate(ctx.blocks['nav-button']));
-    makeStop(item, `nav:${name}`, () => ctx.actions.nav(name));
-    return item;
-  });
-  el.replaceChildren(...items);
-
-  const render = () => {
-    const shuffle = !!store.get('queue')?.shuffle_active;
-    const screen = store.get('screen');
-    for (const item of items) {
-      const name = item.dataset.button;
-      const on = name === 'shuffle' && shuffle;
-      // Shuffle on reads "Singles": the label says what a click does.
-      bind(item, {
-        label: on ? 'Singles' : NAV_LABELS[name],
-        icon: (on && ctx.icons['shuffle-on']) || ctx.icons[name] || '',
-      });
-      item.toggleAttribute('data-active', name === screen);
-      if (name === 'shuffle') item.toggleAttribute('data-on', on);
-    }
-  };
-  store.watch(el, 'queue', render);
-  store.watch(el, 'screen', render);
 }
 
 // The song board: one page of slots, grouped by letter. Slot codes match
@@ -158,6 +117,7 @@ function fillBoard(el, node, ctx) {
       const s = document.createElement('div');
       s.className = 'jb-slot';
       s.dataset.code = slotInfo.code;
+      s.dataset.artScope = '';
       s.append(fromTemplate(ctx.blocks['song-card']));
       const item = slotInfo.item;
       if (!item) {
@@ -202,33 +162,105 @@ function fillPageInfo(el, node, ctx) {
   store.watch(el, 'board', render);
 }
 
-// Knob stops for paging the board, and for backing out of an artist's
-// (album's, genre's) songs to the list of them.
+// Knob stops for paging the board.
 const PAGER = {
-  prev: { label: () => 'Previous Page', click: () => turnPage(-1) },
-  up: { label: v => `All ${v.sortLabel}`, click: upLevel },
-  next: { label: () => 'Next Page', click: () => turnPage(1) },
+  prev: { label: 'Previous Page', icon: 'page-prev', click: () => turnPage(-1) },
+  next: { label: 'Next Page', icon: 'page-next', click: () => turnPage(1) },
 };
 
 function fillPager(el, node, ctx) {
-  const items = Object.entries(PAGER).map(([name, b]) => {
+  el.replaceChildren(...Object.entries(PAGER).map(([name, b]) => {
     const item = document.createElement('div');
     item.className = 'jb-pager-item';
     item.dataset.button = name;
     item.append(fromTemplate(ctx.blocks['pager-button']));
+    bind(item, { label: b.label, icon: ctx.icons[b.icon] });
     makeStop(item, `pager:${name}`, b.click);
+    return item;
+  }));
+}
+
+const NAV_LABELS = {
+  home: 'Home',
+  volume: 'Volume',
+  'all-songs': 'All Songs',
+  settings: 'Settings',
+  'now-playing': 'Now Playing',
+  shuffle: 'Shuffle',
+};
+
+// The owner picks which buttons show, and their order (Settings). Each
+// button sits in a .jb-nav-item, which carries its states.
+function fillNav(el, node, ctx) {
+  const items = ctx.settings.nav.map(name => {
+    const item = document.createElement('div');
+    item.className = 'jb-nav-item';
+    item.dataset.button = name;
+    item.append(fromTemplate(ctx.blocks['nav-button']));
+    makeStop(item, `nav:${name}`, () => ctx.actions.nav(name));
     return item;
   });
   el.replaceChildren(...items);
+
   const render = () => {
-    const v = view();
+    const shuffle = !!store.get('queue')?.shuffle_active;
+    const screen = store.get('screen');
     for (const item of items) {
       const name = item.dataset.button;
-      bind(item, { label: PAGER[name].label(v), icon: ctx.icons[`page-${name}`] || '' });
-      // Only there while inside an artist (album, genre).
-      if (name === 'up') item.hidden = !v.filter;
+      const on = name === 'shuffle' && shuffle;
+      // Shuffle on reads "Single Play": the label says what a click does.
+      bind(item, {
+        label: on ? 'Single Play' : NAV_LABELS[name],
+        icon: (on && ctx.icons['shuffle-on']) || ctx.icons[name],
+      });
+      item.toggleAttribute('data-active', name === screen);
+      if (name === 'shuffle') item.toggleAttribute('data-on', on);
     }
   };
-  store.watch(el, 'tracks', render);
+  store.watch(el, 'queue', render);
+  store.watch(el, 'screen', render);
+}
+
+// The screen's title, subtitle and a Back button. On the board: the sort
+// ("Browse by Genre") and the artist/album/genre picked ("Classic Rock"),
+// else the page; on a See All view, its title and count.
+function fillHeader(el, node, ctx) {
+  el.append(fromTemplate(ctx.blocks.header));
+  stopsFrom(el, 'header', { back: () => ctx.actions.back() });
+  const render = () => {
+    const screen = store.get('screen');
+    let title = '', subtitle = '';
+    if (screen === 'all-songs') {
+      const v = view();
+      const sort = SORTS[v.sort];
+      title = sort?.category ? `Browse by ${sort.singular}` : v.sort === 'title' ? 'All Songs' : v.sortLabel;
+      subtitle = v.filter ? v.filter.value : v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : '';
+    } else if (screen === 'collection') {
+      const c = store.get('collection');
+      title = c?.title || '';
+      subtitle = c?.subtitle || '';
+    }
+    bind(el, { title, subtitle, canGoBack: screen !== 'home', backIcon: ctx.icons.back });
+  };
+  store.watch(el, 'screen', render);
   store.watch(el, 'board', render);
+  store.watch(el, 'tracks', render);
+  store.watch(el, 'collection', render);
+}
+
+// The phone connection badge. Clicking it will manage phones (connect,
+// switch, forget) once the phone connection manager is built; for now it
+// shows the connected phone.
+function fillConnection(el, node, ctx) {
+  el.append(fromTemplate(ctx.blocks.connection));
+  makeStop(el, 'connection', () => ctx.actions.phones());
+  store.watch(el, 'phone', p => {
+    el.toggleAttribute('data-connected', !!p?.connected);
+    bind(el, {
+      status: p?.connected ? 'Connected' : 'Not connected',
+      name: p?.connected ? p.name : 'Connect a phone',
+      icon: ctx.icons.connection,
+      moreIcon: ctx.icons.dropdown,
+    });
+  });
 }

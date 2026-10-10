@@ -12,9 +12,9 @@ export const DIGITS = '1234567890';
 // shows its songs.
 export const SORTS = {
   title: { label: 'Songs' },
-  artist: { label: 'Artists', category: true },
-  album: { label: 'Albums', category: true },
-  genre: { label: 'Genres', category: true },
+  artist: { label: 'Artists', singular: 'Artist', category: true },
+  album: { label: 'Albums', singular: 'Album', category: true },
+  genre: { label: 'Genres', singular: 'Genre', category: true },
   'top-100': { label: 'Top 100' },
   'most-played': { label: 'Most Played' },
 };
@@ -92,10 +92,12 @@ export function turnPage(dir) {
 }
 
 // Back up from an artist's (album's, genre's) songs to the list of them.
+// Returns whether there was a level to go back up from.
 export function upLevel() {
-  if (!state.filter) return;
+  if (!state.filter) return false;
   state = { sort: state.sort, filter: null, page: state.categoryPage || 0 };
   changed();
+  return true;
 }
 
 // The keypad picked slot `index` (A1 = 0 ... K0 = 99, jb-core's order).

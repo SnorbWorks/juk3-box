@@ -31,6 +31,7 @@ ALLOWED_ATTRS = {
     "viewbox", "xmlns", "d", "fill", "stroke", "stroke-width", "stroke-linecap",
     "stroke-linejoin", "fill-rule", "opacity", "transform", "cx", "cy", "r", "rx", "ry",
     "x", "y", "x1", "y1", "x2", "y2", "width", "height", "points",
+    "clip-rule", "fill-opacity", "stroke-opacity", "stroke-miterlimit", "stroke-dasharray",
 }
 UNSAFE_STYLE_RE = re.compile(r"url\s*\(|expression\s*\(|@import|javascript:", re.I)
 

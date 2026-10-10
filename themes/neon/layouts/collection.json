@@ -1,0 +1,9 @@
+{
+  "class": "collection",
+  "children": [
+    { "class": "top-bar", "focus": "top", "children": [
+      { "block": "header" }
+    ]},
+    { "block": "collection", "focus": "collection" }
+  ]
+}

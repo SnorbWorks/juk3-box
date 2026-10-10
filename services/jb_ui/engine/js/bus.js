@@ -21,6 +21,7 @@ const HANDLERS = {
   'jukebox/jb-core/selection': s => store.set('selection', s),
   'jukebox/jb-audio/state': v => store.set('volume', v),
   'jukebox/jb-core/notice': n => store.set('notice', n),
+  'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
 };
 

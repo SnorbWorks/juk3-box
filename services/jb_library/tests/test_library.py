@@ -89,3 +89,17 @@ def test_songs_added_after_the_first_sync_are_stamped(db):
     assert added(db) == {"Animal": None, "Sweater Weather": None, "Dreams": 200.0}
     lib.upsert_tracks(db, MAC, crawl("Animal", "Sweater Weather", "Dreams"), now=300.0)
     assert added(db)["Dreams"] == 200.0  # a resync doesn't make it new again
+
+
+def favorites(db):
+    return db.execute("SELECT title, dup, favorite FROM tracks ORDER BY title, dup").fetchall()
+
+
+def test_favorite_marks_the_copy_whose_artist_matches(db):
+    lib.upsert_tracks(db, MAC, crawl("Animal", "Animal", "Dreams"))
+    db.execute("UPDATE tracks SET artist = 'KATSEYE' WHERE title = 'Animal' AND dup = 1")
+    assert lib.set_favorite(db, "Animal", "katseye", True) == 1
+    assert favorites(db) == [("Animal", 0, 0), ("Animal", 1, 1), ("Dreams", 0, 0)]
+    lib.set_favorite(db, "Dreams", None, True)   # no artist known: every copy
+    lib.set_favorite(db, "Animal", "KATSEYE", False)
+    assert favorites(db) == [("Animal", 0, 0), ("Animal", 1, 0), ("Dreams", 0, 1)]
