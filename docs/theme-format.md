@@ -85,7 +85,7 @@ Themes live in two places:
 | `styles` | yes | CSS files, loaded in order |
 | `fonts` | no | Font files to load. A variable font can give its ranges, e.g. `"weight": "1 1000", "stretch": "25% 151%"`, so bold and condensed use its real axes |
 | `icons` | no | Library icons for the engine's buttons, e.g. `{"home": "lucide:house"}` (see Icons) |
-| `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS |
+| `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS. Ship a video at any size, frame rate or format: JUKE.BOX re-encodes it once for the hardware (H.264, at most 1280x720, 30 fps) and plays that copy; your file is never changed |
 | `sizing` | no | `fluid` (default) or `canvas`; see Fitting any screen |
 
 ## Layouts

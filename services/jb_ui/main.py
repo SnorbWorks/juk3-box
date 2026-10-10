@@ -19,7 +19,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, logging as jb_logging
-from services.jb_ui import icons, markup, themes
+from services.jb_ui import icons, markup, media, themes
 
 SERVICE_NAME = "jb-ui"
 HERE = Path(__file__).resolve().parent
@@ -38,6 +38,8 @@ DEFAULTS = {
     "default_theme": "bare",
     # Always shipped; used when the chosen theme can't load.
     "fallback_theme": "bare",
+    # Background videos re-encoded for the hardware (see media.py).
+    "media_cache_dir": "/var/lib/juk3-box/cache/video",
 }
 
 # Themes are data only: the engine's own scripts run, nothing else does.
@@ -104,6 +106,7 @@ class App:
         self.log = log
         self.theme_dirs = [Path(d) for d in cfg["theme_dirs"]]
         self.settings_path = Path(cfg["settings_path"])
+        self.videos = media.VideoOptimizer(Path(cfg["media_cache_dir"]), log)
 
     def active_theme(self) -> tuple[themes.Theme, dict | None]:
         """The theme to show, plus details if we had to fall back."""
@@ -124,6 +127,12 @@ class App:
 
     async def api_theme(self, request: web.Request) -> web.Response:
         theme, fallback = self.active_theme()
+        # Start optimizing the background video as soon as a theme is used,
+        # so it's ready by the next load if it isn't already.
+        bg = theme.manifest.get("background") or {}
+        if bg.get("type") == "video" and (bg_path := themes.safe_path(theme.root, bg.get("src"))):
+            if bg_path.is_file() and self.videos.is_video(bg_path):
+                self.videos.served_path(bg_path)
         settings = owner_settings(read_settings(self.settings_path))
         base = f"/themes/{theme.id}/"
         return web.json_response({
@@ -149,6 +158,8 @@ class App:
         path = themes.safe_path(root, request.match_info["path"])
         if path is None or not path.is_file():
             raise web.HTTPNotFound()
+        if self.videos.is_video(path):
+            path = self.videos.served_path(path)
         return web.FileResponse(path)
 
 

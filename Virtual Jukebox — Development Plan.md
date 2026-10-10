@@ -365,6 +365,8 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 - [ ] When a pick fails because another app (audiobook, video) has the phone's audio, the screen says to open Music. Better: detect it before the pick
 - [ ] Screens from the old plan, still needed: phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
 - [ ] Cabinet Settings screen (knob-friendly quick toggles): theme switcher, Home rows on/off (edits the module's `show` setting), nav buttons, songs per page, and the jb-admin address with a QR code
+- [x] Background videos optimized by the platform (jb-ui media.py): re-encoded once to H.264 <=1280x720 at 30 fps, cached in /var/lib/juk3-box/cache/video, remade when the original changes; the kiosk plays it with Chromium's zero-copy hardware decoding
+- [ ] Glass effects over the video must not use backdrop-filter (halves the frame rate on the Pi); add this to the theme guide
 - [ ] Later: plugin API
 
 Done when: the default theme matches the mockups on the real monitor, and a second theme can rearrange it without touching the engine.

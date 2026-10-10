@@ -24,6 +24,13 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 
+# Hardware video decoding with zero-copy: the Pi's H.264 decoder hands
+# frames straight to the GPU. Without ZeroCopyGL every frame was copied
+# through the CPU (~120% of a core with the background video playing,
+# ~30% with it; knob scrolling went from ~30 fps to ~50). Measured
+# 2026-10-10 on Chromium 152 (Raspberry Pi build).
+VIDEO_FEATURES="AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL"
+
 # On Wayland, --kiosk alone still first paints a normal browser window
 # (tab strip + address bar) at its remembered size for a second or two
 # before going fullscreen -- visible as a "browser flash" at startup.
@@ -33,6 +40,7 @@ done
 # rather than a white flash.
 exec chromium \
   --kiosk \
+  --enable-features="$VIDEO_FEATURES" \
   --app="$KIOSK_URL" \
   --start-fullscreen \
   --window-position=0,0 \
