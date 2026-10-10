@@ -37,7 +37,13 @@ ssh_pi "cd $REMOTE_DIR && python3 -m venv --system-site-packages venv 2>/dev/nul
 
 UNIT_NAME="$(echo "$SERVICE_NAME" | tr '_' '-')"
 RENDERED_UNIT="$(mktemp)"
-sed "s/{{SERVICE_NAME}}/${SERVICE_NAME}/g" "$REPO_DIR/deploy/systemd/jb-service.service.template" > "$RENDERED_UNIT"
+# A service with its own unit file (e.g. jb-lights, which runs as root) uses
+# that; everything else renders the shared template.
+if [ -f "$REPO_DIR/deploy/systemd/${UNIT_NAME}.service" ]; then
+  cp "$REPO_DIR/deploy/systemd/${UNIT_NAME}.service" "$RENDERED_UNIT"
+else
+  sed "s/{{SERVICE_NAME}}/${SERVICE_NAME}/g" "$REPO_DIR/deploy/systemd/jb-service.service.template" > "$RENDERED_UNIT"
+fi
 scp -i "$PI_KEY" "$RENDERED_UNIT" "$PI_USER@$PI_HOST:/tmp/${UNIT_NAME}.service"
 rm -f "$RENDERED_UNIT"
 ssh_pi_sudo "mv /tmp/${UNIT_NAME}.service /etc/systemd/system/${UNIT_NAME}.service"

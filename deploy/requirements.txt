@@ -2,3 +2,5 @@ aiomqtt
 dbus-next
 aiohttp
 evdev
+paho-mqtt
+rpi_ws281x

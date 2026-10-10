@@ -1,0 +1,18 @@
+[Unit]
+Description=juk3-box jb_lights
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/juk3-box
+# Keep root from leaving root-owned __pycache__ in admin's deploy tree.
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/juk3-box/venv/bin/python -m services.jb_lights.main
+Restart=on-failure
+RestartSec=2
+# rpi_ws281x drives GPIO12 through PWM + DMA, which needs root.
+User=root
+
+[Install]
+WantedBy=multi-user.target
