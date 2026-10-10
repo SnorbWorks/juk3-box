@@ -546,10 +546,11 @@ jb-section[type="new"] .jb-card-song > :first-child::after { bottom: 0; border-r
 
 .top-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1.4vw;
   min-height: 9vh;
-  padding: 2.6vh 16vw 1.4vh 2.6vw;   /* room on the right for the badge */
+  /* Top matches the phone badge's; the right leaves room for it plus a gap. */
+  padding: 2.9vh 17.2vw 1.4vh 2.6vw;
 }
 jb-header { flex: 1; min-width: 0; display: block; }
 .jb-header { display: flex; align-items: center; gap: 1.4vw; }
@@ -581,10 +582,15 @@ jb-header { flex: 1; min-width: 0; display: block; }
 .jb-header-subtitle { margin-top: 0.2vh; font-size: 2vh; color: var(--blue-text); }
 .jb-header-subtitle:empty { display: none; }
 
-jb-pager { display: flex; gap: 0.6vw; }
+/* Same height, top and corners as the phone badge, so they line up. */
+jb-pager { display: flex; gap: 0.6vw; height: 4.9vh; }
 .jb-pager-item {
-  padding: 1vh 1vw;
-  border-radius: 1.2vh;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 1vw;
+  border-radius: 1.4vh;
   background: rgba(20, 30, 60, 0.6);
   box-shadow: inset 0 0 0 1px rgba(130, 160, 255, 0.22);
   transition: background 260ms var(--ease), box-shadow 260ms var(--ease), transform 180ms var(--ease);
