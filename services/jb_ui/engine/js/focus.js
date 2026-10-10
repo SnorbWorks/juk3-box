@@ -80,12 +80,22 @@ function reveal(el) {
   if (top !== scroller.scrollTop) scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
 
+// Which ancestor scrolls never changes for a stop, so it's looked up once:
+// getComputedStyle up the chain forces a style recalculation, and doing it
+// on every knob step cost ~40 ms each on the Pi.
+const scrollers = new WeakMap();
+
 function scrollerOf(el) {
-  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-    const oy = getComputedStyle(p).overflowY;
-    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  if (!scrollers.has(el)) {
+    let found = null;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === 'auto' || oy === 'scroll') { found = p; break; }
+    }
+    scrollers.set(el, found);
   }
-  return null;
+  const s = scrollers.get(el);
+  return s && s.scrollHeight > s.clientHeight ? s : null;
 }
 
 // After the page changes (a new screen), keep the highlight on the same

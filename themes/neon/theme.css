@@ -1,3 +1,8 @@
+/* Performance on the Pi (measured 2026-10-10): only transform and opacity
+   may animate. Animating box-shadow, background or filter repaints every
+   frame and kept the page busy ~70% of the time while the knob turned.
+   Focus looks are pre-drawn layers that fade in by opacity. */
+
 /* Neon: the JUKE.BOX default look (Images/Theme "theme home" and "theme
    browse", Oct 2026). Dark navy glass over a neon video; cards take their
    glow, gradient edge and vignette from their own art (--jb-art-*).
@@ -90,7 +95,7 @@ jb-nav::after {
   position: relative;
   padding: 1.25vh 1.2vw;
   border-radius: 1.2vh;
-  transition: background 260ms var(--ease), box-shadow 260ms var(--ease), transform 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 .jb-nav-button { display: flex; align-items: center; gap: 1.6vw; }
 .jb-nav-icon { display: flex; width: 2.6vh; height: 2.6vh; font-size: 2.6vh; color: var(--ink); }
@@ -113,11 +118,21 @@ jb-nav::after {
   transition: opacity 260ms var(--ease);
   pointer-events: none;
 }
-.jb-nav-item[data-focused],
-.jb-np-head[data-focused] {
+/* The focused look: glass with a glow inside, faded in as a layer. */
+.jb-nav-item::after,
+.jb-np-head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 0 1.2vh rgba(200, 212, 255, 0.1), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 1.2vh rgba(200, 212, 255, 0.14), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  pointer-events: none;
 }
+.jb-nav-item[data-focused]::after,
+.jb-np-head[data-focused]::after { opacity: 1; }
 .jb-nav-item[data-focused]::before,
 .jb-np-head[data-focused]::before { opacity: 1; }
 /* Active: the blue-violet pill, a cyan-to-pink edge, a glow inside. */
@@ -130,9 +145,10 @@ jb-nav::after {
   opacity: 1;
   background: linear-gradient(100deg, rgba(110, 205, 255, 0.7) 0%, rgba(140, 155, 255, 0.28) 45%, rgba(228, 140, 230, 0.5) 100%);
 }
-.jb-nav-item[data-active][data-focused] {
-  box-shadow: inset 0 0 1.8vh rgba(175, 198, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 0 2vh rgba(90, 115, 255, 0.45), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.35);
+/* Active and focused: the focus layer becomes a brighter inner glow. */
+.jb-nav-item[data-active]::after {
+  background: none;
+  box-shadow: inset 0 0 1.8vh rgba(195, 212, 255, 0.45), 0 0 2vh rgba(90, 115, 255, 0.4);
 }
 .jb-nav-item[data-active][data-focused]::before {
   background: linear-gradient(100deg, rgba(150, 220, 255, 0.95) 0%, rgba(170, 182, 255, 0.45) 45%, rgba(240, 165, 240, 0.75) 100%);
@@ -167,7 +183,7 @@ jb-now-playing { display: block; }
   padding: 1.25vh 1.2vw;
   margin-bottom: 1vh;
   border-radius: 1.2vh;
-  transition: background 260ms var(--ease), box-shadow 260ms var(--ease), transform 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 .jb-np-head-icon { display: flex; width: 2.6vh; height: 2.6vh; font-size: 2.6vh; color: var(--ink); }
 .jb-np-head-label { font-size: 2.05vh; font-weight: 450; }
@@ -243,7 +259,7 @@ jb-connection {
      video has to be recomputed every frame and halved the frame rate. */
   background: linear-gradient(160deg, rgba(26, 38, 74, 0.86), rgba(16, 24, 50, 0.9));
   box-shadow: inset 0 0 0 1px rgba(130, 160, 255, 0.28), 0 0.6vh 1.6vh rgba(0, 0, 0, 0.4);
-  transition: box-shadow 260ms var(--ease), transform 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 .jb-connection { display: flex; align-items: center; gap: 0.9vw; }
 .jb-connection-icon { display: flex; font-size: 2.8vh; color: var(--ink); }
@@ -289,13 +305,25 @@ jb-section[type="new"][data-empty] + jb-section[type="featured-artist"] .jb-sect
   border-radius: 1vh;
   font-size: 1.6vh;
   color: var(--ink-soft);
-  transition: background 260ms var(--ease), color 260ms var(--ease), box-shadow 260ms var(--ease), transform 260ms var(--ease);
+  transition: transform 260ms var(--ease);
 }
 .jb-see-all-icon { display: flex; font-size: 1.8vh; }
 /* Focused, See All becomes a small version of the active nav pill: the
    blue-violet gradient, a cyan-to-pink edge, glow inside and out, and a
    lift, so it's easy to spot while the page scrolls. */
-.jb-see-all { position: relative; transform-origin: right center; }
+.jb-see-all { position: relative; z-index: 0; transform-origin: right center; }
+.jb-see-all::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
+  box-shadow: inset 0 0 1.4vh rgba(175, 198, 255, 0.45), 0 0 2.2vh rgba(90, 115, 255, 0.55), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  pointer-events: none;
+}
 .jb-see-all::before {
   content: "";
   position: absolute;
@@ -309,13 +337,9 @@ jb-section[type="new"][data-empty] + jb-section[type="featured-artist"] .jb-sect
   transition: opacity 260ms var(--ease);
   pointer-events: none;
 }
-.jb-see-all[data-focused] {
-  color: #fff;
-  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
-  box-shadow: inset 0 0 1.4vh rgba(175, 198, 255, 0.45), 0 0 2.2vh rgba(90, 115, 255, 0.55), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4);
-  transform: scale(1.15);
-}
-.jb-see-all[data-focused]::before { opacity: 1; }
+.jb-see-all[data-focused] { color: #fff; transform: scale(1.15); }
+.jb-see-all[data-focused]::before,
+.jb-see-all[data-focused]::after { opacity: 1; }
 .jb-see-all[data-pressed] { transform: scale(1.05); }
 
 .jb-section-cards { display: flex; gap: 1.3vw; }
@@ -334,7 +358,7 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
   --c1: var(--jb-art-1, #4f6dff);
   --c2: var(--jb-art-2, #9b7bff);
   --cd: var(--jb-art-dark, #050812);
-  transition: transform 420ms var(--ease), filter 420ms var(--ease);
+  transition: transform 420ms var(--ease);
   will-change: transform;
 }
 .jb-card > :first-child {
@@ -342,7 +366,6 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
   border-radius: inherit;
   /* A black drop shadow, soft and close. */
   box-shadow: 0 1.1vh 2.6vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35);
-  transition: box-shadow 420ms var(--ease);
 }
 /* The rim: 1.5px, translucent, pale with a hint of the art's colors.
    Brightest toward the top-left and bottom-right corners, faint along the
@@ -362,7 +385,6 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
     color-mix(in srgb, color-mix(in srgb, var(--c1) 40%, #e4ebff) 42%, transparent) 100%);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  transition: filter 420ms var(--ease);
   pointer-events: none;
 }
 /* Inside the rim: a soft feather along the edge, a faint glow in the two
@@ -395,12 +417,45 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
 /* Browse cards are small: they stay noticeably larger while focused. */
 .jb-card-link { --lift: 1.1; }
 /* The big feature cards only need a touch. */
-.jb-card:has(> .feature) { --lift: 1.03; }
+jb-section[type="new"] .jb-card,
+jb-section[type="featured-artist"] .jb-card { --lift: 1.03; }
 .jb-card[data-focused] { z-index: 2; transform: scale(var(--lift)) translateY(-0.5vh); animation: pick-up 900ms var(--ease); }
-.jb-card[data-focused] > :first-child {
+/* Focus layers on the card itself: a deeper shadow below, a brighter rim
+   on top. Both pre-drawn; only their opacity changes. */
+.jb-card::before,
+.jb-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 420ms var(--ease);
+  pointer-events: none;
+}
+.jb-card::after {
+  z-index: -1;
   box-shadow: 0 2vh 4vh rgba(0, 0, 0, 0.6), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4);
 }
-.jb-card[data-focused] > :first-child::before { filter: brightness(1.7); }
+.jb-card::before {
+  z-index: 7;
+  padding: 1.5px;
+  background: linear-gradient(140deg,
+    color-mix(in srgb, color-mix(in srgb, var(--c2) 30%, #f0f4ff) 85%, transparent) 0%,
+    rgba(215, 225, 255, 0.24) 24%,
+    rgba(215, 225, 255, 0.14) 50%,
+    rgba(215, 225, 255, 0.24) 76%,
+    color-mix(in srgb, color-mix(in srgb, var(--c1) 40%, #f0f4ff) 75%, transparent) 100%);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.jb-card[data-focused]::before,
+.jb-card[data-focused]::after { opacity: 1; }
+/* On song tiles the card is the cover plus its title: keep the focus
+   layers on the cover. */
+.jb-card-song::before,
+.jb-card-song::after { bottom: 5.2vh; border-radius: var(--radius-md); }
+jb-section[type="new"] .jb-card-song::before,
+jb-section[type="new"] .jb-card-song::after { bottom: 0; border-radius: var(--radius-lg); }
 .jb-card[data-pressed] { transform: scale(1.02) translateY(-0.2vh); }
 /* Picked up: rises a touch past its rest, drifts, and settles. */
 @keyframes pick-up {
@@ -499,8 +554,7 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
 .jb-card-song > .jb-song-tile { box-shadow: none !important; }
 .jb-card-song > .jb-song-tile::before,
 .jb-card-song > .jb-song-tile::after { bottom: 5.2vh; border-radius: var(--radius-md); }
-.jb-card-song .jb-tile-cover { box-shadow: 0 1.1vh 2.4vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35); transition: box-shadow 420ms var(--ease); }
-.jb-card-song[data-focused] .jb-tile-cover { box-shadow: 0 2vh 4vh rgba(0, 0, 0, 0.6), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4); }
+.jb-card-song .jb-tile-cover { box-shadow: 0 1.1vh 2.4vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35); }
 jb-section[type="new"] .jb-card-song > :first-child::before,
 jb-section[type="new"] .jb-card-song > :first-child::after { bottom: 0; border-radius: var(--radius-lg); }
 
@@ -565,7 +619,7 @@ jb-header { flex: 1; min-width: 0; display: block; }
   font-size: 2.1vh;
   color: var(--ink);
   position: relative;
-  transition: background 260ms var(--ease), transform 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 .jb-back::after {   /* the divider after Back */
   content: "";
@@ -595,7 +649,7 @@ jb-pager { display: flex; gap: 0.6vw; height: 4.9vh; }
   border-radius: 1.4vh;
   background: rgba(20, 30, 60, 0.6);
   box-shadow: inset 0 0 0 1px rgba(130, 160, 255, 0.22);
-  transition: background 260ms var(--ease), box-shadow 260ms var(--ease), transform 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 .jb-pager-button { display: flex; align-items: center; gap: 0.4vw; font-size: 1.6vh; }
 .jb-pager-icon { display: flex; font-size: 2vh; }
