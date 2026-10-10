@@ -97,18 +97,45 @@ jb-nav::after {
 .jb-nav-icon svg { width: 100%; height: 100%; }
 .jb-nav-label { font-size: 2.05vh; font-weight: 450; letter-spacing: 0.005em; color: var(--ink); }
 
-.jb-nav-item[data-focused] {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0.6vh 1.6vh rgba(0, 0, 0, 0.35);
+/* Each state's outline is a 1px gradient (a masked ::before), never a
+   solid line, with a soft glow just inside it. */
+.jb-nav-item::before,
+.jb-np-head::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.22));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  pointer-events: none;
 }
+.jb-nav-item[data-focused],
+.jb-np-head[data-focused] {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 1.2vh rgba(200, 212, 255, 0.1), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.3);
+}
+.jb-nav-item[data-focused]::before,
+.jb-np-head[data-focused]::before { opacity: 1; }
+/* Active: the blue-violet pill, a cyan-to-pink edge, a glow inside. */
 .jb-nav-item[data-active] {
   background: linear-gradient(90deg, var(--pill-a) 0%, var(--pill-b) 55%, var(--pill-c) 100%);
-  box-shadow: inset 0 0 0 1px rgba(150, 170, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 0 1.8vh var(--glow-blue), 0 0.6vh 1.6vh rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 1.4vh rgba(150, 178, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 1.3vh rgba(70, 95, 255, 0.28), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.35);
+}
+.jb-nav-item[data-active]::before {
+  opacity: 1;
+  background: linear-gradient(100deg, rgba(110, 205, 255, 0.7) 0%, rgba(140, 155, 255, 0.28) 45%, rgba(228, 140, 230, 0.5) 100%);
 }
 .jb-nav-item[data-active][data-focused] {
-  box-shadow: inset 0 0 0 1.5px rgba(205, 215, 255, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 0 2.6vh rgba(100, 125, 255, 0.7), 0 0.6vh 1.6vh rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 1.8vh rgba(175, 198, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 2vh rgba(90, 115, 255, 0.45), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.35);
+}
+.jb-nav-item[data-active][data-focused]::before {
+  background: linear-gradient(100deg, rgba(150, 220, 255, 0.95) 0%, rgba(170, 182, 255, 0.45) 45%, rgba(240, 165, 240, 0.75) 100%);
 }
 .jb-nav-item[data-pressed] { transform: scale(0.965); }
 .jb-nav-item[data-on] .jb-nav-label { color: #b9c8ff; }
@@ -133,6 +160,7 @@ html[data-playing] .jb-eq i:nth-child(4) { animation-duration: 540ms; animation-
    card. */
 jb-now-playing { display: block; }
 .jb-np-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 1.6vw;
@@ -143,10 +171,6 @@ jb-now-playing { display: block; }
 }
 .jb-np-head-icon { display: flex; width: 2.6vh; height: 2.6vh; font-size: 2.6vh; color: var(--ink); }
 .jb-np-head-label { font-size: 2.05vh; font-weight: 450; }
-.jb-np-head[data-focused] {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0.6vh 1.6vh rgba(0, 0, 0, 0.35);
-}
 .jb-np-head[data-pressed] { transform: scale(0.965); }
 .jb-np-card {
   position: relative;
@@ -161,7 +185,7 @@ jb-now-playing { display: block; }
   height: 10.5vh;
   object-fit: cover;
   border-radius: var(--radius-sm);
-  box-shadow: 0 0 1.6vh color-mix(in srgb, var(--jb-art-1, #4d6bff) 40%, transparent), 0 0.6vh 1.2vh rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0.6vh 1.4vh rgba(0, 0, 0, 0.55);
 }
 .jb-np-text { margin-top: 1.4vh; }
 .jb-np-title { font-size: 1.95vh; font-weight: 650; }
@@ -193,7 +217,7 @@ jb-up-next { flex: 1; min-height: 0; overflow: hidden; }
   height: 4.1vh;
   object-fit: cover;
   border-radius: 0.4vh;
-  box-shadow: 0 0 1vh color-mix(in srgb, var(--jb-art-1, #4d6bff) 35%, transparent);
+  box-shadow: 0 0.3vh 0.8vh rgba(0, 0, 0, 0.5);
 }
 .jb-queue-position { order: 1; font-size: 1.35vh; color: var(--ink-soft); min-width: 1ch; }
 .jb-queue-text { order: 2; min-width: 0; }
@@ -292,41 +316,52 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
 .jb-card > :first-child {
   position: relative;
   border-radius: inherit;
-  box-shadow: 0 0 2.2vh -0.3vh color-mix(in srgb, var(--c1) 45%, transparent), 0 1vh 2.4vh rgba(0, 0, 0, 0.55);
+  /* A black drop shadow, soft and close. */
+  box-shadow: 0 1.1vh 2.6vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35);
   transition: box-shadow 420ms var(--ease);
 }
-/* The gradient edge: light from the top-left in the art's second color,
-   fading through nothing, picking up its main color at the bottom-right. */
+/* The rim: 1.5px, translucent, pale with a hint of the art's colors.
+   Brightest toward the top-left and bottom-right corners, faint along the
+   sides. It sits above everything, caption bars included. */
 .jb-card > :first-child::before {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 6;
   border-radius: inherit;
-  padding: 1px;
+  padding: 1.5px;
   background: linear-gradient(140deg,
-    color-mix(in srgb, color-mix(in srgb, var(--c2) 80%, white 20%) 70%, transparent) 0%,
-    color-mix(in srgb, var(--c2) 18%, transparent) 30%,
-    transparent 55%,
-    color-mix(in srgb, var(--c1) 50%, transparent) 100%);
+    color-mix(in srgb, color-mix(in srgb, var(--c2) 30%, #e4ebff) 50%, transparent) 0%,
+    rgba(200, 212, 255, 0.14) 24%,
+    rgba(200, 212, 255, 0.08) 50%,
+    rgba(200, 212, 255, 0.14) 76%,
+    color-mix(in srgb, color-mix(in srgb, var(--c1) 40%, #e4ebff) 42%, transparent) 100%);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
+  transition: filter 420ms var(--ease);
   pointer-events: none;
 }
-/* The inner vignette, in the art's own dark edge color. */
+/* Inside the rim: a soft feather along the edge, a faint glow in the two
+   lit corners, and the vignette in the art's own dark edge color. */
 .jb-card > :first-child::after {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 5;
   border-radius: inherit;
-  box-shadow: inset 0 0 3.2vh 0.6vh color-mix(in srgb, var(--cd) 80%, transparent);
+  background:
+    radial-gradient(circle at 0 0, rgba(218, 228, 255, 0.16), transparent 6.5vh),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--c1) 16%, transparent), transparent 6.5vh);
+  box-shadow:
+    inset 0 0 0.6vh rgba(205, 218, 255, 0.14),
+    inset 0 0 3vh 0.4vh color-mix(in srgb, var(--cd) 70%, transparent);
   pointer-events: none;
 }
 .jb-card[data-focused] { z-index: 2; transform: scale(1.055) translateY(-0.5vh); animation: pick-up 900ms var(--ease); }
 .jb-card[data-focused] > :first-child {
-  box-shadow: 0 0 3.6vh 0.2vh color-mix(in srgb, var(--c1) 70%, transparent), 0 1.6vh 3.2vh rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2vh 4vh rgba(0, 0, 0, 0.6), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4);
 }
+.jb-card[data-focused] > :first-child::before { filter: brightness(1.7); }
 .jb-card[data-pressed] { transform: scale(1.02) translateY(-0.2vh); }
 /* Picked up: rises a touch past its rest, drifts, and settles. */
 @keyframes pick-up {
@@ -425,8 +460,8 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
 .jb-card-song > .jb-song-tile { box-shadow: none !important; }
 .jb-card-song > .jb-song-tile::before,
 .jb-card-song > .jb-song-tile::after { bottom: 5.2vh; border-radius: var(--radius-md); }
-.jb-card-song .jb-tile-cover { box-shadow: 0 0 2.2vh -0.3vh color-mix(in srgb, var(--c1) 50%, transparent), 0 1vh 2vh rgba(0, 0, 0, 0.5); transition: box-shadow 420ms var(--ease); }
-.jb-card-song[data-focused] .jb-tile-cover { box-shadow: 0 0 3.4vh 0.2vh color-mix(in srgb, var(--c1) 75%, transparent), 0 1.6vh 3vh rgba(0, 0, 0, 0.6); }
+.jb-card-song .jb-tile-cover { box-shadow: 0 1.1vh 2.4vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35); transition: box-shadow 420ms var(--ease); }
+.jb-card-song[data-focused] .jb-tile-cover { box-shadow: 0 2vh 4vh rgba(0, 0, 0, 0.6), 0 0.6vh 1.4vh rgba(0, 0, 0, 0.4); }
 jb-section[type="new"] .jb-card-song > :first-child::before,
 jb-section[type="new"] .jb-card-song > :first-child::after { bottom: 0; border-radius: var(--radius-lg); }
 
@@ -569,7 +604,7 @@ jb-board {
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: 0.4vh;
-  box-shadow: 0 0 1vh color-mix(in srgb, var(--jb-art-1, #4d6bff) 45%, transparent), 0 0.3vh 0.6vh rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0.3vh 0.8vh rgba(0, 0, 0, 0.6);
 }
 .jb-song-text { flex: 1; min-width: 0; }
 .jb-song-title { font-size: 1.38vh; font-weight: 500; font-stretch: 88%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -626,7 +661,7 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
   height: 52vh;
   object-fit: cover;
   border-radius: 2.2vh;
-  box-shadow: 0 0 9vh 0.5vh color-mix(in srgb, var(--c1) 55%, transparent), 0 3vh 6vh rgba(0, 0, 0, 0.6);
+  box-shadow: 0 3vh 7vh rgba(0, 0, 0, 0.65), 0 1vh 2.4vh rgba(0, 0, 0, 0.45);
 }
 .jb-npo-info { width: 34vw; }
 .jb-npo-title { font-size: 6vh; font-weight: 680; font-stretch: 85%; line-height: 1.05; }
