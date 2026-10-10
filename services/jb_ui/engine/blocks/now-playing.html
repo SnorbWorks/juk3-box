@@ -1,11 +1,17 @@
 <div class="jb-np">
-  <img class="jb-np-cover" data-src="cover" data-if="cover" alt="">
-  <div class="jb-np-text" data-if="title">
-    <div class="jb-np-title" data-text="title"></div>
-    <div class="jb-np-artist" data-text="artist"></div>
-    <div class="jb-np-album" data-if="album"><span data-text="album"></span><span data-if="year"> (<span data-text="year"></span>)</span></div>
+  <div class="jb-np-head" data-stop="open">
+    <span class="jb-np-head-icon" data-icon="headIcon"></span>
+    <span class="jb-np-head-label">Now Playing</span>
   </div>
-  <div class="jb-np-idle" data-if-not="title">Nothing playing</div>
-  <div class="jb-np-progress" data-if="title"><div class="jb-np-progress-fill"></div></div>
-  <div class="jb-np-times" data-if="title"><span data-text="elapsed"></span><span data-text="length"></span></div>
+  <div class="jb-np-card">
+    <img class="jb-np-cover" data-src="cover" data-if="cover" alt="">
+    <div class="jb-np-text" data-if="title">
+      <div class="jb-np-title" data-text="title"></div>
+      <div class="jb-np-artist" data-text="artist"></div>
+      <div class="jb-np-album" data-if="album"><span data-text="album"></span><span data-if="year"> (<span data-text="year"></span>)</span></div>
+    </div>
+    <div class="jb-np-idle" data-if-not="title">Nothing playing</div>
+    <div class="jb-np-progress" data-if="title"><div class="jb-np-progress-fill"></div></div>
+    <div class="jb-np-times" data-if="title"><span data-text="elapsed"></span><span data-text="length"></span></div>
+  </div>
 </div>

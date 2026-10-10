@@ -1,9 +1,9 @@
 {
   "class": "frame",
   "children": [
-    { "class": "sidebar", "children": [
+    { "class": "sidebar", "focus": "nav", "focus-flow": "down-from-rest", "children": [
       { "block": "logo", "src": "assets/logo.png" },
-      { "block": "nav", "focus": "nav", "focus-flow": "down-from-rest" },
+      { "block": "nav" },
       { "block": "now-playing" },
       { "block": "up-next", "limit": 5 }
     ]},

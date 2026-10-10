@@ -65,23 +65,10 @@ def read_settings(path: Path) -> dict:
 
 
 # Nav buttons the engine knows (docs/theme-format.md, "Nav buttons").
-NAV_BUTTONS = ("home", "volume", "all-songs", "settings", "now-playing", "shuffle")
-DEFAULT_NAV = ["home", "volume", "all-songs", "settings", "now-playing", "shuffle"]
-
-# Home sections and Browse cards the engine knows (docs/theme-format.md,
-# "Home sections").
-HOME_SECTIONS = ("new", "featured-artist", "browse", "recents")
-DEFAULT_HOME_SECTIONS = ["new", "featured-artist", "browse", "recents"]
-BROWSE_SORTS = ("title", "artist", "album", "genre", "top-100", "most-played")
-DEFAULT_BROWSE = ["artist", "album", "top-100", "most-played"]
-
-
-def _choice_list(value, known, default):
-    """An owner's list of choices, unknown ones and repeats dropped. An empty
-    list is a real choice (show none); anything not a list is the default."""
-    if not isinstance(value, list):
-        return default
-    return list(dict.fromkeys(v for v in value if v in known))
+# "now-playing" is a nav button an owner can add, but by default Now
+# Playing is the header of the Now Playing card instead.
+NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playing")
+DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
 
 
 def owner_settings(raw: dict) -> dict:
@@ -108,8 +95,6 @@ def owner_settings(raw: dict) -> dict:
         "nav": nav,
         "songs_per_page": per_page,
         "idle_home_minutes": idle,
-        "home_sections": _choice_list(raw.get("home_sections"), HOME_SECTIONS, DEFAULT_HOME_SECTIONS),
-        "browse": _choice_list(raw.get("browse"), BROWSE_SORTS, DEFAULT_BROWSE),
     }
 
 

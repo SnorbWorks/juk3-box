@@ -1,6 +1,8 @@
-// Home sections (docs/theme-format.md, "Home sections"): rows of cards.
-// Song cards pick their song; link cards open the board their way. "See
-// All" opens a section's full card view (the collection screen).
+// Home sections (docs/theme-format.md, "Home sections"): rows of cards,
+// each a module placed in a layout with its own settings (like a page
+// builder's modules). Song cards pick their song; link cards open the board
+// their way. "See All" opens the section's full card view (the
+// collection screen).
 
 import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, coversFor } from './board.js';
@@ -9,6 +11,9 @@ import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
 
 const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '');
+
+// The Browse module's categories unless its "sorts" setting says otherwise.
+const DEFAULT_SORTS = ['artist', 'album', 'top-100', 'most-played'];
 
 const BROWSE_DESCRIPTIONS = {
   title: 'Every song',
@@ -86,7 +91,7 @@ const SECTIONS = {
     title: 'Browse',
     kind: 'link',
     limit: Infinity,
-    items: (tracks, ctx) => ctx.settings.browse.map(sort => browseCard(sort, ctx)),
+    items: (tracks, ctx, node) => sortsSetting(node).map(sort => browseCard(sort, ctx)),
     // See All: every way to browse, not just the owner's chosen four.
     all: {
       limit: Infinity,
@@ -95,6 +100,16 @@ const SECTIONS = {
     },
   },
 };
+
+// The "sorts" setting: a comma-separated list, e.g. "artist,genre,top-100".
+function sortsSetting(node) {
+  const list = String(node?.sorts || '').split(',').map(s => s.trim()).filter(s => SORTS[s]);
+  return list.length ? list : DEFAULT_SORTS;
+}
+
+function off(value) {
+  return value === false || value === 'false';
+}
 
 function cardTemplate(def, type, ctx) {
   return def.kind === 'song'
@@ -119,37 +134,30 @@ function makeCard(item, type, def, template, ctx) {
   return card;
 }
 
-// The owner's chosen sections, in their order.
-export function fillSections(el, node, ctx) {
-  el.replaceChildren(...ctx.settings.home_sections.map(type => {
-    const section = document.createElement('jb-section');
-    section.setAttribute('type', type);
-    fillSection(section, { type }, ctx);
-    return section;
-  }));
-}
-
-// One section, placed by the owner's list or pinned by a layout.
+// One section module. Settings: type, limit, title, sorts (Browse),
+// see-all (true unless false), show (false hides it).
 export function fillSection(el, node, ctx) {
   const def = SECTIONS[node.type];
-  if (!def) return;
+  if (!def || off(node.show)) {
+    el.hidden = true;
+    return;
+  }
   el.dataset.type = node.type;
   el.append(fromTemplate(ctx.blocks.section));
   const cards = slot(el, 'cards');
   const limit = Number(node.limit) || def.limit;
   const template = cardTemplate(def, node.type, ctx);
   const seeAll = el.querySelector('[data-stop="see-all"]');
-  if (seeAll && def.all) makeStop(seeAll, `see-all:${node.type}`, () => ctx.actions.openCollection(node.type));
+  const hasSeeAll = !!def.all && !off(node['see-all']);
+  if (seeAll && hasSeeAll) makeStop(seeAll, `see-all:${node.type}`, () => ctx.actions.openCollection(node.type));
 
   const render = () => {
     const tracks = store.get('tracks') || [];
-    const all = def.items(tracks, ctx);
-    const items = all.slice(0, limit);
-    const total = def.all?.items ? def.all.items(tracks, ctx).length : all.length;
+    const items = def.items(tracks, ctx, node).slice(0, limit);
     bind(el, {
-      title: def.title,
+      title: node.title || def.title,
       count: items.length,
-      more: !!def.all && total > items.length,
+      more: hasSeeAll && items.length > 0,
       seeAll: 'See All',
       seeAllIcon: ctx.icons['see-all'],
     });

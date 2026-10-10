@@ -30,7 +30,7 @@
 .main,
 .main jb-screen,
 .all-songs { min-height: 0; }
-.home jb-sections,
+.home .home-sections,
 .all-songs jb-board { flex: 1; }
 
 jb-logo { display: block; text-align: center; }
@@ -177,7 +177,7 @@ jb-board {
 
 /* Home sections: New and Featured Artist share the top row, Browse and
    Recents get full rows. Empty sections (nothing new yet) are hidden. */
-jb-sections {
+.home-sections {
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;

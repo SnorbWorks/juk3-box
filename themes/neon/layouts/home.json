@@ -1,6 +1,11 @@
 {
   "class": "home",
   "children": [
-    { "block": "sections", "focus": "home" }
+    { "class": "home-sections", "focus": "home", "children": [
+      { "block": "section", "type": "new", "limit": 2 },
+      { "block": "section", "type": "featured-artist" },
+      { "block": "section", "type": "browse", "sorts": "artist,album,top-100,most-played" },
+      { "block": "section", "type": "recents", "limit": 18 }
+    ]}
   ]
 }

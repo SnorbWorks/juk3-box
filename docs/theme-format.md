@@ -14,7 +14,7 @@ Like WordPress, three parties shape what's on screen:
 | --- | --- | --- |
 | Engine | Behavior and data | What clicking a card does, which songs are "new" |
 | Theme | Look and arrangement | A purple sidebar on the left, dark song cards |
-| Owner (Settings) | What's switched on | Which Home sections show, which nav buttons show, songs per page, the active theme |
+| Owner (Settings, page builder) | What's switched on, and each module's settings | Which nav buttons show, songs per page, the active theme; each Home module's settings (which Browse categories, how many cards, See All on or off, shown or hidden) |
 
 A theme provides **areas** (like WordPress widget areas and menus). The owner chooses what goes in them from Settings. A spartan setup and a busy one can use the same theme.
 
@@ -98,9 +98,11 @@ A layout is a tree of **containers** holding **blocks**:
 {
   "class": "home",
   "children": [
-    { "block": "section", "type": "new", "limit": 2 },
-    { "block": "section", "type": "browse", "focus": "home" },
-    { "block": "section", "type": "recents", "limit": 6, "focus": "home" }
+    { "class": "home-sections", "focus": "home", "children": [
+      { "block": "section", "type": "new", "limit": 2 },
+      { "block": "section", "type": "browse", "sorts": "artist,album,top-100,most-played" },
+      { "block": "section", "type": "recents", "limit": 18 }
+    ]}
   ]
 }
 ```
@@ -140,11 +142,7 @@ The frame is everything that stays put while screens change, such as a sidebar. 
 
 The theme's layouts are its defaults. When the owner changes a layout, through Settings or the page builder, the engine saves the owner's version separately and uses it instead. The theme's files are never edited. "Reset to theme default" deletes the owner's version.
 
-The simplest change needs no builder: a `sections` block holds whatever Home sections the owner switched on in Settings, in their chosen order.
-
-```json
-{ "block": "sections", "focus": "home" }
-```
+Blocks are modules, the way a page builder's are: each carries its own settings in the layout (a Home row's categories, card count, See All). The owner's Settings toggles and the page builder both edit those same settings in the owner's copy of the layout. There is no separate list of what's switched on.
 
 Text and images that are part of the look (headings, decorations) go in block markup and CSS, not in layouts. Block markup is HTML; `<script>` tags, inline event handlers (`onclick=` and friends) and links to outside websites are removed when the theme loads.
 
@@ -160,8 +158,7 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `now-playing` | The current song | |
 | `up-next` | The queue | `limit` |
 | `board` | The song board | |
-| `sections` | The owner's chosen Home sections | |
-| `section` | One Home section, placed by the layout | `type`, `limit` |
+| `section` | One Home row of cards (see Home sections) | `type`, `limit`, `title`, `sorts`, `see-all`, `show` |
 | `page-info` | Board page and current sort, e.g. "Artists · Queen  1 of 2" | |
 | `pager` | Knob stops for the board: Previous Page and Next Page | |
 | `header` | The screen's title and subtitle ("Browse by Genre" / "Classic Rock", or "All Songs" / "Page 1 of 10") and a Back button. Back leaves an artist (album, genre) for the list of them, else returns to the previous screen | |
@@ -181,7 +178,7 @@ The engine knows these nav buttons. The owner picks which show, and in what orde
 | `now-playing` | Opens the Now Playing overlay |
 | `shuffle` | Shuffle on or off |
 
-The default order is Home, Volume, All Songs, Settings, Now Playing, Shuffle. Labels come from the engine; while shuffle is on, its label reads "Single Play", which is what a click switches to. Icons: see Icons.
+The default order is Home, Volume, Shuffle, All Songs, Settings. `now-playing` can be added as a nav button, but by default Now Playing is the header of the `now-playing` block (its `data-stop="open"`), which opens the overlay; put the block in the same focus group as the nav to keep the knob walking from Settings into it. Labels come from the engine; while shuffle is on, its label reads "Single Play", which is what a click switches to. Icons: see Icons.
 
 Each button sits in a `.jb-nav-item` element, which carries its states (see States you can style).
 
@@ -197,9 +194,20 @@ Each section is a row of cards. There are two kinds of card:
 | `new` | Songs added to the phone since the jukebox first synced it, newest first | Plays the song |
 | `recents` | Songs played for at least 30 seconds, most recent first | Plays the song |
 | `featured-artist` | An artist the engine picks at random, at startup and every 30 minutes | Opens the board filtered to that artist |
-| `browse` | Shortcuts: Artist, Album, Genre, Top 100, Most Played, Recently Added and so on, chosen in Settings | Opens the board in that sort |
+| `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `top-100`, `most-played` | Opens the board in that sort |
 
-Default card counts: New 2, Featured Artist 1, Browse the owner's chosen sorts, Recents 18 (a layout's `limit` changes them; later, the page builder). When a section has more than it shows, its header's See All (`data-stop="see-all"` in `section.html`) opens the `collection` screen: every Browse option, the last 100 played, or every new song, as cards. A theme lays that screen out in `layouts/collection.json`; without one, the engine uses a header plus the cards.
+A section's settings:
+
+| Setting | Meaning | Default |
+| --- | --- | --- |
+| `type` | Which section (above) | required |
+| `limit` | How many cards | New 2, Featured Artist 1, Browse all its sorts, Recents 18 |
+| `title` | Its heading | New, Featured Artist, Browse, Recents |
+| `sorts` | Browse only: which categories, comma-separated, e.g. `"artist,genre,top-100"` | `artist,album,top-100,most-played` |
+| `see-all` | Show See All in its header | `true` (New, Browse, Recents) |
+| `show` | `false` hides the row | `true` |
+
+See All (`data-stop="see-all"` in `section.html`) opens the `collection` screen, the section's full page, like a WordPress archive: every Browse category, the last 100 played, or every new song, as cards. A theme lays that screen out in `layouts/collection.json`; without one, the engine uses a header plus the cards.
 
 The Home sections area should scroll (`overflow-y: auto`): when the knob moves to a card below the fold, the engine scrolls it smoothly into view, and back to the top when the highlight returns to rest.
 

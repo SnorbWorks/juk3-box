@@ -6,7 +6,7 @@ import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, turnPage, view } from './board.js';
 import { makeStop } from './focus.js';
 import { nowPlayingData } from './np.js';
-import { fillCollection, fillSection, fillSections } from './sections.js';
+import { fillCollection, fillSection } from './sections.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
 
@@ -18,7 +18,6 @@ export const BLOCKS = {
   'now-playing': fillNowPlaying,
   'up-next': fillUpNext,
   board: fillBoard,
-  sections: fillSections,
   section: fillSection,
   collection: fillCollection,
   'page-info': fillPageInfo,
@@ -56,11 +55,13 @@ const TICK_MS = 500;
 function fillNowPlaying(el, node, ctx) {
   el.append(fromTemplate(ctx.blocks['now-playing']));
   el.dataset.artScope = '';
+  // Its header (data-stop="open") opens the Now Playing overlay.
+  stopsFrom(el, 'now-playing', { open: () => ctx.actions.nav('now-playing') });
   const render = () => {
     const d = nowPlayingData();
     el.dataset.state = d.state;
     el.style.setProperty('--jb-progress', d.progress.toFixed(4));
-    bind(el, d);
+    bind(el, { ...d, headIcon: ctx.icons['now-playing'] });
   };
   store.watch(el, 'nowPlaying', render);
   // Covers arrive with the library, possibly after the song started.

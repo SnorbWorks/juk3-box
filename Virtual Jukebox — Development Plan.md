@@ -308,7 +308,7 @@ A theme never talks to the bus or reads the knob. It places blocks; the engine f
 - Responsive: one theme fits any monitor size and aspect ratio. Size with relative units and grid, never fixed pixels for the screen.
 - Themes are data only (JSON layouts, HTML block templates, CSS, images, a manifest), so installing one can't run code. Plugins come later with their own rules.
 - Layouts are structured data (a JSON tree of containers and blocks), not free-form HTML, so a drag-and-drop page builder can open and save them (Phase 7c). The owner's edits are saved separately from the theme; resetting brings back the theme's default.
-- Three parties, like WordPress: the engine decides behavior, the theme decides look and arrangement, the owner decides what's switched on (Home sections, nav buttons, songs per page, active theme).
+- Three parties, like WordPress: the engine decides behavior, the theme decides look and arrangement, the owner decides what's switched on (nav buttons, songs per page, active theme) and each module's settings. Home rows are modules in the layout with their own settings (Browse categories, card count, See All, shown or hidden), like page builder modules; See All opens the row's full page, like a WordPress archive.
 - Not gatekept: the theme format is documented, and the default theme is the worked example to copy.
 - The knob's focus order comes from the layout's reading order (left to right, top to bottom), computed by the engine. No hand-kept order lists.
 - Every block copes with missing data: no cover, no artist, no length, no phone connected.
@@ -364,7 +364,7 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 - [ ] Phone badge (top right): manage phones from it -- connect, switch, forget. Stubbed for now (shows who's connected); built with the phone connection manager
 - [ ] When a pick fails because another app (audiobook, video) has the phone's audio, the screen says to open Music. Better: detect it before the pick
 - [ ] Screens from the old plan, still needed: phones (list/connect/disconnect/forget), pairing (code + countdown), no phone, syncing (progress)
-- [ ] Cabinet Settings screen (knob-friendly quick toggles): theme switcher, Home sections, nav buttons, songs per page, and the jb-admin address with a QR code
+- [ ] Cabinet Settings screen (knob-friendly quick toggles): theme switcher, Home rows on/off (edits the module's `show` setting), nav buttons, songs per page, and the jb-admin address with a QR code
 - [ ] Later: plugin API
 
 Done when: the default theme matches the mockups on the real monitor, and a second theme can rearrange it without touching the engine.
