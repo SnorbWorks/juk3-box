@@ -1,6 +1,24 @@
 # Virtual Jukebox — Development Plan
 
-Sep 24, 2026 · @shawn
+Sep 24, 2026 · @shawn · updated Oct 11, 2026
+
+## Status (Oct 11, 2026)
+
+The core jukebox works end to end on the bench: an iPhone streams over Bluetooth, the library syncs and shows on the themed UI, a keypad letter + digit plays that slot, songs queue and shuffle, the knob drives the UI and volume, and the button and level bar lights respond, all as boot services. What's left is mostly phone management, the admin side, the remaining LED hardware, and appliance hardening.
+
+| Phase | State |
+| --- | --- |
+| 0 Foundation, 1 Audio | Done |
+| 2a Pico input | Done except encoder detent tuning and the coin-return retrofit |
+| 2b jb-input | Service done; gestures beyond click built but off, mapping not wired |
+| 2c LED board | Rev E built; buttons and level bar working. Accent strip not built yet, so the all-chains + music tests wait |
+| 3 Phone link test | Answered except Q4's change counter and Q10 (see the table) |
+| 4 Phone source | Playback, picks, sync and reconnect work; pairing, multi-phone and switching not started |
+| 5 Library | Done, except real artist/album (iTunes guesses today) and popular/play counts |
+| 6 Core | Queue, shuffle, picks done; Now Playing gestures and Up Next removal open |
+| 6b Lights | Buttons theme 1 and bar idle + volume fill running; accent scenes, real audio levels and the mood analyzer next |
+| 7 UI platform | Engine, Neon theme, Home sections, overlay done; phone screens, Settings screen, second test theme open |
+| 7b Admin, 7c Page builder, 8 Appliance, 9+ | Not started (8: services already restart on failure) |
 
 ## Architecture
 
@@ -35,7 +53,7 @@ Services never call each other directly, only through the bus, so each can be bu
 | jb-lights | Button pixels, accent strip and volume/level bar: scenes driven by jb-core state, audio level from PipeWire, per-frame current limiter |
 | jb-ui | Web song board in a Chromium kiosk, subscribed to MQTT over websockets |
 
-Stack: Pi OS Lite 64-bit, Python 3 + asyncio, dbus-next (BlueZ), evdev, aiomqtt, SQLite, PipeWire/WirePlumber, cage + Chromium, mosquitto. The Pico runs CircuitPython.
+Stack: Pi OS Lite 64-bit, Python 3 + asyncio, dbus-next (BlueZ), evdev, aiomqtt, SQLite, PipeWire/WirePlumber, sway + Chromium (kiosk, app mode), aiohttp (jb-ui), rpi_ws281x + spidev (jb-lights), mosquitto. The Pico runs CircuitPython.
 
 ## Hardware
 
@@ -51,13 +69,13 @@ A single Raspberry Pi Pico, presenting as a USB keyboard, reads every control on
 | Coin-return button | Converted to rotary encoder + push switch; volume knob | Mechanical retrofit, see Phase 2a |
 | KY-040 encoders (6-pack) | Bench prototyping | **Bought.** Power from 3.3V; SW needs internal pull-up |
 | Bourns PEC11R | Optional final encoder | Same pinout, drop-in upgrade |
-| 24× SK6812 RGBW pixels | One under each button (+ coin-return knob optional) | BTF 10 mm boards, natural white, GRBW, 5V, 60 mA max each |
+| 23× SK6812 RGBW pixels | One under each of the 20 keys, Single Play, Album Play and Reset | BTF 10 mm boards, natural white, GRBW, 5V, 60 mA max each. Chain order: K…A, Single, Album, 1…0, Reset |
 | WS2812B strip, 5 m / 300 px | Accent lighting | 5V, GRB, one chip per LED; up to 18A at full white; power injected at 5 points |
-| LED board (custom PCB) | One 5V input, four fused branches, level shifting for three LED chains | Stacks on the DAC Pro; see LED and power board |
+| LED board (custom PCB, Rev E) | One 5V input, five fused branches, two Adafruit Pixel Shifters for four LED data lines | Stacks on the DAC Pro; see LED and power board |
 | Mean Well LRS-200-5 | 5V supply for the Pi and all LEDs, 5V 40A (200W) | Fanless; set to 5.2–5.25V; one 12 AWG pair to the board |
 | Monitor | Song board display | Size and resolution TBD |
 | USB Bluetooth dongle + extension | Fallback only | Only if in-cabinet range is weak |
-| Volume / level bar | Volume and sound-level meter | 32 segments of 4" WS2812B (6 px each, 192 px), in a diffused aluminum channel |
+| Volume / level bar | Volume and sound-level meter | As built: 36 vertical strips × 5 WS2812B = 180 px (the original plan was 32 × 6), in a diffused aluminum channel. Strip 1 at the left, each strip bottom → top, no serpentine |
 | Fosi BT30D Pro | 2.1 amplifier (TPA3255) | Runs on its own 48V 5A brick inside the cabinet |
 | IEC inlet + internal power strip | One cord, one switch for the whole cabinet | Switched inlet with 5A slow-blow fuse; feeds the Mean Well and the amp brick |
 
@@ -67,9 +85,7 @@ The 435 keyboard does not latch: each key is a momentary press that shorts two w
 
 ## LED and power board
 
-One board, stacked on the DAC Pro, takes all LED and Pi power in at a single point (J2) and splits it into four fused branches: Pi, button pixels, accent strip and level bar. It also lifts three LED data lines from 3.3V to 5V. Current design: Rev C, 13 parts plus the header. (The separate Jukebox LED Board page still shows the older Rev B and is out of date.)
-
-&#91;image: Power and LED board, Rev C\]
+One board, stacked on the DAC Pro, takes all LED and Pi power in at a single point (J2) and splits it into fused branches: Pi, button pixels, accent strip, level bar and a spare 4th LED channel. It also lifts the LED data lines from 3.3V to 5V with two Adafruit Pixel Shifters (#6066). Current design: Rev E (schematic: `docs/jukebox-power-board-revE.png`). Rev C's 74xx125 level shifter (U1) was dropped: it passed every DC test but couldn't pass the LEDs' fast pulses. (The separate Jukebox LED Board page still shows the older Rev B and is out of date.)
 
 ### Cabinet power: one cord, one switch
 
@@ -82,43 +98,52 @@ One board, stacked on the DAC Pro, takes all LED and Pi power in at a single poi
 | Branch | Fuse (resettable PTC) | Feeds | Leaves board at | Budget |
 | --- | --- | --- | --- | --- |
 | Pi | F1 5A | Pi 4 + DAC Pro through header pins 2 and 4 | J1 | 3A |
-| Buttons | F2 1.85A | Level shifter + 24 SK6812 RGBW | J3 (JST-XH 3-pin) | 0.72A at 50% cap |
+| Buttons | F2 1.85A | 23 SK6812 RGBW | J3 (JST-XH 3-pin) | Well under 1A (idle is the white channel at 70%) |
 | Accent strip | F3 8A | WS2812B, 5m / 300 px | J4 (3-pos screw terminal) | 6A limiter |
-| Level bar | F4 5A | 32 segments × 6 WS2812B = 192 px | J5 (3-pos screw terminal) | 4A limiter |
+| Level bar | F4 5A | 36 strips × 5 WS2812B = 180 px | J5 (3-pos screw terminal) | 4A limiter |
+| 4th channel | F5 (size to the load) | Spare, WS2812B or SK6812 | J6 (3-pos screw terminal) | TBD |
 | **Total through J2** |  |  |  | **\~14A** |
 
 ### Data
 
-| Chain | GPIO (header pin) | Drive | rpi\_ws281x strip type | Level shifter channel |
+| Chain | GPIO (header pin) | Drive | Strip type | Shifter path (Rev E as built) |
 | --- | --- | --- | --- | --- |
-| Buttons | GPIO12 (32) | PWM0 | SK6812\_STRIP\_GRBW | 1 → R1 330Ω → J3 |
-| Accent strip | GPIO13 (33) | PWM1 | WS2811\_STRIP\_GRB | 2 → R2 330Ω → J4 |
-| Level bar | GPIO10 (19) | SPI | WS2811\_STRIP\_GRB | 3 → R3 330Ω → J5 |
+| Buttons | GPIO12 (32) | PWM0, rpi\_ws281x channel 0, DMA 10 (root) | SK6812\_STRIP\_GRBW | U1 DAT → **!D5** (inverted) → R1 330Ω → J3. Driven with `invert=True` |
+| Accent strip | GPIO13 (33) | PWM1, rpi\_ws281x channel 1, DMA 10 (root) | WS2811\_STRIP\_GRB | U1 CLK → C5 → R2 330Ω → J4 |
+| Level bar | GPIO10 (19) | SPI via spidev (no root) | WS2812B GRB | U2 DAT → D5 → R3 330Ω → J5 (reworked, see below) |
+| 4th channel | GPIO6 (31) | SPI4 MOSI (`dtoverlay=spi4-1cs`, `/dev/spidev4.0`) | TBD | U2 CLK → C5 → R4 330Ω → J6. Untested |
 
-**Why a level shifter.** An LED chip reads a data 1 only above about 70% of its 5V supply (3.5V). The Pi outputs 3.3V, which is why the Sidecar strip failed direct from a GPIO. The 74AHCT125 (powered from the button branch) lifts all three lines to 5V; its fourth channel is tied off.
+**Why a level shifter.** An LED chip reads a data 1 only above about 70% of its 5V supply (3.5V). The Pi outputs 3.3V, which is why the Sidecar strip failed direct from a GPIO. Each Pixel Shifter has a 74HCT2G34 buffering both channels (DAT → D5, CLK → C5) plus an inverted copy of DAT on !D5, and a charge pump that makes 5V from its V pin, so powering V from the Pi's 3.3V is correct. A tiny WS2812B on the board's D5 output lights with the first pixel's color: a handy "is the signal arriving" check.
+
+**Rev E lesson: the output terminal order.** On the real #6066 the output block reads, from the G end: **G, D5, !D5, C5**. The Rev E schematic drew the outputs in a different order, the board was built from the physical position, and both data lines landed on **!D5**, the inverted output. An inverted signal looks like nothing to the LEDs: they ignore every frame and sit in their power-up white. Fixes, Oct 10-11:
+- Buttons: left on !D5 and inverted in software (rpi\_ws281x `invert=True`; PWM inverts in hardware, so it's reliable). With no program running the pin falls low and the line sits high, so jb-lights parks GPIO12 as an output driven high when it stops. From power-up until jb-lights starts, the buttons may show junk.
+- Level bar: SPI can't invert (the kernel rejects `SPI_MOSI_IDLE_HIGH` on this controller, and a software pin-switching workaround missed frames under load), so U2 was reworked: trace cut at the !D5 pad, jumper from **D5** to R3.
+- Next board revision: fix the terminal order in the schematic and footprint.
 
 ### Board rules
 
 - The Pi is powered through header pins 2 and 4 from its own fused branch. No USB-C cable.
 - After the build, run `vcgencmd get_throttled` with the lights bright; it must read `0x0`. If not, raise the supply toward 5.25V or swap F1 for a 5A blade fuse (lower voltage drop).
 - Keyed XT60 input, so no reverse-polarity diode is needed.
-- Software caps in jb-lights: accent strip 6A, level bar 4A, buttons 50%. PTC fuses hold about 20% less when warm.
+- Software caps in jb-lights: accent strip 6A, level bar 4A. Buttons idle on the white channel at 70% (23 px, well under the 1.85A fuse). PTC fuses hold about 20% less when warm.
 - C1 2200µF sits at the split point; C4 1000µF goes across the strip's input wires (off board).
 - Accent strip power is injected at start, middle and end, with all three taps landing at J4.
 - Order 2 oz copper; use wide pours on the input, strip and bar paths.
 - Measure DAC Pro jack height against the stack gap before choosing the header height.
 - Removed since Rev B: Mini560, D1 diode, JP1 jumper, pull-down resistors, power LED.
 
-Free GPIO with the DAC Pro fitted: 4–17 and 22–26. The board uses 10, 12 and 13, plus 5V and GND.
+Free GPIO with the DAC Pro fitted: 4–17 and 22–26. The board uses 6, 10, 12 and 13, plus 3.3V, 5V and GND.
 
 ## Phase 0: Foundation
 
 A bare Pi you can deploy to and a bus you can watch from your laptop.
 
-- [ ] Flash Pi OS Lite 64-bit; set hostname, SSH keys, mDNS name
-- [ ] Repo layout: /services/\<name>, /shared (bus client, config, logging), /firmware/pico, /deploy
-- [ ] VS Code Remote-SSH; rsync + restart deploy script; shared systemd unit template
-- [ ] Install mosquitto with a websockets listener
+- [x] Flash Pi OS Lite 64-bit; set hostname, SSH keys, mDNS name (`juk3-box.local`)
+- [x] Repo layout: /services/\<name>, /shared (bus client, config, logging), /firmware/pico, /deploy
+- [x] rsync + restart deploy script (`deploy/deploy.sh <service>`); shared systemd unit template, or a service's own unit in `deploy/systemd/` (jb-lights runs as root)
+- [x] Install mosquitto with a websockets listener (1883, 9001)
+
+Done Sep 27.
 
 Done when: a heartbeat service is visible on the bus from your laptop.
 
@@ -126,11 +151,11 @@ Done when: a heartbeat service is visible on the bus from your laptop.
 
 Clean audio from the DAC Pro, with volume controlled over the bus.
 
-- [ ] Enable the DAC Pro overlay; disable onboard audio
-- [ ] PipeWire + WirePlumber with the DAC as the default sink
-- [ ] Test with speaker-test and a WAV: both channels, no noise or clipping
-- [ ] Volume is the local mixer; the phone stays at full volume
-- [ ] Service handles volume up/down deltas and mute from the bus; publishes the current level
+- [x] Enable the DAC Pro overlay; disable onboard audio (the HAT auto-detects; no overlay needed)
+- [x] PipeWire + WirePlumber with the DAC as the default sink (WirePlumber runs the `main-embedded` profile, required for headless Bluetooth)
+- [ ] Test with speaker-test and a WAV: both channels, no noise or clipping (clean so far, but only the right speaker is connected)
+- [x] Volume is the local mixer; the phone stays at full volume
+- [x] Service handles volume up/down deltas and mute from the bus; publishes the current level (retained)
 
 Done when: a clean tone plays and volume changes by bus message.
 
@@ -138,9 +163,9 @@ Done when: a clean tone plays and volume changes by bus message.
 
 Every physical control produces a keycode.
 
-- [ ] Meter the 435 keyboard: do the switches share a common side?
-- [ ] CircuitPython firmware: 21 switches as keycodes; encoder clockwise/counterclockwise as keycodes; press/release only, no gesture logic
-- [ ] Bench-test a KY-040; tune steps per detent
+- [x] Meter the 435 keyboard: wired as a 4×5 matrix (GP5–8 rows, GP9–13 cols), Reset NC on GP14, encoder GP2/3/4. Spec: `Keyboard Input Build Brief.md`
+- [x] CircuitPython firmware (`firmware/pico-keypad/`, USB name "Jukebox JB Keypad"): all 20 keys, Reset, knob push and turn bench-verified; hold A while plugging in for the CIRCUITPY drive
+- [ ] Bench-test a KY-040; tune steps per detent (works, 22 steps per turn with no lost clicks; detent tuning still open)
 - [ ] Coin-return retrofit check:
   - Can the plunger rotate, or is it keyed? Remove the key if so
   - Hard stop so the plunger never bottoms out on the encoder switch
@@ -154,10 +179,10 @@ Done when: every control shows the right keycode in evtest.
 
 Raw keys become logical actions; runs in parallel with 2a using any USB keyboard.
 
-- [ ] Keycode to logical name mapping in a config file
-- [ ] Gesture engine: click, double-click, hold, push-and-turn, with configurable thresholds (about 300 ms double window, 700 ms hold)
-- [ ] Publish logical actions; action-to-function mapping lives in config and is decided later
-- [ ] Wire up the draft gesture-to-function mapping below once jb-input exists (jb-ui currently reads the encoder directly as an interim stand-in)
+- [x] Keycode to logical name mapping in a config file (`/etc/juk3-box/jb-input.json` overrides the defaults)
+- [x] Gesture engine: click, double-click, hold, push-and-turn, with configurable thresholds. Built but OFF by default: today the knob turns and clicks, and the keys and Reset report presses
+- [x] Publish logical actions: `jukebox/jb-input/key` (`{key, kind}`), `/gesture`, `/action`, `/status`; the UI takes the knob from here
+- [ ] Wire up the draft gesture-to-function mapping below
 
 Done when: every gesture fires reliably with no false triggers.
 
@@ -176,17 +201,19 @@ Ideas from a 2026-09-27 design conversation, not yet implemented — captured he
 The lighting hardware, built and proven before any animation code. Runs in parallel with 2a and 2b.
 
 - [ ] Measure DAC Pro jack height; fix J1 header height and standoffs
-- [ ] Redraw the Rev C schematic in EasyEDA; lay out with 2 oz copper and wide pours on input, strip and bar paths; DRC; order
+- [x] Design, lay out and order the board (now Rev E with two Pixel Shifters); built and stacked
 - [ ] Set the Mean Well to 5.2–5.25V before connecting anything
-- [ ] Board only, no Pi: 5V at J2, each branch output reads 5V; U1 pin 14 reads 5V
+- [ ] Board only, no Pi: 5V at J2, each branch output reads 5V
 - [ ] Stack on the DAC Pro and power the Pi through the header; run `vcgencmd get_throttled` under load (must be `0x0`)
-- [ ] Pi on, audio playing: button chain on GPIO12 (SK6812\_STRIP\_GRBW), listen for clicks and watch for flicker
-- [ ] Accent strip on GPIO13; build the three injection taps and C4; full-white test at the 6A cap, every point ≥ 4.7V
-- [ ] Build the level bar (32 × 6 px segments, chained); run it on GPIO10 (SPI on, core\_freq=500, core\_freq\_min=500) with audio and both other chains running
+- [ ] Pi on, audio playing: button chain on GPIO12 (SK6812\_STRIP\_GRBW), listen for clicks and watch for flicker. Chain works (23 px, Oct 10 stress test clean, no Wi-Fi errors); the audio test is still to do
+- [ ] Accent strip on GPIO13; build the three injection taps and C4; full-white test at the 6A cap, every point ≥ 4.7V. The port is proven (the button chain and the level bar both ran on it); the strip isn't built yet
+- [x] Build the level bar (as built 36 × 5 px); run it on GPIO10 (SPI on, core\_freq=500, core\_freq\_min=500). Works through U2 after the D5 rework (Oct 11)
+- [ ] Run the bar with audio and both other chains running
 - [ ] Re-run `vcgencmd get_throttled` with all three chains at their caps
 - [ ] Confirm button key caps: translucent (even glow) or opaque (halo); check clearance under each key
+- [ ] Next board revision: correct the Pixel Shifter output order (G, D5, !D5, C5) so no rework or software inversion is needed
 
-Done when: both chains run test patterns while music plays, with no audio artifacts.
+Done when: all chains run test patterns while music plays, with no audio artifacts. Waiting on the accent strip build.
 
 ## Phase 3: Phone link test (decision gate)
 
@@ -196,18 +223,21 @@ Throwaway test code that answers ten questions before any real phone service is 
 
 | # | Question | Decides | Result |
 | --- | --- | --- | --- |
-| 1 | Do streaming/Apple Music library items appear, or only downloads? | What the board can show |  |
-| 2 | Does PlayItem (play a specific track by ID) work? | Whether selection works at all |  |
-| 3 | Full crawl time for the library (track count + seconds) | Sync UX |  |
-| 4 | Are track IDs stable across reconnects; does the change counter work? | Caching strategy |  |
-| 5 | Negotiated codec: AAC or SBC? | Audio quality |  |
-| 6 | End of track: can the jukebox queue override iOS auto-advance? | Queue strategy |  |
-| 7 | Metadata available for sorting (title, artist, album, recently added) | Sort views |  |
-| 8 | Does cover art arrive over AVRCP, and for which tracks? | Artwork strategy |  |
-| 9 | Do position and duration update well enough for a progress bar? | Now-playing strip |  |
-| 10 | Pi-initiated reconnect with the iPhone awake vs. asleep | Auto-reconnect and switching |  |
+| 1 | Do streaming/Apple Music library items appear, or only downloads? | What the board can show | Partly answered: the whole folder tree browses (My Music → Artists/Albums/Songs/Genres…, Playlists, Radio, Audiobooks), and Songs listed all 910 library tracks. Streaming-only vs downloaded not separated yet |
+| 2 | Does PlayItem (play a specific track by ID) work? | Whether selection works at all | **Yes.** `MediaItem1.Play()` plays that exact song |
+| 3 | Full crawl time for the library (track count + seconds) | Sync UX | 910 tracks in one `ListItems` call, near instant. A stuck crawl now times out at 120 s |
+| 4 | Are track IDs stable across reconnects; does the change counter work? | Caching strategy | **Not stable.** Item paths die whenever BlueZ recreates the player (reconnect, or the phone switching audio apps), and player names get reused. Change counter not tested |
+| 5 | Negotiated codec: AAC or SBC? | Audio quality | **SBC.** Worth checking whether AAC can be preferred later |
+| 6 | End of track: can the jukebox queue override iOS auto-advance? | Queue strategy | **Yes**, after the fact: iOS advances seamlessly, but a `PlayItem` sent right after cleanly overrides it every time |
+| 7 | Metadata available for sorting (title, artist, album, recently added) | Sort views | **Title only** when browsing. Full metadata arrives only for the playing track |
+| 8 | Does cover art arrive over AVRCP, and for which tracks? | Artwork strategy | **No.** No art in any metadata |
+| 9 | Do position and duration update well enough for a progress bar? | Now-playing strip | **Yes.** Position updates; the UI interpolates between updates |
+| 10 | Pi-initiated reconnect with the iPhone awake vs. asleep | Auto-reconnect and switching | Not tested. The phone reconnecting on its own (out of range and back) works |
 
-Output: a findings note plus the caching, queue and artwork strategies. During development WiFi is busy (deploys, apt), so suspect WiFi/Bluetooth coexistence before BlueZ if audio drops.
+Output: a findings note plus the caching, queue and artwork strategies. As decided:
+- **Caching:** tracks keyed by (phone, title, duplicate index); a fresh sync on every new BlueZ player, navigating by folder contents; a failed pick re-syncs and replays the same song (self-heals in about 2.6 s).
+- **Queue:** jb-core watches now-playing; a title it didn't command means iOS auto-advanced, so it plays the next queued song over it. With an empty queue, it accepts iOS's pick.
+- **Artwork and artist/album:** looked up by title from the iTunes Search API. These are guesses (e.g. duplicate titles share one artist). Planned fix: read real artists from the phone's My Music → Artists folder. During development WiFi is busy (deploys, apt), so suspect WiFi/Bluetooth coexistence before BlueZ if audio drops.
 
 ## Phase 4: Phone source (jb-source-phone)
 
@@ -218,8 +248,9 @@ Pairing, multiple phones, and switching between them, built on the Phase 3 findi
 - [ ] Switch sequence: pause current phone, disconnect, connect new phone, load its cached library
 - [ ] Connection policy (takeover vs. locked; recommendation: locked)
 - [ ] Auto-reconnect on boot: last active phone, then others by most recent use
-- [ ] Publish the connected phone's name (drives the source tab label)
-- [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork
+- [x] Publish the connected phone's name (`jukebox/jb-source-phone/connected`, retained: `{connected, name, mac}`)
+- [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork. Built for the phone (crawl, `play_item`, play/pause/next/previous, now-playing; artwork comes from jb-library), but not yet as a shared interface other sources plug into
+- [x] Reconnect hardening: retries while BlueZ finishes building the player; library sync waits for browsing to appear; a failed pick re-syncs and replays
 - [ ] Phone button hold gesture opens the pairing/management screen, distinct from a plain click's quick-glance status (see the gesture-to-function mapping in Phase 2b)
 
 Done when: the phone reconnects on boot, two phones switch from the command line, and a track ID on the bus plays that song.
@@ -228,11 +259,11 @@ Done when: the phone reconnects on boot, two phones switch from the command line
 
 A per-phone cache so the board appears instantly.
 
-- [ ] SQLite keyed per source and per phone: tracks, sync state, play counts, last played, cached artwork
-- [ ] First connect: full crawl. Later: skip if the change counter is unchanged, else recrawl and diff
-- [ ] Fallback if IDs are unstable: show cached board instantly, refresh IDs in the background
-- [ ] Sort views: title, artist, album, recent, popular (popular = jukebox play counts; recent = phone data if Phase 3 finds it, else jukebox last played)
-- [ ] Serve pages of 100 slots
+- [x] SQLite keyed per phone (`/var/lib/juk3-box/library.db`): tracks (with duplicate titles), last played, added, favorites, iTunes artwork/artist/album/genre. Play counts not yet
+- [x] Sync: jb-source-phone drives it (a fresh crawl per new BlueZ player, since IDs aren't stable); jb-library stores, prunes songs gone from the phone (skipped if a sync looks short) and republishes only on change
+- [x] Fallback for unstable IDs: the cached board shows instantly; IDs refresh on sync, and a dead ID self-heals on pick
+- [ ] Sort views: title, artist, album, recent, popular. Title, artist/album/genre drill-down, New and Recents work; popular needs play counts; artist/album are iTunes guesses until read from the phone's Artists folder
+- [x] Serve pages of 100 slots (the UI pages the snapshot; 10–100 per page, owner setting)
 
 Done when: switching back to a known phone shows its library instantly and every sort view is correct.
 
@@ -240,11 +271,11 @@ Done when: switching back to a known phone shows its library instantly and every
 
 The jukebox behavior, working end to end with no UI.
 
-- [ ] Slot labels A1–K0: each screen column holds two letters (A/B, C/D, E/F, G/H, J/K); digits run 1–9, then 0
-- [ ] Entry state machine: letter highlights its 10-slot block, digit completes; cancel or timeout clears
-- [ ] Paging, sort-mode cycling, menu state
-- [ ] Selection queue using the Phase 3 end-of-track strategy; queue clears on phone switch
-- [ ] Record plays for the popular view
+- [x] Slot labels A1–K0: each screen column holds two letters (A/B, C/D, E/F, G/H, J/K); digits run 1–9, then 0
+- [ ] Entry state machine: letter highlights its 10-slot block, digit completes; cancel or timeout clears (`jukebox/jb-core/entry`, `/selection`). Letter, digit and the 10 s timeout work; **Reset doesn't cancel yet** (jb-core ignores it)
+- [x] Paging and sorting (in the UI engine); menu state comes with the Settings and phone screens
+- [x] Selection queue using the Phase 3 end-of-track strategy; shuffle (picks go ahead of shuffle's own; turning shuffle on starts playback). Clearing the queue on phone switch comes with Phase 4 switching
+- [ ] Record plays for the popular view (last played is recorded; counts aren't)
 - [ ] Now Playing double-click (skip to next) and hold (previous/restart) drive through this same queue mechanism, not a raw transport command (see the gesture-to-function mapping in Phase 2b)
 - [ ] Up Next item-removal gesture, once decided (see the open question in Phase 2b's gesture-to-function mapping)
 
@@ -252,35 +283,37 @@ Done when: select, queue three songs, they play in order, and paging and sorting
 
 ## Phase 6b: Lights (jb-lights)
 
-The buttons and cabinet respond to what the jukebox is doing. Subscribes to jb-core events; all colors, timings and modes live in config.
+The buttons and cabinet respond to what the jukebox is doing. Runs as `jb-lights.service` (root, starts at boot): buttons in the main thread, the level bar in its own thread. Code in `services/jb_lights/`.
+
+**Buttons: buttons-theme1** (the user's design, Oct 10; replaced the original red/amber table):
 
 | State | Selection keys | Reset button |
 | --- | --- | --- |
-| Idle | All resting color (white channel) | Resting color |
-| Letter chosen | That letter turns red; others dim or stay (configurable) | Cancel color (amber) |
-| Digit chosen | That digit turns red too | Cancel color |
-| Selection confirmed | Both keys blink together about 3× | Blinks with them |
-| Reset | Dark, then a chase back to resting | Resting color |
-| Cancel / timeout | Quick fade to resting | Resting color |
-| Menu open | Navigation keys lit, rest dark | Back color (blue) |
-| Pairing | Slow pulse | Pairing color |
+| Idle | All white (white channel, 70%) | White |
+| Letter chosen | That letter green; another letter moves the green | Red (can cancel) |
+| Digit chosen after a letter | That digit green too, then a rainbow comet runs A…K, 1…0 twice, then back to idle | Off during the comet |
+| Digit with no letter | That digit blinks red 3× (not a valid start) | White |
+| Reset while a letter is held | Back to idle | White |
+| Menu open, pairing | To design | To design |
 
-- [ ] Pixel-index to button map in config (wire the chain in whatever order is easiest)
-- [ ] Scene engine for the table above; accent-strip scenes (idle, playing, selection)
-- [ ] Per-frame current limiter: estimate draw from pixel values and scale brightness to stay inside the 22A supply
-- [ ] Button brightness capped at 50% (keeps the 5V rail under 0.75 A)
+- [x] Pixel-index to button map (`buttons.py`; chain order K…A, Single, Album, 1…0, Reset)
+- [x] buttons-theme1 (`themes/buttons_theme1.py`), currently driven straight from jb-input key presses
+- [ ] Drive the button lights from jb-core's entry state instead of raw keys, so the lights, the board and the 10 s timeout always agree
+- [ ] Menu and pairing scenes; accent-strip scenes (idle, playing, selection)
+- [x] Per-frame current limiter for the level bar (4A); estimate draw from pixel values and scale the frame
+- [ ] Limiter for the accent strip (6A)
 - [ ] Optional: warm the natural white slightly with a touch of red
 
-**Level bar.** Two modes, selectable in the menu; both are software only.
+**Level bar** (the user's design, Oct 11; replaced the fill/meter modes):
+- At idle: every pixel white at 60%. The limiter holds it at the 4A cap (about 37%), which the user approved by eye.
+- While the knob turns: the volume fill (white columns, left to right = volume) crossfades in, holds 3 s after the last change, then fades back.
+- While music plays (future): themes 1–3 picked dynamically by an **audio mood analyzer**: 1 center-out rainbow analyzer, 2 flowing light ribbon, 3 classic analyzer with falling peak caps. All three run on fake audio today.
 
-| Mode | At rest | While music plays |
-| --- | --- | --- |
-| Fill | Yellow fills left to right up to the volume level; rest dark or dim white | The sound level bounces inside the filled area |
-| Meter | One cell marks the volume; rest dark | Level bounces from the left: green, then yellow, then red at the far right |
-
-- [ ] Volume from jb-audio; sound level read from PipeWire (the same stream the DAC plays, so the meter stays in sync)
-- [ ] Treat each 6-pixel segment as one cell (32 cells)
-- [ ] Level bar current cap 4A; accent strip 6A; buttons 50%
+- [x] Volume from jb-audio (`jukebox/jb-audio/state`); volume fill overlay (`themes/volume_bar_theme4.py`, `levelbar.py`)
+- [x] Matrix layout 36 × 5 (`matrix.py`, index = column × 5 + row)
+- [x] Idle all-white default (`themes/volume_bar_idle.py`), in the service
+- [ ] Sound level read from PipeWire (the same stream the DAC plays, so the meter stays in sync); feed per-column levels to themes 1–3
+- [ ] Audio mood analyzer: choose theme 1, 2 or 3 to fit the music
 
 Done when: a full select, confirm and reset sequence plays on the keys within about 20 ms of each press.
 
@@ -355,10 +388,10 @@ Home cards are knob stops. Song cards (New, Recents) pick the song like the keyp
 
 ### Build order
 
-- [ ] Theme format spec: manifest, layouts, block templates, style variables, format version
-- [ ] UI engine: bus data, focus/knob, selection, screens, popups
-- [ ] Blocks above, unstyled but working
-- [ ] Default theme from the mockups
+- [x] Theme format spec: manifest, layouts, block templates, style variables, format version (draft, `docs/theme-format.md`)
+- [x] UI engine: bus data, focus/knob, selection, screens, popups (jb-ui serves it on 127.0.0.1:8090)
+- [x] Blocks above, unstyled but working
+- [x] Default theme from the mockups ("Neon", rebuilt from the Oct 9 mockups)
 - [ ] Prove it: a second, deliberately different test theme rearranges the screens with no engine changes; test at two monitor sizes
 - [x] Now Playing overlay (full-screen glass; Favorite, Close), See All views, header with Back, EQ Now Playing icon, Lucide icons (Iconify format, bundled), art-sampled card glows
 - [ ] Phone badge (top right): manage phones from it -- connect, switch, forget. Stubbed for now (shows who's connected); built with the phone connection manager
@@ -399,7 +432,7 @@ Done when: an owner can rebuild the Home screen on a phone and see it on the cab
 
 It behaves like a machine, not a computer.
 
-- [ ] Boot order, auto-restart, watchdog
+- [ ] Boot order, auto-restart, watchdog. Partly there: every service restarts on failure, publish-only services exit when a task dies, and a clock jump at boot is survived (mosquitto drops clients when NTP jumps the clock; the kiosk uses native timers). The hardware watchdog is the Pi OS default (1 min)
 - [ ] Phone leaves range mid-song; power cut during a sync
 - [ ] Log rotation; read-only or overlay root filesystem
 - [ ] Cold boot to a working jukebox in under a minute
@@ -430,8 +463,9 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 | Coin-return retrofit feasibility | Phase 2a | Fallback: separate panel knob, still fits the pin budget |
 | Queue, artwork, "recent" strategies | Phase 4–6 | Come out of the Phase 3 findings |
 | LED board header height | Phase 2c | Depends on DAC Pro jack height; measure first |
-| Level bar on GPIO10 (SPI) alongside the two PWM chains | Phase 2c | Buttons GPIO12 and accent GPIO13 are settled. If GPIO10 conflicts with audio, chain the bar onto the end of the accent strip instead (\~65 fps max) |
+| Level bar on GPIO10 (SPI) alongside the two PWM chains | Phase 2c | Works on the bench with the buttons running (Oct 11); still to test with audio and the accent strip. Fallback if GPIO10 conflicts with audio: chain the bar onto the end of the accent strip (\~65 fps max) |
+| Pixel Shifter output order | Next board revision | Decided: fix the footprint to G, D5, !D5, C5. Rev E works today via the U2 rework and the buttons' software inversion |
 | LED supply size | Phase 2c | Decided: LRS-200-5 (5V 40A) powers the Pi and all LEDs through the board; amp on its own 48V brick |
 | Key cap translucency | Phase 2c | Translucent = one pixel per key; opaque may need two or a light pipe |
-| Level bar display mode | Phase 6b | Build both (fill and meter) and pick on the real cabinet |
+| Level bar display mode | Phase 6b | Decided (Oct 11): idle all white; volume fill while the knob turns; themes 1–3 while music plays, chosen by an audio mood analyzer (to build) |
 | Pi branch fuse: PTC or blade | Phase 2c | 5A PTC; switch to a 5A blade fuse if the Pi reports undervoltage |
