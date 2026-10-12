@@ -16,6 +16,7 @@ BLUEZ = "org.bluez"
 # rather than leaving the caller (jb-library's crawl) with a stale result.
 DBUS_RETRY_ATTEMPTS = 5
 DBUS_RETRY_DELAY_S = 0.5
+BUSY_WAIT_S = 60
 
 # A whole library crawl normally takes well under a minute. BlueZ calls have
 # no timeout of their own, and a crawl that hung when the phone switched
@@ -47,14 +48,27 @@ class BrowseLost(RuntimeError):
 
 
 async def _dbus_retry(coro_fn):
+    """Retries a BlueZ browsing call. "Busy" is waited out for up to
+    BUSY_WAIT_S: after any listing BlueZ keeps fetching the rest of that
+    folder from the phone in the background and refuses calls until it's
+    done (seen in btmon 2026-10-11; a big folder takes a while), and a sync
+    that gave up on it left the library unsynced. Other errors get the
+    usual few quick retries."""
     last_error = None
-    for attempt in range(DBUS_RETRY_ATTEMPTS):
+    attempts = 0
+    busy_until = asyncio.get_running_loop().time() + BUSY_WAIT_S
+    while True:
         try:
             return await coro_fn()
         except DBusError as e:
             last_error = e
+            if "busy" in str(e).lower() and asyncio.get_running_loop().time() < busy_until:
+                await asyncio.sleep(DBUS_RETRY_DELAY_S)
+                continue
+            attempts += 1
+            if attempts >= DBUS_RETRY_ATTEMPTS:
+                raise last_error
             await asyncio.sleep(DBUS_RETRY_DELAY_S)
-    raise last_error
 
 
 class Phone:
@@ -279,7 +293,10 @@ async def main() -> None:
                 return
             except Exception:
                 log.exception("library sync failed (attempt %d/%d)", attempt, 1 + len(SYNC_RETRY_DELAYS_S))
-        log.error("library sync gave up; it runs again on the next connection or browse reset")
+        # Out of retries: a reset (reconnect) gives the phone a fresh browse
+        # session, rather than leaving picks broken until the next connect.
+        log.error("library sync gave up; resetting the browse session")
+        request_browse_reset(bus)
 
     def request_browse_reset(bus: Bus):
         nonlocal reset_pending

@@ -31,20 +31,23 @@ import json
 import signal
 import sys
 
-from dbus_next import BusType, Variant
+from dbus_next import BusType
 from dbus_next.aio import MessageBus
 from dbus_next.errors import DBusError
 
 BLUEZ = "org.bluez"
-CALL_TIMEOUT_S = 8           # any single BlueZ call
+CALL_TIMEOUT_S = 15          # any single BlueZ call
 CONNECT_TIMEOUT_S = 30
 READY_TIMEOUT_S = 20         # browse root reporting items after a connect
 STEP_PAUSE_S = 0.4           # between folder hops: the pace the working survey used
 READ_RETRIES = 3             # a timed-out or "busy" read is tried again
 RETRY_PAUSE_S = 2
+BUSY_WAIT_S = 60             # how long to wait out BlueZ's background folder fetch
+BUSY_POLL_S = 0.5
 SETTLE_S = 2                 # after a fresh session reports ready, let the phone settle
 COUNT_WAIT_S = 2             # how long a folder may report 0 items before we believe it
-PAGE = 50                    # items per listing request (one big request kept the phone busy)
+FETCH_WAIT_S = 60            # BlueZ fetching a whole big folder in the background
+FETCH_POLL_S = 0.3
 # Playlists folders that aren't the owner's playlists: "Recently Added"
 # lists playlists (not songs), Playback History is the phone's own history
 # (Recents stays jukebox-local, the user's call), Photos Memories is iOS's.
@@ -71,19 +74,34 @@ class Walker:
         self.stack = []              # [(object path, BlueZ name)] we entered, root first
 
     async def call(self, label: str, make, retries: int = 0):
-        """One BlueZ call with a timeout. make() returns a fresh coroutine,
-        so read-only calls can be retried: right after a connect the phone
-        is slow and answers \"busy\" (seen live). Folder changes are never
-        retried (one that timed out may still have moved the cursor)."""
-        for attempt in range(retries + 1):
+        """One BlueZ call with a timeout; make() returns a fresh coroutine.
+
+        "Busy" is waited out and retried for ANY call, folder changes too:
+        BlueZ refuses a call before sending anything to the phone while it's
+        still fetching the rest of a folder in the background -- it does
+        that after every listing, in ~10-item chunks, however small the
+        range asked for (seen in btmon, 2026-10-11: asked 0-59 of Artists,
+        BlueZ kept fetching 40-302). Timeouts and other errors are retried
+        only for reads (`retries`): a folder change that timed out may
+        still have moved the phone's cursor."""
+        attempt = 0
+        busy_until = asyncio.get_running_loop().time() + BUSY_WAIT_S
+        while True:
             if self.stop.is_set():
                 raise Stop()
             try:
                 return await asyncio.wait_for(make(), CALL_TIMEOUT_S)
-            except (asyncio.TimeoutError, DBusError) as e:
-                if attempt == retries:
-                    raise RuntimeError(f"{label}: {type(e).__name__} {e}") from e
-                await asyncio.sleep(RETRY_PAUSE_S)
+            except DBusError as e:
+                if "busy" in str(e).lower() and asyncio.get_running_loop().time() < busy_until:
+                    await asyncio.sleep(BUSY_POLL_S)
+                    continue
+                err = e
+            except asyncio.TimeoutError as e:
+                err = e
+            if attempt >= retries:
+                raise RuntimeError(f"{label}: {type(err).__name__} {err}") from err
+            attempt += 1
+            await asyncio.sleep(RETRY_PAUSE_S)
 
     # -- session ---------------------------------------------------------
     async def new_session(self):
@@ -145,17 +163,15 @@ class Walker:
             await asyncio.sleep(0.25)
         if not count:
             return []
-        # Unbounded, like the core Songs sync: an explicit range is built
-        # from that same count, which can still be the previous folder's
-        # right after a change, and a range past the end stalls the phone
-        # (seen live: a 1-song artist asked for 302 items, then the next
-        # folder change hung).
+        # One unbounded listing: whatever range is asked for, BlueZ goes on
+        # fetching the whole folder from the phone in the background (~10
+        # items per round trip), and anything sent meanwhile queues behind
+        # it -- the next call then times out and its late reply derails
+        # the step after (btmon, 2026-10-11). So wait until BlueZ holds
+        # every item before moving on.
         out = []
-        items = {}
-        for start in range(0, count, PAGE):
-            end = min(start + PAGE, count) - 1
-            items.update(await self.call(f"list {here} {start}-{end}", lambda: self.folder.call_list_items(
-                {"Start": Variant("u", start), "End": Variant("u", end)}), READ_RETRIES))
+        items = await self.call(f"list {here}", lambda: self.folder.call_list_items({}), READ_RETRIES)
+        await self.wait_fetched(count)
         for path, props in items.items():
             if str(path).rsplit("/", 1)[0] != self.stack[-1][0]:
                 # BlueZ reuses an existing object when a listed item's phone
@@ -169,6 +185,19 @@ class Walker:
             name = full[len(here) + 1:] if full.startswith(here + "/") else full.rsplit("/", 1)[-1]
             out.append((str(path), name, props["Type"].value == "folder" if "Type" in props else False))
         return out
+
+    async def wait_fetched(self, count: int):
+        """Until BlueZ has an object for every item of the current folder
+        (its background fetch is done), or FETCH_WAIT_S."""
+        folder_path = self.stack[-1][0]
+        deadline = asyncio.get_running_loop().time() + FETCH_WAIT_S
+        while asyncio.get_running_loop().time() < deadline:
+            node = await asyncio.wait_for(self.bus.introspect(BLUEZ, folder_path), CALL_TIMEOUT_S)
+            # one aliased entry (see ls) has no object here, hence the -1
+            if len(node.nodes) >= count - 1:
+                return
+            await asyncio.sleep(FETCH_POLL_S)
+        emit({"progress": f"slow fetch in {self.stack[-1][1]}"})
 
     async def down(self, path: str, name: str):
         await self.call(f"enter {name}", lambda: self.folder.call_change_folder(path))
