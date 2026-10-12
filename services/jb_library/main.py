@@ -61,6 +61,25 @@ DEEP_SCHEMA = """
         rank INTEGER NOT NULL,
         PRIMARY KEY (phone_mac, album)
     );
+    -- Every album on the phone (names only, the phone's order): what the
+    -- board's Albums view lists. Contents come later, on demand.
+    CREATE TABLE IF NOT EXISTS album_index (
+        phone_mac TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (phone_mac, name)
+    );
+    -- An album's songs, fetched when someone first opens it. uid is the
+    -- phone's ID for the song, the same as in Songs, so it matches the
+    -- end of the library's play path exactly (unlike titles, which repeat).
+    CREATE TABLE IF NOT EXISTS album_tracks (
+        phone_mac TEXT NOT NULL,
+        album TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        uid TEXT NOT NULL,
+        PRIMARY KEY (phone_mac, album, position)
+    );
 """
 
 
@@ -176,6 +195,26 @@ def store_deep(conn: sqlite3.Connection, mac: str, branch: str, data: dict) -> i
         conn.execute("DELETE FROM album_recent WHERE phone_mac=?", (mac,))
         conn.executemany("INSERT OR IGNORE INTO album_recent (phone_mac, album, rank) VALUES (?, ?, ?)",
                          [(mac, album, i) for i, album in enumerate(data.get("recent", []))])
+    elif branch == "album_index":
+        names = data["albums"]
+        conn.execute("DELETE FROM album_index WHERE phone_mac=?", (mac,))
+        conn.executemany("INSERT OR IGNORE INTO album_index (phone_mac, name, position) VALUES (?, ?, ?)",
+                         [(mac, n, i) for i, n in enumerate(names)])
+        conn.execute("DELETE FROM album_recent WHERE phone_mac=?", (mac,))
+        conn.executemany("INSERT OR IGNORE INTO album_recent (phone_mac, album, rank) VALUES (?, ?, ?)",
+                         [(mac, a, i) for i, a in enumerate(data.get("recent", []))])
+        changed = len(names)
+    elif branch == "album":
+        name, tracks = data["name"], data["tracks"]
+        conn.execute("DELETE FROM album_tracks WHERE phone_mac=? AND album=?", (mac, name))
+        conn.executemany(
+            "INSERT INTO album_tracks (phone_mac, album, position, title, uid) VALUES (?, ?, ?, ?, ?)",
+            [(mac, name, i, t["title"], str(t["uid"])) for i, t in enumerate(tracks)])
+        # The songs themselves now know their real album and track number.
+        for i, t in enumerate(tracks, 1):
+            changed += conn.execute(
+                "UPDATE tracks SET phone_album=?, album_track=? WHERE phone_mac=? AND item_path LIKE ?",
+                (name, i, mac, f"%/item{t['uid']}")).rowcount
     elif branch == "genres":
         genre_of = {}
         for genre, artists in data["genres"].items():
@@ -192,6 +231,19 @@ def store_deep(conn: sqlite3.Connection, mac: str, branch: str, data: dict) -> i
         raise ValueError(f"unknown branch {branch!r}")
     conn.commit()
     return changed
+
+
+def read_albums(conn: sqlite3.Connection) -> dict:
+    """{albums: [{name, rank}] in the phone's order, contents: {name: [{title,
+    uid}] in album order}} -- contents only for albums opened so far."""
+    albums = [{"name": n, "rank": r} for n, r in conn.execute(
+        "SELECT i.name, r.rank FROM album_index i LEFT JOIN album_recent r"
+        " ON r.phone_mac = i.phone_mac AND r.album = i.name ORDER BY i.phone_mac, i.position")]
+    contents = {}
+    for album, title, uid in conn.execute(
+            "SELECT album, title, uid FROM album_tracks ORDER BY phone_mac, album, position"):
+        contents.setdefault(album, []).append({"title": title, "uid": uid})
+    return {"albums": albums, "contents": contents}
 
 
 def read_playlists(conn: sqlite3.Connection) -> list:
@@ -328,6 +380,7 @@ class Snapshots:
         self.log = log
         self._last_payload: str | None = None
         self._last_playlists: str | None = None
+        self._last_albums: str | None = None
 
     async def publish(self) -> None:
         """Whole library sorted by title -- the UI slices/sorts client-side.
@@ -368,6 +421,12 @@ class Snapshots:
             await self.bus.publish("jukebox/jb-library/playlists", playlists, retain=True)
             self._last_playlists = serialized
             self.log.info("published %d playlists", len(playlists["playlists"]))
+        albums = read_albums(self.conn)
+        serialized = json.dumps(albums)
+        if serialized != self._last_albums:
+            await self.bus.publish("jukebox/jb-library/albums", albums, retain=True)
+            self._last_albums = serialized
+            self.log.info("published %d albums (%d opened)", len(albums["albums"]), len(albums["contents"]))
 
 
 async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:

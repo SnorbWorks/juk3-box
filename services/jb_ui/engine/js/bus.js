@@ -18,6 +18,8 @@ const HANDLERS = {
     store.set('tracks', lib.tracks || []);
   },
   'jukebox/jb-library/playlists': p => store.set('playlists', p.playlists || []),
+  'jukebox/jb-library/albums': a => store.set('albums', a),
+  'jukebox/jb-crawl/album': s => store.set('albumFetch', s),
   'jukebox/jb-core/entry': e => { activity(); store.set('entry', e); },
   'jukebox/jb-core/selection': s => store.set('selection', s),
   'jukebox/jb-audio/state': v => store.set('volume', v),

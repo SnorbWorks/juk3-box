@@ -9,6 +9,6 @@ for i in $(seq 1 40); do
   sleep 10
 done
 case "$s" in *'"holder": "diag"'*) ;; *) echo "NO LEASE -- not running"; exit 1;; esac
-timeout 900 /opt/juk3-box/venv/bin/python -u "$@" 2>&1 | grep -v '^  \|^\s*\^\|Traceback\|^$'
+timeout 900 /opt/juk3-box/venv/bin/python -u "$@" 2>&1 | grep -v '^  File \|^\s*\^\|^$'
 mosquitto_pub -t jukebox/jb-source-phone/cmd -m '{"action": "lease_release", "holder": "diag"}'
 echo "lease released"

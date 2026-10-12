@@ -158,3 +158,25 @@ def test_deep_genres_come_through_the_artist(db):
 def test_deep_unknown_branch_is_rejected(db):
     with pytest.raises(ValueError):
         lib.store_deep(db, MAC, "podcasts", {})
+
+
+def test_album_index_lists_every_album_with_its_recent_rank(db):
+    lib.store_deep(db, MAC, "album_index", {"albums": ["Abbey Road", "Dawn FM", "Mezzanine"],
+                                            "recent": ["Dawn FM", "Abbey Road"]})
+    got = lib.read_albums(db)
+    assert got["albums"] == [{"name": "Abbey Road", "rank": 1}, {"name": "Dawn FM", "rank": 0},
+                             {"name": "Mezzanine", "rank": None}]
+    assert got["contents"] == {}
+
+
+def test_opened_album_matches_songs_by_phone_id_not_title(db):
+    # Two songs called "Home"; the album holds the second (by its phone ID).
+    lib.upsert_tracks(db, MAC, [{"title": "Home", "item_path": "/p/Songs/item111"},
+                                {"title": "Home", "item_path": "/p/Songs/item222"},
+                                {"title": "Intro", "item_path": "/p/Songs/item333"}])
+    lib.store_deep(db, MAC, "album", {"name": "Live", "tracks": [{"title": "Intro", "uid": "333"},
+                                                                 {"title": "Home", "uid": "222"}]})
+    got = db.execute("SELECT title, dup, phone_album, album_track FROM tracks ORDER BY title, dup").fetchall()
+    assert got == [("Home", 0, None, None), ("Home", 1, "Live", 2), ("Intro", 0, "Live", 1)]
+    assert lib.read_albums(db)["contents"] == {"Live": [{"title": "Intro", "uid": "333"},
+                                                         {"title": "Home", "uid": "222"}]}

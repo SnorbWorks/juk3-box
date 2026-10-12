@@ -173,17 +173,20 @@ class Walker:
         items = await self.call(f"list {here}", lambda: self.folder.call_list_items({}), READ_RETRIES)
         await self.wait_fetched(count)
         for path, props in items.items():
-            if str(path).rsplit("/", 1)[0] != self.stack[-1][0]:
+            is_folder = props["Type"].value == "folder" if "Type" in props else False
+            if is_folder and str(path).rsplit("/", 1)[0] != self.stack[-1][0]:
                 # BlueZ reuses an existing object when a listed item's phone
-                # ID matches one it already has: Artists' first entry comes
-                # back as the My Music folder itself (seen live). Entering it
-                # would send the phone UP instead and derail everything
-                # after, so it's skipped (that entry's songs keep their
-                # iTunes guesses).
+                # ID matches one it already has. For a folder that's a trap:
+                # Artists' first entry comes back as the My Music folder
+                # itself (seen live), and entering it would send the phone UP
+                # and derail everything after, so it's skipped. Songs are
+                # different: their IDs are global, so a song listed in an
+                # album comes back as its object from Songs -- the very play
+                # path the library already has. Those are kept.
                 continue
             full = props["Name"].value if "Name" in props else ""
             name = full[len(here) + 1:] if full.startswith(here + "/") else full.rsplit("/", 1)[-1]
-            out.append((str(path), name, props["Type"].value == "folder" if "Type" in props else False))
+            out.append((str(path), name, is_folder))
         return out
 
     async def wait_fetched(self, count: int):
@@ -269,6 +272,93 @@ class Walker:
         await self.up()
         return {"genres": out}
 
+    # -- albums, starting from where the library sync leaves the cursor --
+    # Opening Albums from Songs needs no reconnect: up one level to My Music,
+    # then down. Measured 2026-10-12: album list ~24 s (BlueZ fetching 430
+    # names), one album's songs <1 s, back to Songs ~21 s.
+
+    async def known_folders(self) -> dict:
+        """{BlueZ folder name: object path} for the folders BlueZ knows."""
+        om = self.bus.get_proxy_object(BLUEZ, "/", await self.bus.introspect(BLUEZ, "/")).get_interface(
+            "org.freedesktop.DBus.ObjectManager")
+        objs = await asyncio.wait_for(om.call_get_managed_objects(), CALL_TIMEOUT_S)
+        out = {}
+        for path, ifaces in objs.items():
+            it = ifaces.get("org.bluez.MediaItem1")
+            if it and "Type" in it and it["Type"].value == "folder" and "Name" in it:
+                out[it["Name"].value] = str(path)
+        return out
+
+    async def to_my_music(self):
+        """Into My Music: one step up from Songs when that's where the cursor
+        is (the normal case), else a fresh session from the root."""
+        player = await self.find_player()
+        if player:
+            obj = self.bus.get_proxy_object(BLUEZ, player, await self.bus.introspect(BLUEZ, player))
+            self.folder = obj.get_interface("org.bluez.MediaFolder1")
+            self.props = obj.get_interface("org.freedesktop.DBus.Properties")
+            name, _ = await self.state()
+            known = await self.known_folders()
+            if name == "/Filesystem/My Music/Songs" and "/Filesystem/My Music" in known:
+                self.root = player + "/Filesystem"
+                self.stack = [(self.root, "/Filesystem"), (known["/Filesystem/My Music"], "/Filesystem/My Music"),
+                              (known[name], name)]
+                await self.up()
+                return
+        await self.new_session()
+        await self.enter("My Music")
+
+    async def child(self, name: str):
+        """Down into a child of the current folder, by BlueZ's known object
+        when it has one (skips re-listing the parent), else by listing."""
+        full = f"{self.stack[-1][1]}/{name}"
+        path = (await self.known_folders()).get(full)
+        if path and path.rsplit("/", 1)[0] == self.stack[-1][0]:
+            await self.down(path, name)
+        else:
+            await self.enter(name)
+
+    async def album_names(self) -> list:
+        """Inside Albums: every album's name, in the phone's order."""
+        return [n for _, n, f in await self.ls() if f and n != "Recently Added"]
+
+    async def album_index(self) -> dict:
+        """From My Music: the list of albums and the phone's newest-first
+        order (Albums > Recently Added). Names only, nothing opened."""
+        await self.child("Albums")
+        listing = await self.ls()
+        names = [n for _, n, f in listing if f and n != "Recently Added"]
+        emit({"progress": f"album list {len(names)}"})
+        recent = []
+        ra = next((p for p, n, f in listing if f and n == "Recently Added"), None)
+        if ra:
+            await self.down(ra, "Recently Added")
+            recent = [n for _, n, f in await self.ls() if f]
+            await self.up()
+        await self.up()
+        return {"albums": names, "recent": recent}
+
+    async def album(self, name: str) -> dict:
+        """From My Music: one album's songs, in album order, with each song's
+        phone ID -- the same ID as in Songs, so it maps exactly onto the
+        library's play path (seen 2026-10-12)."""
+        await self.child("Albums")
+        listing = await self.ls()
+        emit({"progress": f"albums listed ({len(listing)})"})
+        path = next((p for p, n, f in listing if f and n == name), None)
+        tracks = None
+        if path:
+            await self.down(path, name)
+            tracks = [{"title": n, "uid": p.rsplit("/item", 1)[-1]} for p, n, f in await self.ls() if not f]
+            await self.up()
+        await self.up()
+        return {"name": name, "tracks": tracks}
+
+    async def back_to_songs(self):
+        while len(self.stack) > 2:
+            await self.up()
+        await self.child("Songs")
+
     async def restore(self):
         """Leave the cursor where the core sync can find Songs: if we're
         inside My Music, walk up to it and into Songs; otherwise reconnect
@@ -286,12 +376,23 @@ class Walker:
         await self.new_session()
 
 
-async def run(mac: str, branches: list):
+async def run(mac: str, branches: list, album: str | None = None):
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
     w = Walker(bus, mac)
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGTERM, w.stop.set)
     try:
+        if album is not None:
+            # On demand (someone opened an album): no reconnect, back to Songs after.
+            await w.to_my_music()
+            emit({"album": await w.album(album)})
+            await w.back_to_songs()
+            emit({"done": True})
+            return
+        if "album_index" in branches:
+            await w.to_my_music()
+            emit({"branch": "album_index", "data": await w.album_index()})
+            await w.back_to_songs()
         if "playlists" in branches:
             await w.new_session()
             emit({"branch": "playlists", "data": await w.playlists()})
@@ -321,9 +422,10 @@ async def run(mac: str, branches: list):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mac", required=True)
-    ap.add_argument("--branches", required=True, help="comma list: playlists,artists,albums,genres")
+    ap.add_argument("--branches", default="", help="comma list: album_index,playlists,artists,albums,genres")
+    ap.add_argument("--album", help="fetch just this album's songs (on demand)")
     args = ap.parse_args()
-    asyncio.run(run(args.mac, [b for b in args.branches.split(",") if b]))
+    asyncio.run(run(args.mac, [b for b in args.branches.split(",") if b], args.album))
 
 
 if __name__ == "__main__":

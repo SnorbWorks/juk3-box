@@ -106,6 +106,7 @@ function fillBoard(el, node, ctx) {
     const v = view();
     el.style.setProperty('--jb-digits', v.digits);
     el.toggleAttribute('data-category', v.isCategory);
+    el.toggleAttribute('data-loading', !!v.album?.loading);
     groups.clear();
     for (const slotInfo of v.slots) {
       let group = groups.get(slotInfo.letter);
@@ -150,6 +151,8 @@ function fillBoard(el, node, ctx) {
 
   store.watch(el, 'tracks', render);
   store.watch(el, 'playlists', render);
+  store.watch(el, 'albums', render);
+  store.watch(el, 'albumFetch', render);
   store.watch(el, 'board', render);
   store.watch(el, 'entry', showEntry);
 }
@@ -162,6 +165,8 @@ function fillPageInfo(el, node, ctx) {
   };
   store.watch(el, 'tracks', render);
   store.watch(el, 'playlists', render);
+  store.watch(el, 'albums', render);
+  store.watch(el, 'albumFetch', render);
   store.watch(el, 'board', render);
 }
 
@@ -238,6 +243,8 @@ function fillHeader(el, node, ctx) {
       const sort = SORTS[v.sort];
       title = sort?.category ? `Browse by ${sort.singular}` : v.sort === 'title' ? 'All Songs' : v.sortLabel;
       subtitle = v.filter ? v.filter.value : v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : '';
+      if (v.album?.loading) subtitle += ' · Loading album…';
+      if (v.album?.failed) subtitle += ` · ${v.album.failed}`;
     } else if (screen === 'collection') {
       const c = store.get('collection');
       title = c?.title || '';
@@ -248,6 +255,8 @@ function fillHeader(el, node, ctx) {
   store.watch(el, 'screen', render);
   store.watch(el, 'board', render);
   store.watch(el, 'tracks', render);
+  store.watch(el, 'albums', render);
+  store.watch(el, 'albumFetch', render);
   store.watch(el, 'collection', render);
 }
 

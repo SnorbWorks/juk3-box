@@ -2,6 +2,7 @@
 // filter), which page, and how a slot code maps to a song. The board
 // block draws this; the keypad and the pager change it.
 
+import { publish } from './bus.js';
 import { store } from './store.js';
 
 export const LETTERS = 'ABCDEFGHJK';   // no I
@@ -37,8 +38,32 @@ export function playlistSongs(tracks, name) {
   }).filter(Boolean);
 }
 
+// Albums come from the phone (jb-library's album index: every album's
+// name). An album's songs are only fetched when someone opens it; until
+// then the board shows it loading (jb-crawl's album state).
+const phoneAlbums = () => store.get('albums')?.albums || [];
+
+// An opened album's songs in album order, matched to the library by the
+// phone's song ID (the end of each song's play path), not by title.
+export function albumSongs(tracks, name) {
+  const list = store.get('albums')?.contents?.[name];
+  if (!list) return null;
+  const byUid = new Map(tracks.map(t => [String(t.item_path || '').split('/item').pop(), t]));
+  return list.map(s => byUid.get(String(s.uid))).filter(Boolean);
+}
+
+// Ask for an album's songs if they aren't known yet (jb-crawl fetches them).
+function requestAlbum(name) {
+  if (!phoneAlbums().length || store.get('albums')?.contents?.[name]) return;
+  const st = store.get('albumFetch');
+  if (st?.name === name && (st.state === 'loading' || st.state === 'waiting')) return;
+  store.set('albumFetch', { name, state: 'loading' });
+  publish('jukebox/jb-crawl/cmd', { action: 'album', name });
+}
+
 function songsFor(tracks, sort, filter) {
   if (filter?.field === 'playlist') return playlistSongs(tracks, filter.value);
+  if (filter?.field === 'album' && phoneAlbums().length) return albumSongs(tracks, filter.value) || [];
   if (filter?.field === 'album') {
     // Album order where the phone told us the track numbers (deep crawl).
     return tracks.filter(t => t.album === filter.value)
@@ -59,6 +84,7 @@ function songsFor(tracks, sort, filter) {
 
 function categoriesFor(tracks, field) {
   if (field === 'playlist') return (store.get('playlists') || []).map(p => p.name);   // the phone's order
+  if (field === 'album' && phoneAlbums().length) return phoneAlbums().map(a => a.name);
   const values = [...new Set(tracks.map(t => t[field]).filter(Boolean))];
   return values.sort((a, b) => a.localeCompare(b));
 }
@@ -67,6 +93,15 @@ let state = { sort: 'title', filter: null, page: 0 };
 
 function digitsPerLetter() {
   return store.get('settings')?.songs_per_page / LETTERS.length || DIGITS.length;
+}
+
+// While an opened album's songs are being fetched: { loading } or { failed }.
+function albumStatus() {
+  const f = state.filter;
+  if (f?.field !== 'album' || !phoneAlbums().length || store.get('albums')?.contents?.[f.value]) return null;
+  const st = store.get('albumFetch');
+  if (st?.name === f.value && st.state === 'failed') return { failed: st.reason || "Couldn't load this album" };
+  return { loading: true };
 }
 
 // What the board shows now: items for the current page with their codes.
@@ -90,6 +125,7 @@ export function view() {
     sort: state.sort,
     sortLabel: SORTS[state.sort]?.label || state.sort,
     filter: state.filter,
+    album: albumStatus(),
     page,
     pages,
     digits,
@@ -134,6 +170,7 @@ export function pick(index) {
   if (!slot?.item) return null;
   if (slot.item.category !== undefined) {
     state = { sort: state.sort, filter: { field: state.sort, value: slot.item.category }, page: 0, categoryPage: state.page };
+    if (state.sort === 'album') requestAlbum(slot.item.category);
     changed();
     return null;
   }
@@ -145,6 +182,7 @@ export function pick(index) {
 export function openFilter(field, value) {
   if (!SORTS[field]?.category) return;
   state = { sort: field, filter: { field, value }, page: 0, categoryPage: 0 };
+  if (field === 'album') requestAlbum(value);
   changed();
 }
 

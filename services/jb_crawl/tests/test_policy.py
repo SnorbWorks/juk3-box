@@ -38,16 +38,17 @@ def test_interrupted_cycle_resumes_unfinished_branches_even_after_reconnects():
     policy.on_connect(st, MAC, ts("2026-10-11 09:00"))
     policy.branch_done(st, MAC, "playlists", ts("2026-10-11 09:10"))
     policy.on_connect(st, MAC, ts("2026-10-11 12:00"))      # same day
-    assert policy.pending(st, MAC) == ["artists", "albums", "genres"]
+    rest = [b for b in policy.BRANCHES if b != "playlists"]
+    assert policy.pending(st, MAC) == rest
     policy.on_connect(st, MAC, ts("2026-10-12 08:00"))      # next day: still finishing
-    assert policy.pending(st, MAC) == ["artists", "albums", "genres"]
+    assert policy.pending(st, MAC) == rest
 
 
 def test_cycle_completes_when_every_branch_is_done():
     st = {}
     policy.on_connect(st, MAC, ts("2026-10-11 09:00"))
     done = [policy.branch_done(st, MAC, b, ts("2026-10-11 09:30")) for b in policy.BRANCHES]
-    assert done == [False, False, False, True]
+    assert done == [False] * (len(policy.BRANCHES) - 1) + [True]
     assert st[MAC]["last_complete"] == ts("2026-10-11 09:30")
 
 

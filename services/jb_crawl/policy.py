@@ -24,7 +24,11 @@ from datetime import datetime
 from pathlib import Path
 
 STATE_PATH = Path("/var/lib/juk3-box/crawl-state.json")
-BRANCHES = ("playlists", "artists", "albums", "genres")
+# album_index = the phone's album names + newest-first order (cheap, no
+# reconnect). Albums' contents are fetched on demand, when someone opens one;
+# the full walks (artists, albums, genres) take hours over Bluetooth and stay
+# off unless a config enables them.
+BRANCHES = ("album_index", "playlists", "artists", "albums", "genres")
 
 
 def day(ts: float) -> str:

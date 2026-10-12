@@ -52,12 +52,17 @@ ACK_TIMEOUT_S = 20
 STATUS_EVERY_S = 5
 RETRY_AFTER_FAIL_S = 1800
 MAX_FAILURES_PER_DAY = 3
+# Without /etc/juk3-box/jb-crawl.json: the cheap branches only. The full
+# artist/album/genre walks take hours over Bluetooth.
+DEFAULT_BRANCHES = ("album_index", "playlists")
 
 
 class Supervisor:
     def __init__(self, bus: Bus, cfg: dict, log):
         self.bus, self.log = bus, log
-        self.enabled = tuple(b for b in cfg.get("branches", policy.BRANCHES) if b in policy.BRANCHES)
+        self.enabled = tuple(b for b in cfg.get("branches", DEFAULT_BRANCHES) if b in policy.BRANCHES)
+        self.album_queue = []        # album names someone opened, oldest first
+        self.wake = asyncio.Event()  # an album request shouldn't wait for the next tick
         self.state = policy.load()
         self.mac = None
         self.connected_since = None
@@ -109,6 +114,20 @@ class Supervisor:
                 fut.set_result(bool(p.get("ok")))
         elif topic.endswith(f"{SERVICE_NAME}/cmd") and p.get("action") == "crawl_now":
             self.force = True
+            self.wake.set()
+        elif topic.endswith(f"{SERVICE_NAME}/cmd") and p.get("action") == "album" and p.get("name"):
+            # Someone opened an album whose songs aren't known yet: fetch
+            # just that one, now (no idle wait -- a person is waiting).
+            if p["name"] not in self.album_queue:
+                self.album_queue.append(p["name"])
+                await self.album_state(p["name"], "loading")
+            self.wake.set()
+
+    async def album_state(self, name: str, state: str, reason: str | None = None):
+        """jukebox/jb-crawl/album (retained): the latest album request's state,
+        so the board can show "Loading album..." or why it failed."""
+        await self.bus.publish(f"jukebox/{SERVICE_NAME}/album",
+                               {"name": name, "state": state, "reason": reason, "at": time.time()}, retain=True)
 
     # -- the loop ----------------------------------------------------------
     async def run(self):
@@ -117,10 +136,34 @@ class Supervisor:
                 await self.tick()
             except Exception:
                 self.log.exception("crawl tick failed")
-            await asyncio.sleep(TICK_S)
+            try:
+                await asyncio.wait_for(self.wake.wait(), TICK_S)
+            except asyncio.TimeoutError:
+                pass
+            self.wake.clear()
+
+    async def fetch_albums(self):
+        """On-demand album fetches, one worker per album, before any metered
+        crawl. A pick still revokes the lease and stops one mid-way."""
+        while self.album_queue and self.mac and not self.worker:
+            name = self.album_queue[0]
+            if not await self.take_lease():
+                await self.album_state(name, "waiting", f"phone busy: {self.lease.get('reason')}")
+                return  # try again on the next tick
+            ok = False
+            try:
+                ok = await self.crawl(["--album", name], label=f"album {name!r}")
+            finally:
+                await self.bus.publish("jukebox/jb-source-phone/cmd", {"action": "lease_release", "holder": HOLDER})
+            self.album_queue.pop(0)
+            if not ok:
+                await self.album_state(name, "failed", "the phone didn't answer; try again")
 
     async def tick(self):
         if self.worker or not self.mac:
+            return
+        if self.album_queue:
+            await self.fetch_albums()
             return
         pending = policy.pending(self.state, self.mac, self.enabled)
         if not pending and not self.force:
@@ -147,7 +190,7 @@ class Supervisor:
             return
         ok = False
         try:
-            ok = await self.crawl(pending)
+            ok = await self.crawl(["--branches", ",".join(pending)], label=",".join(pending), expect=set(pending))
         finally:
             await self.bus.publish("jukebox/jb-source-phone/cmd", {"action": "lease_release", "holder": HOLDER})
         if not ok:
@@ -167,12 +210,15 @@ class Supervisor:
                 return False
         return False
 
-    async def crawl(self, branches: list) -> bool:
+    async def crawl(self, args: list, label: str, expect=frozenset({"album"})) -> bool:
+        """Runs one worker (args: --branches ... or --album NAME) and hands
+        what it finds to jb-library. True when it finished and everything
+        in `expect` was stored."""
         cycle = uuid.uuid4().hex[:8]
-        self.log.info("deep crawl %s of %s: %s", cycle, self.mac, ",".join(branches))
-        await self.set_status(state="crawling", reason=",".join(branches))
+        self.log.info("deep crawl %s of %s: %s", cycle, self.mac, label)
+        await self.set_status(state="crawling", reason=label)
         self.worker = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "services.jb_crawl.worker", "--mac", self.mac, "--branches", ",".join(branches),
+            sys.executable, "-m", "services.jb_crawl.worker", "--mac", self.mac, *args,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=8 * 1024 * 1024,
         )
         started = last_status = time.time()
@@ -202,6 +248,14 @@ class Supervisor:
                 elif "branch" in msg:
                     if await self.store(cycle, msg["branch"], msg["data"]):
                         stored.add(msg["branch"])
+                elif "album" in msg:
+                    album = msg["album"]
+                    if album.get("tracks") is None:
+                        await self.album_state(album["name"], "failed", "the phone has no album by that name")
+                        stored.add("album")  # a real answer, not a failure to retry
+                    elif await self.store(cycle, "album", album):
+                        stored.add("album")
+                        await self.album_state(album["name"], "done")
                 elif msg.get("done"):
                     finished = True
                 elif "error" in msg or msg.get("stopped"):
@@ -210,7 +264,7 @@ class Supervisor:
             await self.reap()
         self.log.info("deep crawl %s: stored %s%s", cycle, sorted(stored) or "nothing",
                       "" if finished else " (incomplete)")
-        return finished and stored >= set(branches)
+        return finished and stored >= set(expect)
 
     def parse(self, line: bytes) -> dict:
         try:
@@ -230,7 +284,7 @@ class Supervisor:
             self.log.error("jb-library didn't confirm the %s branch; it will be crawled again", branch)
         finally:
             self.acks.pop(key, None)
-        if ok:
+        if ok and branch in policy.BRANCHES:
             if policy.branch_done(self.state, self.mac, branch, time.time(), self.enabled):
                 self.log.info("deep crawl cycle complete for %s", self.mac)
             policy.save(self.state)
