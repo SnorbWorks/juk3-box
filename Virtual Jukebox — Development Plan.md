@@ -2,7 +2,7 @@
 
 Sep 24, 2026 · @shawn · updated Oct 11, 2026
 
-## Status (Oct 11, 2026)
+## Status (Oct 12, 2026)
 
 The core jukebox works end to end on the bench: an iPhone streams over Bluetooth, the library syncs and shows on the themed UI, a keypad letter + digit plays that slot, songs queue and shuffle, the knob drives the UI and volume, and the button and level bar lights respond, all as boot services. What's left is mostly phone management, the admin side, the remaining LED hardware, and appliance hardening.
 
@@ -13,8 +13,8 @@ The core jukebox works end to end on the bench: an iPhone streams over Bluetooth
 | 2b jb-input | Service done; gestures beyond click built but off, mapping not wired |
 | 2c LED board | Rev E built; buttons and level bar working. Accent strip not built yet, so the all-chains + music tests wait |
 | 3 Phone link test | Answered except Q4's change counter and Q10 (see the table) |
-| 4 Phone source | Playback, picks, sync and reconnect work; pairing, multi-phone and switching not started |
-| 5 Library | Done, except real artist/album (iTunes guesses today) and popular/play counts |
+| 4 Phone source | Playback, picks, sync and reconnect work; the sync is hardened (waits out BlueZ, retries, resets itself when lost) and shares browsing through a lease. Pairing, multi-phone and switching not started |
+| 5 Library | Done, plus playlists from the phone (jb-crawl, Oct 11). Real artist/album/track numbers: storage ready, crawl too slow over Bluetooth -- the route for albums (Shortcut export vs. resumable crawl) is the next decision |
 | 6 Core | Queue, shuffle, picks done; Now Playing gestures and Up Next removal open |
 | 6b Lights | Buttons theme 1 and bar idle + volume fill running; accent scenes, real audio levels and the mood analyzer next |
 | 7 UI platform | Engine, Neon theme, Home sections, overlay done; phone screens, Settings screen, second test theme open |
@@ -251,6 +251,8 @@ Pairing, multiple phones, and switching between them, built on the Phase 3 findi
 - [x] Publish the connected phone's name (`jukebox/jb-source-phone/connected`, retained: `{connected, name, mac}`)
 - [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork. Built for the phone (crawl, `play_item`, play/pause/next/previous, now-playing; artwork comes from jb-library), but not yet as a shared interface other sources plug into
 - [x] Reconnect hardening: retries while BlueZ finishes building the player; library sync waits for browsing to appear; a failed pick re-syncs and replays
+- [x] Sync hardening (Oct 11): waits until the phone lists items, waits out BlueZ "busy" (it fetches whole folders in the background), retries, and resets the browse session with a reconnect when lost or out of retries (never while playing, at most every 5 min)
+- [x] Browse lease: jb-crawl's deep crawl takes turns with the library sync; a pick always wins
 - [ ] Phone button hold gesture opens the pairing/management screen, distinct from a plain click's quick-glance status (see the gesture-to-function mapping in Phase 2b)
 
 Done when: the phone reconnects on boot, two phones switch from the command line, and a track ID on the bus plays that song.
@@ -263,6 +265,8 @@ A per-phone cache so the board appears instantly.
 - [x] Sync: jb-source-phone drives it (a fresh crawl per new BlueZ player, since IDs aren't stable); jb-library stores, prunes songs gone from the phone (skipped if a sync looks short) and republishes only on change
 - [x] Fallback for unstable IDs: the cached board shows instantly; IDs refresh on sync, and a dead ID self-heals on pick
 - [ ] Sort views: title, artist, album, recent, popular. Title, artist/album/genre drill-down, New and Recents work; popular needs play counts; artist/album are iTunes guesses until read from the phone's Artists folder
+- [x] Deep crawl (jb-crawl, separate capped service): Playlists live (a Home module and a board sort). Artists/Albums/Genres work but take ~19 s per folder over Bluetooth, so they're disabled on the Pi (`/etc/juk3-box/jb-crawl.json`). Findings and tools: `tools/avrcp/`
+- [ ] Album Play and real artist/album: decide the route -- an iPhone Shortcut that sends the full library over Wi-Fi (exact, seconds, no Bluetooth browsing) vs. a resumable, incremental Bluetooth crawl (hours the first time; risk of wedging the phone's Bluetooth)
 - [x] Serve pages of 100 slots (the UI pages the snapshot; 10–100 per page, owner setting)
 
 Done when: switching back to a known phone shows its library instantly and every sort view is correct.
