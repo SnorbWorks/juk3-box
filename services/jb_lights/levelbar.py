@@ -9,9 +9,12 @@ to the default theme OVERLAY_HOLD_S after the last change. The starting
 volume is read from PipeWire directly, since jb-audio's state isn't retained
 and startup must not trigger the overlay.
 
-Themes 1-3 still run on fake audio until real levels from PipeWire exist.
+Theme 0 (idle, all white) is the default. Themes 1-3 still run on fake audio
+until real levels from PipeWire exist.
 
-    python -m services.jb_lights.levelbar --theme 3
+    python -m services.jb_lights.levelbar --theme 0
+
+run() is what the jb-lights service starts, in its own thread.
 """
 
 import argparse
@@ -29,6 +32,7 @@ from services.jb_lights.themes import (
     volume_bar_theme2 as theme2,
     volume_bar_theme3 as theme3,
 )
+from services.jb_lights.themes.volume_bar_idle import Idle
 from services.jb_lights.themes.volume_bar_theme4 import VolumeFill
 from services.jb_lights.ws2812_spi import WS2812SPI
 
@@ -70,16 +74,21 @@ class Theme3:
         return _scale(self.analyzer.frame(theme3.fake_spectrum(t), dt), theme3.BRIGHTNESS)
 
 
-THEMES = {1: Theme1, 2: Theme2, 3: Theme3}
+THEMES = {0: Idle, 1: Theme1, 2: Theme2, 3: Theme3}
 
 
 def read_pipewire_volume():
-    out = subprocess.run(
-        ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True,
-        env={**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")},
-    ).stdout
-    parts = out.split()
-    return float(parts[1]), "[MUTED]" in out
+    """(volume, muted) from PipeWire, or (0.0, False) if it can't be read
+    (e.g. PipeWire not up yet at boot); jb-audio's next state fixes it."""
+    try:
+        out = subprocess.run(
+            ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True,
+            env={**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")},
+            timeout=5,
+        ).stdout
+        return float(out.split()[1]), "[MUTED]" in out
+    except (OSError, subprocess.SubprocessError, IndexError, ValueError):
+        return 0.0, False
 
 
 class VolumeWatcher:
@@ -105,27 +114,24 @@ class VolumeWatcher:
             return self.volume, self.muted, self.last_change
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--theme", type=int, choices=sorted(THEMES), default=3)
-    ap.add_argument("--host", default="localhost")
-    args = ap.parse_args()
-
+def run(theme_num=0, host="localhost", stop=None):
+    """Drives the bar until stop (a threading.Event) is set, or Ctrl-C."""
+    stop = stop or threading.Event()
     watcher = VolumeWatcher(*read_pipewire_volume())
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = lambda c, u, f, rc, p=None: c.subscribe("jukebox/jb-audio/state")
     client.on_message = lambda c, u, msg: watcher.on_state(json.loads(msg.payload))
-    client.connect(args.host, 1883)
+    client.connect(host, 1883)
     client.loop_start()
 
-    theme = THEMES[args.theme]()
+    theme = THEMES[theme_num]()
     volume_fill = VolumeFill(*watcher.snapshot()[:2])
     # Themes and the fill scale their own brightness; the driver only enforces the cap.
     bar = WS2812SPI(matrix.NUM_PIXELS, brightness=1.0, max_amps=matrix.MAX_AMPS)
     alpha = 0.0  # 0 = default theme, 1 = volume fill
     start = last = time.monotonic()
     try:
-        while True:
+        while not stop.is_set():
             now = time.monotonic()
             dt, t = now - last, now - start
             last = now
@@ -144,6 +150,14 @@ def main():
         client.loop_stop()
         bar.off()
         bar.close()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--theme", type=int, choices=sorted(THEMES), default=0)
+    ap.add_argument("--host", default="localhost")
+    args = ap.parse_args()
+    run(args.theme, args.host)
 
 
 if __name__ == "__main__":
