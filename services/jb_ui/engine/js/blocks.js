@@ -149,6 +149,7 @@ function fillBoard(el, node, ctx) {
   };
 
   store.watch(el, 'tracks', render);
+  store.watch(el, 'playlists', render);
   store.watch(el, 'board', render);
   store.watch(el, 'entry', showEntry);
 }
@@ -160,6 +161,7 @@ function fillPageInfo(el, node, ctx) {
     bind(el, { sort: v.sortLabel, filter: v.filter?.value || '', page: v.page + 1, pages: v.pages });
   };
   store.watch(el, 'tracks', render);
+  store.watch(el, 'playlists', render);
   store.watch(el, 'board', render);
 }
 

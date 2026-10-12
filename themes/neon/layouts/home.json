@@ -5,6 +5,7 @@
       { "block": "section", "type": "new", "limit": 2 },
       { "block": "section", "type": "featured-artist" },
       { "block": "section", "type": "browse", "sorts": "artist,album,top-100,most-played" },
+      { "block": "section", "type": "playlists", "limit": 12 },
       { "block": "section", "type": "recents", "limit": 18 }
     ]}
   ]

@@ -103,3 +103,58 @@ def test_favorite_marks_the_copy_whose_artist_matches(db):
     lib.set_favorite(db, "Dreams", None, True)   # no artist known: every copy
     lib.set_favorite(db, "Animal", "KATSEYE", False)
     assert favorites(db) == [("Animal", 0, 0), ("Animal", 1, 0), ("Dreams", 0, 1)]
+
+
+# -- deep crawl storage (jb-crawl results) ---------------------------------
+
+def test_deep_playlists_replace_the_previous_set(db):
+    lib.upsert_tracks(db, MAC, crawl("A", "B", "C"))
+    lib.store_deep(db, MAC, "playlists", {"playlists": {"Mix": ["B", "A"], "Old": ["C"]}})
+    lib.store_deep(db, MAC, "playlists", {"playlists": {"Mix": ["C", "B", "A"]}})
+    assert lib.read_playlists(db) == [{"name": "Mix", "titles": ["C", "B", "A"]}]
+
+
+def test_deep_artists_beat_itunes_and_trigger_a_new_cover_lookup(db):
+    lib.upsert_tracks(db, MAC, crawl("Flaws", "Cry"))
+    db.execute("UPDATE tracks SET artist='Calum Scott', enriched=1, popularity_checked=1")
+    lib.store_deep(db, MAC, "artists", {"artists": {"Bastille": ["Flaws"]}})
+    row = db.execute("SELECT COALESCE(phone_artist, artist), enriched, popularity_checked"
+                     " FROM tracks WHERE title='Flaws'").fetchone()
+    assert row == ("Bastille", 0, 0)
+    untouched = db.execute("SELECT phone_artist, enriched FROM tracks WHERE title='Cry'").fetchone()
+    assert untouched == (None, 1)
+    # Storing the same answer again changes nothing and re-triggers nothing.
+    db.execute("UPDATE tracks SET enriched=1")
+    assert lib.store_deep(db, MAC, "artists", {"artists": {"Bastille": ["Flaws"]}}) == 0
+    assert db.execute("SELECT enriched FROM tracks WHERE title='Flaws'").fetchone() == (1,)
+
+
+def test_deep_artists_split_duplicate_titles(db):
+    lib.upsert_tracks(db, MAC, crawl("Home", "Home"))
+    lib.store_deep(db, MAC, "artists", {"artists": {"Edward Sharpe": ["Home"], "Phillip Phillips": ["Home"]}})
+    got = db.execute("SELECT dup, phone_artist FROM tracks ORDER BY dup").fetchall()
+    assert got == [(0, "Edward Sharpe"), (1, "Phillip Phillips")]
+
+
+def test_deep_albums_track_numbers_and_recent_order(db):
+    lib.upsert_tracks(db, MAC, crawl("One", "Two", "Solo"))
+    lib.store_deep(db, MAC, "albums", {"albums": {"Pair": ["One", "Two"], "Single": ["Solo"]},
+                                       "recent": ["Single", "Pair"]})
+    got = db.execute("SELECT title, phone_album, album_track FROM tracks ORDER BY title").fetchall()
+    assert got == [("One", "Pair", 1), ("Solo", "Single", 1), ("Two", "Pair", 2)]
+    assert db.execute("SELECT album, rank FROM album_recent ORDER BY rank").fetchall() == [("Single", 0), ("Pair", 1)]
+
+
+def test_deep_genres_come_through_the_artist(db):
+    lib.upsert_tracks(db, MAC, crawl("Flaws", "Cry"))
+    lib.store_deep(db, MAC, "artists", {"artists": {"Bastille": ["Flaws"]}})
+    db.execute("UPDATE tracks SET artist='Cigarettes After Sex' WHERE title='Cry'")   # iTunes only
+    lib.store_deep(db, MAC, "genres", {"genres": {"Alternative": ["bastille", "Cigarettes After Sex"],
+                                                  "Pop": ["Bastille"]}})
+    got = db.execute("SELECT title, phone_genre FROM tracks ORDER BY title").fetchall()
+    assert got == [("Cry", "Alternative"), ("Flaws", "Alternative")]
+
+
+def test_deep_unknown_branch_is_rejected(db):
+    with pytest.raises(ValueError):
+        lib.store_deep(db, MAC, "podcasts", {})

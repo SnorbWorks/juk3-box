@@ -1,0 +1,28 @@
+[Unit]
+Description=juk3-box jb_crawl (deep library crawl)
+After=network.target mosquitto.service jb-source-phone.service
+Wants=mosquitto.service
+# Restart on failure, but a service that keeps crashing stops trying
+# (5 starts in 10 minutes) instead of looping forever.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/juk3-box
+ExecStart=/opt/juk3-box/venv/bin/python -m services.jb_crawl.main
+Restart=on-failure
+RestartSec=10
+User=admin
+# Hard limits for the supervisor and its crawl worker together (same cgroup):
+# a leak or a runaway loop gets capped or killed by the kernel, never starves
+# the jukebox. The worker is a short-lived child, so normal use stays far below.
+MemoryHigh=96M
+MemoryMax=128M
+CPUQuota=30%
+Nice=10
+IOSchedulingClass=idle
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

@@ -5,7 +5,7 @@
 // collection screen).
 
 import { bind, fromTemplate, slot } from './bind.js';
-import { SORTS, coversFor } from './board.js';
+import { SORTS, coversFor, playlistSongs } from './board.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
@@ -20,6 +20,7 @@ const BROWSE_DESCRIPTIONS = {
   artist: 'Every artist',
   album: 'Every album',
   genre: 'Every genre',
+  playlist: 'Your playlists',
   'top-100': "The world's favorites",
   'most-played': 'Played most here',
 };
@@ -87,6 +88,25 @@ const SECTIONS = {
         open: () => ctx.actions.openFilter('artist', f.artist),
       }];
     },
+  },
+  // The phone's own playlists, one card each; a card opens the board on
+  // that playlist's songs, in the playlist's order.
+  playlists: {
+    title: 'Playlists',
+    kind: 'link',
+    limit: 12,
+    items: (tracks, ctx) => (store.get('playlists') || []).map(p => {
+      const songs = playlistSongs(tracks, p.name);
+      const cover = songs.find(t => t.artwork_url)?.artwork_url;
+      return {
+        label: p.name,
+        description: `${songs.length} song${songs.length === 1 ? '' : 's'}`,
+        image: sized(cover, 600),
+        backdrop: sized(cover, 24),
+        open: () => ctx.actions.openFilter('playlist', p.name),
+      };
+    }).filter(item => item.description !== '0 songs'),
+    all: { limit: Infinity, subtitle: n => `${n} playlist${n === 1 ? '' : 's'}` },
   },
   browse: {
     title: 'Browse',
@@ -169,6 +189,7 @@ export function fillSection(el, node, ctx) {
   };
   store.watch(el, 'tracks', render);
   store.watch(el, 'featured', render);
+  store.watch(el, 'playlists', render);
 }
 
 // A section's See All view: all its cards, in a grid the knob scrolls.
@@ -193,4 +214,5 @@ export function fillCollection(el, node, ctx) {
   };
   store.watch(el, 'collection', render);
   store.watch(el, 'tracks', render);
+  store.watch(el, 'playlists', render);
 }

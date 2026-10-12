@@ -15,13 +15,35 @@ export const SORTS = {
   artist: { label: 'Artists', singular: 'Artist', category: true },
   album: { label: 'Albums', singular: 'Album', category: true },
   genre: { label: 'Genres', singular: 'Genre', category: true },
+  // The phone's own playlists (jb-crawl's deep crawl, via jb-library).
+  playlist: { label: 'Playlists', singular: 'Playlist', category: true },
   'top-100': { label: 'Top 100' },
   'most-played': { label: 'Most Played' },
 };
 
 const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '');
 
+// A playlist's songs in the phone's order. Playlists are stored by title
+// (play paths don't survive reconnects): each title takes the next unused
+// copy of that title, and titles no longer in the library are skipped.
+export function playlistSongs(tracks, name) {
+  const p = (store.get('playlists') || []).find(pl => pl.name === name);
+  if (!p) return [];
+  const used = new Set();
+  return p.titles.map(title => {
+    const t = tracks.find(x => x.title === title && !used.has(x));
+    if (t) used.add(t);
+    return t;
+  }).filter(Boolean);
+}
+
 function songsFor(tracks, sort, filter) {
+  if (filter?.field === 'playlist') return playlistSongs(tracks, filter.value);
+  if (filter?.field === 'album') {
+    // Album order where the phone told us the track numbers (deep crawl).
+    return tracks.filter(t => t.album === filter.value)
+      .sort((a, b) => (a.album_track ?? 1e9) - (b.album_track ?? 1e9) || byTitle(a, b));
+  }
   if (filter) return tracks.filter(t => t[filter.field] === filter.value).sort(byTitle);
   if (sort === 'top-100') {
     // Global popularity (Last.fm listeners, from jb-library).
@@ -36,6 +58,7 @@ function songsFor(tracks, sort, filter) {
 }
 
 function categoriesFor(tracks, field) {
+  if (field === 'playlist') return (store.get('playlists') || []).map(p => p.name);   // the phone's order
   const values = [...new Set(tracks.map(t => t[field]).filter(Boolean))];
   return values.sort((a, b) => a.localeCompare(b));
 }

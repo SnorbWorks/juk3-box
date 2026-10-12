@@ -194,17 +194,18 @@ Each section is a row of cards. There are two kinds of card:
 | `new` | Songs added to the phone since the jukebox first synced it, newest first | Plays the song |
 | `recents` | Songs played for at least 30 seconds, most recent first | Plays the song |
 | `featured-artist` | An artist the engine picks at random, at startup and every 30 minutes | Opens the board filtered to that artist |
-| `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `top-100`, `most-played` | Opens the board in that sort |
+| `playlists` | The phone's own playlists (from the deep crawl), with a cover from their songs. Empty playlists are left out | Opens the board on that playlist's songs, in its order |
+| `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played` | Opens the board in that sort |
 
 A section's settings:
 
 | Setting | Meaning | Default |
 | --- | --- | --- |
 | `type` | Which section (above) | required |
-| `limit` | How many cards | New 2, Featured Artist 1, Browse all its sorts, Recents 18 |
-| `title` | Its heading | New, Featured Artist, Browse, Recents |
+| `limit` | How many cards | New 2, Featured Artist 1, Browse all its sorts, Playlists 12, Recents 18 |
+| `title` | Its heading | New, Featured Artist, Browse, Playlists, Recents |
 | `sorts` | Browse only: which categories, comma-separated, e.g. `"artist,genre,top-100"` | `artist,album,top-100,most-played` |
-| `see-all` | Show See All in its header | `true` (New, Browse, Recents) |
+| `see-all` | Show See All in its header | `true` (New, Browse, Playlists, Recents) |
 | `show` | `false` hides the row | `true` |
 
 See All (`data-stop="see-all"` in `section.html`) opens the `collection` screen, the section's full page, like a WordPress archive: every Browse category, the last 100 played, or every new song, as cards. A theme lays that screen out in `layouts/collection.json`; without one, the engine uses a header plus the cards.
@@ -336,7 +337,7 @@ The engine sets attributes; style them in your CSS.
 | Board slot | `data-empty` | No song in this slot |
 | Board slot | `data-entry` | Its letter has been pressed, waiting for a digit |
 | Now playing | `data-state` | `playing`, `paused` or `stopped` |
-| Section | `data-type` | `new`, `recents`, `featured-artist`, `browse` |
+| Section | `data-type` | `new`, `recents`, `featured-artist`, `browse`, `playlists` |
 | Section | `data-empty` | No cards (e.g. no new songs yet) |
 | `<html>` | `data-screen` | Current screen name |
 | `<html>` | `data-mode` | `select`, or a knob mode such as `volume` |
@@ -375,7 +376,7 @@ The engine wraps each letter's slots in a group, so you can lay the board out by
 
 How the slots are arranged on screen is up to your CSS. Use `--jb-digits` so the board fits whatever page size the owner picks.
 
-In an artist, album or genre sort, the board first lists the artists (albums, genres) themselves, one per slot, with the name as the card's `title`; `<jb-board>` then has `data-category`. Picking one shows its songs.
+In an artist, album, genre or playlist sort, the board first lists the artists (albums, genres, playlists) themselves, one per slot, with the name as the card's `title`; `<jb-board>` then has `data-category`. Picking one shows its songs.
 
 Pressing a letter on the keypad brings up the All Songs screen if it isn't showing, so the guest sees what they're picking.
 

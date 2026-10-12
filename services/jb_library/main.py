@@ -34,7 +34,34 @@ MIGRATIONS = {
     "added_at": "REAL",
     # Marked by the owner from the Now Playing overlay.
     "favorite": "INTEGER DEFAULT 0",
+    # The phone's own artist/album/genre, from jb-crawl's deep crawl (which
+    # folder a title sits in). Shown in preference to the iTunes guesses in
+    # artist/album/genre above, which stay as the fallback.
+    "phone_artist": "TEXT",
+    "phone_album": "TEXT",
+    "phone_genre": "TEXT",
+    "album_track": "INTEGER",   # 1-based position in phone_album
 }
+
+# Deep-crawl tables (jb-crawl). Stored by title, never by play path: play
+# paths die on every reconnect, titles don't.
+DEEP_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS playlists (
+        phone_mac TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        PRIMARY KEY (phone_mac, name, position)
+    );
+    -- The phone's Albums > Recently Added order (0 = newest): the true
+    -- order for the UI's New row.
+    CREATE TABLE IF NOT EXISTS album_recent (
+        phone_mac TEXT NOT NULL,
+        album TEXT NOT NULL,
+        rank INTEGER NOT NULL,
+        PRIMARY KEY (phone_mac, album)
+    );
+"""
 
 
 # A sync smaller than this fraction of the stored library is treated as a
@@ -89,8 +116,91 @@ def get_db() -> sqlite3.Connection:
         )
         conn.execute("DROP TABLE tracks")
         conn.execute("ALTER TABLE tracks_v2 RENAME TO tracks")
+    conn.executescript(DEEP_SCHEMA)
     conn.commit()
     return conn
+
+
+def _assign_by_title(conn, mac: str, title_to_values: dict, column: str) -> int:
+    """Set `column` on each copy of each title. A title can sit under several
+    values (two different songs sharing a name, by different artists): the
+    Nth copy gets the Nth value, the best that title-only data allows.
+    Returns rows changed."""
+    changed = 0
+    for title, values in title_to_values.items():
+        dups = [r[0] for r in conn.execute(
+            "SELECT dup FROM tracks WHERE phone_mac=? AND title=? ORDER BY dup", (mac, title))]
+        for i, dup in enumerate(dups):
+            value = values[min(i, len(values) - 1)]
+            changed += conn.execute(
+                f"UPDATE tracks SET {column}=? WHERE phone_mac=? AND title=? AND dup=?"
+                f" AND {column} IS NOT ?", (value, mac, title, dup, value)).rowcount
+    return changed
+
+
+def store_deep(conn: sqlite3.Connection, mac: str, branch: str, data: dict) -> int:
+    """Stores one branch of jb-crawl's deep crawl for a phone, replacing what
+    that branch stored before. Returns how many rows changed. Raises
+    ValueError on data it can't use (jb-crawl then crawls that branch again)."""
+    changed = 0
+    if branch == "playlists":
+        playlists = data["playlists"]
+        conn.execute("DELETE FROM playlists WHERE phone_mac=?", (mac,))
+        conn.executemany(
+            "INSERT INTO playlists (phone_mac, name, position, title) VALUES (?, ?, ?, ?)",
+            [(mac, name, i, title) for name, titles in playlists.items() for i, title in enumerate(titles)])
+        changed = len(playlists)
+    elif branch == "artists":
+        by_title = {}
+        for artist, titles in data["artists"].items():
+            for t in titles:
+                by_title.setdefault(t, []).append(artist)
+        before = dict(((r[0], r[1]), r[2]) for r in conn.execute(
+            "SELECT title, dup, phone_artist FROM tracks WHERE phone_mac=?", (mac,)))
+        changed = _assign_by_title(conn, mac, by_title, "phone_artist")
+        # A song whose real artist is now known (or changed) gets its cover
+        # and popularity looked up again, by artist + title this time.
+        for title, dup, artist in conn.execute(
+                "SELECT title, dup, phone_artist FROM tracks WHERE phone_mac=?", (mac,)).fetchall():
+            if artist and before.get((title, dup)) != artist:
+                conn.execute("UPDATE tracks SET enriched=0, popularity_checked=0"
+                             " WHERE phone_mac=? AND title=? AND dup=?", (mac, title, dup))
+    elif branch == "albums":
+        by_title, track_no = {}, {}
+        for album, titles in data["albums"].items():
+            for i, t in enumerate(titles, 1):
+                by_title.setdefault(t, []).append(album)
+                track_no.setdefault(t, []).append(i)
+        changed = _assign_by_title(conn, mac, by_title, "phone_album")
+        changed += _assign_by_title(conn, mac, track_no, "album_track")
+        conn.execute("DELETE FROM album_recent WHERE phone_mac=?", (mac,))
+        conn.executemany("INSERT OR IGNORE INTO album_recent (phone_mac, album, rank) VALUES (?, ?, ?)",
+                         [(mac, album, i) for i, album in enumerate(data.get("recent", []))])
+    elif branch == "genres":
+        genre_of = {}
+        for genre, artists in data["genres"].items():
+            for a in artists:
+                genre_of.setdefault(a.casefold(), genre)   # an artist's first genre
+        for title, dup, artist in conn.execute(
+                "SELECT title, dup, COALESCE(phone_artist, artist) FROM tracks WHERE phone_mac=?", (mac,)).fetchall():
+            genre = genre_of.get((artist or "").casefold())
+            if genre:
+                changed += conn.execute(
+                    "UPDATE tracks SET phone_genre=? WHERE phone_mac=? AND title=? AND dup=? AND phone_genre IS NOT ?",
+                    (genre, mac, title, dup, genre)).rowcount
+    else:
+        raise ValueError(f"unknown branch {branch!r}")
+    conn.commit()
+    return changed
+
+
+def read_playlists(conn: sqlite3.Connection) -> list:
+    """[{name, titles}] for every phone, in the phone's playlist order."""
+    out = {}
+    for name, title in conn.execute(
+            "SELECT name, title FROM playlists ORDER BY phone_mac, rowid"):
+        out.setdefault(name, []).append(title)
+    return [{"name": n, "titles": t} for n, t in out.items()]
 
 
 def number_duplicates(tracks: list) -> list:
@@ -140,8 +250,12 @@ def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None, no
     return removed
 
 
-async def lookup_itunes(session: aiohttp.ClientSession, title: str) -> dict | None:
-    params = {"term": title, "media": "music", "entity": "song", "limit": 1}
+async def lookup_itunes(session: aiohttp.ClientSession, title: str, artist: str | None = None) -> dict | None:
+    """Best iTunes match for a song. With the phone's real artist known,
+    searches title + artist and prefers a result by that artist (title-only
+    searches pick a different song with the same name too often)."""
+    term = f"{title} {_search_terms(title, artist)[1]}" if artist else title
+    params = {"term": term, "media": "music", "entity": "song", "limit": 5 if artist else 1}
     async with session.get(
         "https://itunes.apple.com/search", params=params, timeout=aiohttp.ClientTimeout(total=10)
     ) as resp:
@@ -155,6 +269,9 @@ async def lookup_itunes(session: aiohttp.ClientSession, title: str) -> dict | No
         if not results:
             return None
         r = results[0]
+        if artist:
+            lead = _search_terms(title, artist)[1].casefold()
+            r = next((x for x in results if lead in (x.get("artistName") or "").casefold()), r)
         artwork = r.get("artworkUrl100", "")
         if artwork:
             artwork = artwork.replace("100x100bb", "600x600bb")
@@ -210,14 +327,23 @@ class Snapshots:
         self.conn = conn
         self.log = log
         self._last_payload: str | None = None
+        self._last_playlists: str | None = None
 
     async def publish(self) -> None:
-        """Whole library sorted by title -- the UI slices/sorts client-side."""
+        """Whole library sorted by title -- the UI slices/sorts client-side.
+        artist/album/genre are the phone's own (deep crawl) where known, the
+        iTunes guess otherwise. album_track = position in the album;
+        album_rank = the album's place in the phone's Recently Added (0 =
+        newest), for ordering the New row. Also publishes the playlists."""
         rows = self.conn.execute(
             """
-            SELECT title, artist, album, genre, artwork_url, item_path,
-                   lastfm_listeners, play_count, last_played_at, added_at, favorite
-            FROM tracks ORDER BY title COLLATE NOCASE
+            SELECT t.title, COALESCE(t.phone_artist, t.artist), COALESCE(t.phone_album, t.album),
+                   COALESCE(t.phone_genre, t.genre), t.artwork_url, t.item_path,
+                   t.lastfm_listeners, t.play_count, t.last_played_at, t.added_at, t.favorite,
+                   t.album_track, r.rank
+            FROM tracks t
+            LEFT JOIN album_recent r ON r.phone_mac = t.phone_mac AND r.album = t.phone_album
+            ORDER BY t.title COLLATE NOCASE
             """
         ).fetchall()
         tracks = [
@@ -226,16 +352,22 @@ class Snapshots:
                 "artwork_url": r[4], "item_path": r[5],
                 "popularity": r[6], "play_count": r[7] or 0, "last_played_at": r[8],
                 "added_at": r[9], "favorite": bool(r[10]),
+                "album_track": r[11], "album_rank": r[12],
             }
             for r in rows
         ]
         payload = {"tracks": tracks}
         serialized = json.dumps(payload)
-        if serialized == self._last_payload:
-            return
-        await self.bus.publish("jukebox/jb-library/tracks", payload, retain=True)
-        self._last_payload = serialized
-        self.log.info("published snapshot: %d tracks", len(tracks))
+        if serialized != self._last_payload:
+            await self.bus.publish("jukebox/jb-library/tracks", payload, retain=True)
+            self._last_payload = serialized
+            self.log.info("published snapshot: %d tracks", len(tracks))
+        playlists = {"playlists": read_playlists(self.conn)}
+        serialized = json.dumps(playlists)
+        if serialized != self._last_playlists:
+            await self.bus.publish("jukebox/jb-library/playlists", playlists, retain=True)
+            self._last_playlists = serialized
+            self.log.info("published %d playlists", len(playlists["playlists"]))
 
 
 async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:
@@ -260,15 +392,16 @@ async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key:
                 last_publish = time.monotonic()
 
             row = conn.execute(
-                "SELECT phone_mac, title FROM tracks WHERE enriched = 0 LIMIT 1"
+                "SELECT phone_mac, title, dup, phone_artist FROM tracks WHERE enriched = 0 LIMIT 1"
             ).fetchone()
             if row is not None:
-                dirty |= await _enrich_itunes(conn, session, *row, log)
+                mac, title, dup, phone_artist = row
+                dirty |= await _enrich_itunes(conn, session, mac, title, log, dup, phone_artist)
                 await asyncio.sleep(ENRICH_DELAY_S)
                 continue
 
             row = conn.execute(
-                "SELECT phone_mac, title, artist FROM tracks"
+                "SELECT phone_mac, title, COALESCE(phone_artist, artist) FROM tracks"
                 " WHERE enriched = 1 AND popularity_checked = 0 LIMIT 1"
             ).fetchone() if lastfm_key else None
             if row is not None:
@@ -285,28 +418,33 @@ async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key:
             await wake.wait()
 
 
-async def _enrich_itunes(conn, session, mac: str, title: str, log) -> bool:
-    """Returns whether any displayed data changed."""
+async def _enrich_itunes(conn, session, mac: str, title: str, log, dup: int = 0,
+                         phone_artist: str | None = None) -> bool:
+    """Returns whether any displayed data changed. Without the phone's
+    artist, every copy of the title gets the same title-only match (as
+    before); with it, just this copy, matched by artist + title."""
+    where = "phone_mac=:mac AND title=:title" + (" AND dup=:dup" if phone_artist else "")
     try:
-        info = await lookup_itunes(session, title)
+        info = await lookup_itunes(session, title, phone_artist)
     except Exception:
         # A real failure (network, API hiccup) -- leave enriched=0
         # so it gets retried later instead of permanently giving up.
         log.exception("iTunes lookup failed for %r, will retry later", title)
         await asyncio.sleep(ENRICH_RETRY_DELAY_S)
         return False
+    keys = {"mac": mac, "title": title, "dup": dup}
     if info:
         conn.execute(
-            """
+            f"""
             UPDATE tracks SET artist=:artist, album=:album, genre=:genre,
                 artwork_url=:artwork_url, enriched=1
-            WHERE phone_mac=:mac AND title=:title
+            WHERE {where}
             """,
-            {**info, "mac": mac, "title": title},
+            {**info, **keys},
         )
     else:
         # Successful lookup, genuinely no match -- done, not a retry case.
-        conn.execute("UPDATE tracks SET enriched=1 WHERE phone_mac=? AND title=?", (mac, title))
+        conn.execute(f"UPDATE tracks SET enriched=1 WHERE {where}", keys)
     conn.commit()
     return bool(info)
 
@@ -422,6 +560,7 @@ async def main() -> None:
         await bus.subscribe("jukebox/jb-source-phone/connected")
         await bus.subscribe("jukebox/jb-source-phone/now-playing")
         await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
+        await bus.subscribe("jukebox/jb-crawl/result")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -448,6 +587,20 @@ async def main() -> None:
             if topic.endswith("/now-playing"):
                 if plays.on_now_playing(payload):
                     await snapshots.publish()  # once per counted play
+                continue
+            if topic == "jukebox/jb-crawl/result":
+                # One branch of the deep crawl. Confirm it either way, so
+                # jb-crawl only counts the branch done once it's stored.
+                ack = {k: payload.get(k) for k in ("mac", "branch", "cycle")}
+                try:
+                    n = store_deep(conn, payload["mac"], payload["branch"], payload["data"])
+                    log.info("stored deep crawl %s for %s (%d changes)", payload["branch"], payload["mac"], n)
+                    await bus.publish(f"jukebox/{SERVICE_NAME}/deep-ack", {**ack, "ok": True})
+                    await snapshots.publish()
+                    wake.set()   # re-look-up covers for songs whose real artist is now known
+                except Exception:
+                    log.exception("couldn't store deep crawl %s", payload.get("branch"))
+                    await bus.publish(f"jukebox/{SERVICE_NAME}/deep-ack", {**ack, "ok": False})
                 continue
             mac = payload.get("mac")
             tracks = payload.get("tracks")
