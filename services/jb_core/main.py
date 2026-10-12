@@ -4,7 +4,7 @@ import time
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
-from shared.jb_entry.entry import Entry, EntryChanged, Selection
+from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 
 SERVICE_NAME = "jb-core"
 ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
@@ -118,6 +118,8 @@ async def publish_entry_events(bus: Bus, events, log) -> None:
         elif isinstance(e, Selection):
             log.info("keypad selection: %s (slot %d)", e.slot, e.index)
             await bus.publish("jukebox/jb-core/selection", e.payload())
+        elif isinstance(e, Rejected):
+            await bus.publish("jukebox/jb-core/rejected", e.payload())
 
 
 async def entry_timeouts(bus: Bus, entry: Entry, log) -> None:
@@ -144,6 +146,12 @@ async def main() -> None:
             if topic == "jukebox/jb-input/key":
                 # Keypad letters and digits -> slot selections (letter first).
                 await publish_entry_events(bus, entry.key(payload["key"], time.monotonic()), log)
+
+            elif topic == "jukebox/jb-input/gesture":
+                # Reset click cancels a waiting letter (the board mark and the
+                # button lights both follow jukebox/jb-core/entry).
+                if payload.get("control") == "reset" and payload.get("gesture") == "click":
+                    await publish_entry_events(bus, entry.cancel(time.monotonic()), log)
 
             elif topic == "jukebox/jb-library/tracks":
                 q.library_tracks = payload.get("tracks", [])

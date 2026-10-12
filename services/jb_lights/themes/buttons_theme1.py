@@ -2,16 +2,24 @@
 
 The user's design, tested 2026-10-10:
   - idle: every button white at 70%
-  - letter pressed: that letter green, and RESET red (the selection can be
+  - letter waiting: that letter green, and RESET red (the selection can be
     cancelled); another letter moves the green
-  - digit after a letter: the digit goes green too, then a rainbow comet runs
-    A..K, 1..0 twice, then back to all white
-  - digit with no letter first: that digit blinks red (not a valid start)
-  - RESET while a letter is held: cancel, back to all white
-SINGLE/ALBUM stay white and sit out the chase. Presses during the chase or
-the blink are dropped.
+  - selection made: letter and digit blink green together, then a rainbow
+    comet runs A..K, 1..0 twice, then back to all white
+  - digit with no letter first: that digit blinks red, lingering (not a
+    valid start)
+  - cancelled (RESET): RESET blinks red to acknowledge, with the letter still
+    green, then all white
+  - timed out: straight back to all white
+(blink changes 2026-10-11)
+SINGLE/ALBUM stay white and sit out the chase.
 
-Listens to jb-input's jukebox/jb-input/key and jukebox/jb-input/gesture:
+The lights show jb-core's selection state rather than reading keys
+themselves, so they always agree with what jb-core will actually play:
+jukebox/jb-core/entry (retained: idle / partial + letter, and why it went
+idle), /selection (the slot picked) and /rejected (a digit with no letter).
+After an animation, anything that arrived meanwhile is folded into jb-core's
+latest entry state, not replayed.
 
     sudo venv/bin/python -m services.jb_lights.themes.buttons_theme1
 """
@@ -27,6 +35,8 @@ from rpi_ws281x import Color
 
 from services.jb_lights import buttons
 
+TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected")
+
 WHITE = Color(0, 0, 0, int(255 * 0.70))
 GREEN = Color(0, 200, 0, 0)
 RED = Color(200, 0, 0, 0)
@@ -35,14 +45,17 @@ CHASE = [buttons.index(k) for k in buttons.LETTERS + buttons.DIGITS]
 CHASE_CYCLES = 2
 COMET_TAIL = 5
 CHASE_STEP_S = 0.035
-CONFIRM_HOLD_S = 0.6      # both picks green before the chase starts
-BLINKS = 3
+CONFIRM_BLINKS = 3        # letter + digit blink green together before the chase
+CONFIRM_ON_S, CONFIRM_OFF_S = 0.22, 0.15
+REJECT_BLINKS = 5         # a digit with no letter: slow, lingering red blinks
+REJECT_ON_S, REJECT_OFF_S = 0.30, 0.20
+CANCEL_BLINKS = 3         # RESET acknowledges the cancel
+CANCEL_ON_S, CANCEL_OFF_S = 0.15, 0.12
 
 
 class Theme1:
     def __init__(self, strip):
         self.strip = strip
-        self.letter = None
 
     def paint(self, colors=None):
         colors = colors or {}
@@ -50,12 +63,35 @@ class Theme1:
             self.strip.setPixelColor(i, colors.get(i, WHITE))
         self.strip.show()
 
-    def blink_red(self, i):
-        for _ in range(BLINKS):
-            self.paint({i: RED})
-            time.sleep(0.18)
-            self.paint({i: OFF})
-            time.sleep(0.12)
+    def show_entry(self, letter):
+        """Resting look for jb-core's entry state: a waiting letter, or idle."""
+        if letter:
+            self.paint({buttons.index(letter): GREEN, buttons.RESET: RED})
+        else:
+            self.paint()
+
+    def blink(self, base, on, off, times, on_s, off_s):
+        """Alternate base+on and base+off frames."""
+        for _ in range(times):
+            self.paint({**base, **on})
+            time.sleep(on_s)
+            self.paint({**base, **off})
+            time.sleep(off_s)
+
+    def rejected(self, key):
+        i = buttons.index(key)
+        self.blink({}, {i: RED}, {i: OFF}, REJECT_BLINKS, REJECT_ON_S, REJECT_OFF_S)
+
+    def cancelled(self, letter):
+        base = {buttons.index(letter): GREEN} if letter else {}
+        self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF},
+                   CANCEL_BLINKS, CANCEL_ON_S, CANCEL_OFF_S)
+
+    def selected(self, slot):
+        picks = (buttons.index(slot[0]), buttons.index(slot[1]))
+        self.blink({}, {i: GREEN for i in picks}, {i: OFF for i in picks},
+                   CONFIRM_BLINKS, CONFIRM_ON_S, CONFIRM_OFF_S)
+        self.comet()
 
     def comet(self):
         n = len(CHASE)
@@ -70,28 +106,6 @@ class Theme1:
             self.paint(frame)
             time.sleep(CHASE_STEP_S)
 
-    def on_key(self, key, kind):
-        """Returns True when an animation ran (queued presses get dropped)."""
-        if kind == "letter":
-            self.letter = key
-            self.paint({buttons.index(key): GREEN, buttons.RESET: RED})
-            return False
-        if self.letter is None:
-            self.blink_red(buttons.index(key))
-            self.paint()
-            return True
-        self.paint({buttons.index(self.letter): GREEN, buttons.index(key): GREEN})
-        time.sleep(CONFIRM_HOLD_S)
-        self.comet()
-        self.letter = None
-        self.paint()
-        return True
-
-    def on_reset(self):
-        if self.letter is not None:
-            self.letter = None
-            self.paint()
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -100,8 +114,7 @@ def main():
 
     events = queue.Queue()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.on_connect = lambda c, u, f, rc, p=None: (c.subscribe("jukebox/jb-input/key"),
-                                                     c.subscribe("jukebox/jb-input/gesture"))
+    client.on_connect = lambda c, u, f, rc, p=None: [c.subscribe(t) for t in TOPICS]
     client.on_message = lambda c, u, msg: events.put((msg.topic, json.loads(msg.payload)))
     client.connect(args.host, 1883)
     client.loop_start()
@@ -109,15 +122,28 @@ def main():
     strip = buttons.open_strip()
     theme = Theme1(strip)
     theme.paint()
+    letter = None   # jb-core's waiting letter, from the retained entry topic
     try:
         while True:
             topic, p = events.get()
-            if topic.endswith("/key"):
-                if theme.on_key(p["key"], p["kind"]):
-                    while not events.empty():
-                        events.get_nowait()
-            elif p.get("control") == "reset" and p.get("gesture") == "click":
-                theme.on_reset()
+            if topic.endswith("/entry"):
+                was = letter
+                letter = p.get("letter") if p.get("state") == "partial" else None
+                if not (letter is None and was and p.get("reason") == "cancelled"):
+                    theme.show_entry(letter)
+                    continue
+                theme.cancelled(was)
+            elif topic.endswith("/selection"):
+                theme.selected(p["slot"])
+            elif topic.endswith("/rejected"):
+                theme.rejected(p["key"])
+            # Catch up on whatever came in during the animation: keep only
+            # the entry state, then show it.
+            while not events.empty():
+                t, q = events.get_nowait()
+                if t.endswith("/entry"):
+                    letter = q.get("letter") if q.get("state") == "partial" else None
+            theme.show_entry(letter)
     except KeyboardInterrupt:
         pass
     finally:

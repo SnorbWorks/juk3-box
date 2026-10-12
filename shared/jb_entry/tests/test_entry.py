@@ -1,6 +1,6 @@
 import pytest
 
-from shared.jb_entry.entry import Entry, EntryChanged, Selection, slot_index
+from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection, slot_index
 
 
 def changed(state, letter=None, reason=None):
@@ -25,9 +25,9 @@ def test_letter_then_digit_selects():
     assert e.state == "idle"
 
 
-def test_digit_first_is_ignored():
+def test_digit_first_is_rejected():
     e = Entry()
-    assert e.key("7", 0) == []
+    assert e.key("7", 0) == [Rejected("7", "no_letter")]
     assert e.state == "idle"
     # ...and doesn't linger: the next letter + digit is a normal selection.
     e.key("B", 1)
