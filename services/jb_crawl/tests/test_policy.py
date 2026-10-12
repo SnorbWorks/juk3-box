@@ -84,3 +84,14 @@ def test_state_round_trip(tmp_path):
     policy.save(st, path)
     assert policy.load(path) == st
     assert policy.load(tmp_path / "missing.json") == {}
+
+
+def test_cycle_closes_when_branches_are_disabled_after_storing():
+    # Stored playlists with all four enabled, then config narrowed to playlists.
+    st = {}
+    policy.on_connect(st, MAC, ts("2026-10-11 22:00"))
+    policy.branch_done(st, MAC, "playlists", ts("2026-10-11 22:30"))
+    assert st[MAC]["due"]
+    assert policy.settle(st, MAC, ts("2026-10-11 23:00"), ("playlists",))
+    assert policy.on_connect(st, MAC, ts("2026-10-12 00:01"))   # next day starts fresh
+    assert policy.pending(st, MAC, ("playlists",)) == ["playlists"]

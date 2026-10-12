@@ -88,6 +88,7 @@ class Supervisor:
             if p.get("connected"):
                 if p.get("mac") != self.mac or self.connected_since is None:
                     self.mac, self.connected_since = p.get("mac"), time.time()
+                    policy.settle(self.state, self.mac, time.time(), self.enabled)
                     if policy.on_connect(self.state, self.mac, time.time()):
                         self.log.info("first connect today for %s: deep crawl due", self.mac)
                     policy.save(self.state)

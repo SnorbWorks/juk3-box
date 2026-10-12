@@ -62,6 +62,15 @@ def branch_done(state: dict, mac: str, branch: str, now: float, enabled=BRANCHES
     p = phone(state, mac)
     if branch not in p["done"]:
         p["done"].append(branch)
+    return settle(state, mac, now, enabled)
+
+
+def settle(state: dict, mac: str, now: float, enabled=BRANCHES) -> bool:
+    """Close the cycle if nothing enabled is left to crawl -- also when the
+    enabled branches changed after they were stored (otherwise the cycle
+    stays open and the next day's connect never starts a new one).
+    Returns True when it closed the cycle."""
+    p = phone(state, mac)
     if p["due"] and not pending(state, mac, enabled):
         p["due"] = False
         p["last_complete"] = now
