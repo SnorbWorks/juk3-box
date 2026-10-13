@@ -70,7 +70,7 @@ A single Raspberry Pi Pico, presenting as a USB keyboard, reads every control on
 | KY-040 encoders (6-pack) | Bench prototyping | **Bought.** Power from 3.3V; SW needs internal pull-up |
 | Bourns PEC11R | Optional final encoder | Same pinout, drop-in upgrade |
 | 23× SK6812 RGBW pixels | One under each of the 20 keys, Single Play, Album Play and Reset | BTF 10 mm boards, natural white, GRBW, 5V, 60 mA max each. Chain order: K…A, Single, Album, 1…0, Reset |
-| WS2812B strip, 5 m / 300 px | Accent lighting | 5V, GRB, one chip per LED; up to 18A at full white; power injected at 5 points |
+| WS2812B accent chain, 349 px (as built, Oct 12) | Accent lighting | One chain on GPIO13: the **upper panel** (pixels 1-189), then a jumper to the **footlights panel** (190-349), 4 rows of 40 facing down onto the front grill, serpentine, front row first: 190-229 left to right, 230-269 right to left, 270-309 left to right, 310-349 right to left. 5V, GRB; up to ~21A at full white (hence the 6A cap) |
 | LED board (custom PCB, Rev E) | One 5V input, five fused branches, two Adafruit Pixel Shifters for four LED data lines | Stacks on the DAC Pro; see LED and power board |
 | Mean Well LRS-200-5 | 5V supply for the Pi and all LEDs, 5V 40A (200W) | Fanless; set to 5.2–5.25V; one 12 AWG pair to the board |
 | Monitor | Song board display | Size and resolution TBD |
@@ -99,7 +99,7 @@ One board, stacked on the DAC Pro, takes all LED and Pi power in at a single poi
 | --- | --- | --- | --- | --- |
 | Pi | F1 5A | Pi 4 + DAC Pro through header pins 2 and 4 | J1 | 3A |
 | Buttons | F2 1.85A | 23 SK6812 RGBW | J3 (JST-XH 3-pin) | Well under 1A (idle is the white channel at 70%) |
-| Accent strip | F3 8A | WS2812B, 5m / 300 px | J4 (3-pos screw terminal) | 6A limiter |
+| Accent chain | F3 8A | WS2812B, 349 px: upper panel 189 + footlights 160 (as built) | J4 (3-pos screw terminal) | 6A limiter |
 | Level bar | F4 5A | 36 strips × 5 WS2812B = 180 px | J5 (3-pos screw terminal) | 4A limiter |
 | 4th channel | F5 (size to the load) | Spare, WS2812B or SK6812 | J6 (3-pos screw terminal) | TBD |
 | **Total through J2** |  |  |  | **\~14A** |
