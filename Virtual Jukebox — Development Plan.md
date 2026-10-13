@@ -193,7 +193,7 @@ Ideas from a 2026-09-27 design conversation, not yet implemented — captured he
 - **Now Playing** (function owned by Phase 4/6 transport, gesture routed through jb-core's queue so it stays authoritative rather than issuing a raw "next"): click = play/pause toggle; double-click = skip to next track; hold = previous/restart current track.
 - **Volume**: double-click = toggle mute (jb-audio's `toggle_mute` command already exists — see `services/jb_audio/main.py` — nothing currently triggers it), distinct from the existing single-click-to-enter-slider-adjust-mode.
 - **Phone** (Phase 4): click = quick glance at who's connected (already built); hold = open the phone pairing/management screen (pair new, forget old) — keeps the common case uncluttered by the rarer, more deliberate one.
-- **Reset**: click = cancel/back (already the plan's draft default); hold (several seconds) = full reboot, a "something's frozen, get me out" recovery path distinct from the soft-cancel click.
+- **Reset** (built Oct 12, the user's design): click = cancel a waiting letter, or the power menu; **hold 1 s** while a song plays = cancel the song (the next queued plays; nothing queued = stopped and cleared from Now Playing); hold with nothing playing = the power menu; **keep holding to 4 s** during music = cancel, then the menu with playback paused. The menu: Reboot / Shut down / Cancel by the knob, starting on Cancel; Reset click or 20 s = cancel and resume. The Reset light is red while held and blinks twice on the cancel and again when the menu opens.
 - **Up Next — still undecided**: how to remove a specific queued item once it's reachable via Up Next's scroll mode (click vs. hold). Needs a decision before Phase 6/7 implement it.
 
 ## Phase 2c: LED board build
@@ -440,7 +440,7 @@ It behaves like a machine, not a computer.
 - [ ] Phone leaves range mid-song; power cut during a sync
 - [ ] Log rotation; read-only or overlay root filesystem
 - [ ] Cold boot to a working jukebox in under a minute
-- [ ] Reset button hold (several seconds) triggers a full reboot, as a physical recovery path distinct from its click = cancel/back (see the gesture-to-function mapping in Phase 2b)
+- [x] Reset hold opens a Reboot / Shut down menu (4 s during music, 1 s when idle) -- the physical recovery path (Oct 12; jb-core power.py, polkit rule deploy/polkit/)
 
 Done when: 10 pull-the-plug tests pass in a row.
 
