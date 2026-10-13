@@ -191,7 +191,9 @@ class Phone:
         dev = self.system_bus.get_proxy_object(BLUEZ, self.device_path, intro).get_interface("org.bluez.Device1")
         await dev.call_disconnect()
         await asyncio.sleep(3)
-        await asyncio.wait_for(dev.call_connect(), 30)
+        # The audio profile, not a plain Connect: that can go to Bluetooth LE
+        # for an iPhone and hang (see reconnect.connect).
+        await asyncio.wait_for(dev.call_connect_profile(rc.A2DP_SOURCE), 30)
 
     async def play_item(self, item_path: str):
         item_intro = await self.system_bus.introspect(BLUEZ, item_path)

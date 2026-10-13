@@ -113,7 +113,9 @@ class Walker:
         except Exception:
             pass  # already disconnected is fine
         await asyncio.sleep(3)
-        await asyncio.wait_for(dev.call_connect(), CONNECT_TIMEOUT_S)
+        # The audio profile, not a plain Connect: for an iPhone BlueZ can pick
+        # Bluetooth LE and hang (jb_source_phone.reconnect.connect explains).
+        await asyncio.wait_for(dev.call_connect_profile("0000110a-0000-1000-8000-00805f9b34fb"), CONNECT_TIMEOUT_S)
         deadline = asyncio.get_running_loop().time() + READY_TIMEOUT_S
         while True:
             if self.stop.is_set():
