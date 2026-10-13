@@ -2,7 +2,7 @@
 
 Sep 24, 2026 · @shawn · updated Oct 11, 2026
 
-## Status (Oct 12, 2026)
+## Status (Oct 12, 2026, late)
 
 The core jukebox works end to end on the bench: an iPhone streams over Bluetooth, the library syncs and shows on the themed UI, a keypad letter + digit plays that slot, songs queue and shuffle, the knob drives the UI and volume, and the button and level bar lights respond, all as boot services. What's left is mostly phone management, the admin side, the remaining LED hardware, and appliance hardening.
 
@@ -14,10 +14,10 @@ The core jukebox works end to end on the bench: an iPhone streams over Bluetooth
 | 2c LED board | Rev E built; buttons and level bar working. Accent strip not built yet, so the all-chains + music tests wait |
 | 3 Phone link test | Answered except Q4's change counter and Q10 (see the table) |
 | 4 Phone source | Playback, picks, sync and reconnect work; the sync is hardened (waits out BlueZ, retries, resets itself when lost) and shares browsing through a lease. Pairing, multi-phone and switching not started |
-| 5 Library | Done, plus playlists from the phone (jb-crawl, Oct 11). Real artist/album/track numbers: storage ready, crawl too slow over Bluetooth -- the route for albums (Shortcut export vs. resumable crawl) is the next decision |
-| 6 Core | Queue, shuffle, picks done; Now Playing gestures and Up Next removal open |
-| 6b Lights | Buttons theme 1 and bar idle + volume fill running; accent scenes, real audio levels and the mood analyzer next |
-| 7 UI platform | Engine, Neon theme, Home sections, overlay done; phone screens, Settings screen, second test theme open |
+| 5 Library | Done, plus the phone's playlists and its full album list (jb-crawl). An album's songs are fetched when someone first opens it (~50 s, then saved); albums sharing a name are kept apart. Real artists for every song and play counts are still open |
+| 6 Core | Queue, shuffle, picks, album picks (queue the whole album in order), Reset hold (cancel the song; reboot / shut-down menu) done. Up Next removal open |
+| 6b Lights | All three chains run in jb-lights: buttons theme 1 (with Reset feedback), the bar's idle white + volume fill, and the camera-mapped upper panel + footlights as a city at night. EQ and ribbon looks built; real audio levels and the playing look next |
+| 7 UI platform | Engine, Neon theme (now on a still stage photo), Home sections incl. Playlists, an album browser of cover cards, a page-turn swipe, the power menu. Phone screens, Settings screen, second test theme open |
 | 7b Admin, 7c Page builder, 8 Appliance, 9+ | Not started (8: services already restart on failure) |
 
 ## Architecture
