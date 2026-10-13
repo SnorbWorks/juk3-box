@@ -43,3 +43,17 @@ def test_city_footlights_reflect_the_panel_and_trace_the_cars():
     city.cars = []
     bare = city.frame(1.0, 0.0)[accent.foot_index(0, col)]
     assert sum(frame[accent.foot_index(0, col)]) > sum(bare)    # the car lit its spot
+
+
+def test_level_bar_sits_mid_cabinet_left_aligned_with_the_panel():
+    from services.jb_lights import matrix
+    bar, pos = matrix.positions(), accent.positions()
+    assert len(bar) == matrix.NUM_PIXELS and all(p is not None for p in bar)
+    panel_bottom = max(y for _, y in pos[:accent.UPPER])
+    foot_top = min(y for _, y in pos[accent.UPPER:])
+    assert all(panel_bottom < y < foot_top for _, y in bar)
+    xs = [x for x, _ in bar]
+    assert min(xs) < 0.02 and 0.38 < max(xs) < 0.42            # ~9" of the panel's 22"
+    left, right = bar[matrix.index(0, 0)], bar[matrix.index(35, 0)]
+    assert left[0] < right[0]
+    assert bar[matrix.index(0, 4)][1] < bar[matrix.index(0, 0)][1]   # row 0 is the bottom

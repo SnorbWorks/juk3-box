@@ -12,9 +12,10 @@
                    (left/right as seen standing in front of the cabinet)
 
 Effects work in space, not chain order: positions() gives every pixel an
-(x, y) in one picture of the cabinet -- x 0..1 left to right, y from 0 at
-the top of the upper panel to 1 at its bottom, with the footlights' rows
-just below it (front row nearest). part() names which panel a pixel is on.
+(x, y) in one picture of the cabinet -- x 0..1 left to right across the upper
+panel, y from 0 at its top to 1 at its bottom, carrying on down the cabinet
+at the same scale: the level bar (matrix.positions) mid-height, the
+footlights' rows in the lower third (front row nearest). part() names which panel a pixel is on.
 """
 
 import json
@@ -27,11 +28,19 @@ NUM_PIXELS = UPPER + FOOT  # 349
 GPIO = 13
 MAX_AMPS = 6.0  # accent branch software cap (F3 is an 8A PTC)
 
-# Where the footlight rows sit in the shared picture, below the upper panel.
-FOOT_Y0, FOOT_DY = 1.08, 0.04
-
 _MAP = json.loads((Path(__file__).with_name("upper_panel_map.json")).read_text())
 UPPER_ASPECT = _MAP["aspect"]  # width / height of the upper panel's LED extent
+
+# The cabinet in inches (user's measurements, 2026-10-13): ~40" tall, the upper
+# panel ~22" wide at the top, the level bar mid-height (matrix.positions), the
+# footlights lighting the lower third. One inch in the shared picture:
+UPPER_WIDTH_IN = 22.0
+IN_X = 1 / UPPER_WIDTH_IN
+IN_Y = UPPER_ASPECT / UPPER_WIDTH_IN
+
+# Where the footlight rows sit in the shared picture: where their light lands,
+# the lower third of the cabinet (~27" down). Rows are front to back, close together.
+FOOT_Y0, FOOT_DY = 27.0 * IN_Y, 0.04
 
 
 def foot_index(row: int, col: int) -> int:
