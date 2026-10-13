@@ -38,7 +38,28 @@ VIDEO_FEATURES="AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCop
 # even that first paint already fills the display. --force-dark-mode (with
 # the page's color-scheme meta) keeps the instant before first paint dark
 # rather than a white flash.
-exec chromium \
+# Memory: the Pi has 1 GB and Chromium is most of it; when it runs short the
+# kernel kills the page ("Aw, Snap!" / a dead kiosk -- 2026-10-13, scrolling
+# Home with music and the analyzer running). So the binary is launched
+# directly, not via the /usr/bin/chromium wrapper, which adds Raspberry Pi
+# desktop defaults from /etc/chromium.d we don't want here:
+#   --force-renderer-accessibility  builds a screen-reader copy of every page
+#                                    update (memory + CPU, for no one)
+#   --enable-remote-extensions, --load-extension=...  extension machinery
+# The wrapper's useful ones are kept below (ANGLE on GLES, GPU raster, no
+# /dev/shm, no pings). Plus: no extensions or component extensions, no
+# background networking, and one renderer process.
+exec /usr/lib/chromium/chromium \
+  --use-angle=gles \
+  --enable-gpu-rasterization \
+  --disable-dev-shm-usage \
+  --no-default-browser-check \
+  --disable-pings \
+  --media-router=0 \
+  --disable-extensions \
+  --disable-component-extensions-with-background-pages \
+  --disable-background-networking \
+  --renderer-process-limit=1 \
   --kiosk \
   --enable-features="$VIDEO_FEATURES" \
   --app="$KIOSK_URL" \
