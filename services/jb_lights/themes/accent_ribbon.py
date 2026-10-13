@@ -38,9 +38,9 @@ class AccentRibbon:
         self.shimmer = [1.0] * BUCKETS
         self.sparks = {}
 
-    def _step(self):
+    def _step(self, ignite=None):
         self.hot = [h * 0.93 for h in self.hot]
-        if random.random() < 0.04:
+        if (random.random() < 0.04) if ignite is None else ignite:
             c0, w = random.randrange(BUCKETS), random.randint(2, 4)
             for c in range(c0, min(BUCKETS, c0 + w)):
                 self.hot[c] = 1.0
@@ -68,12 +68,15 @@ class AccentRibbon:
         spark = self.sparks.get(i)
         return _lerp(colour, SPARK, spark) if spark else colour
 
-    def frame(self, t):
-        self._step()
+    def frame(self, t, swell=1.0, ignite=None):
+        """swell scales the band's thickness (the music's loudness when
+        playing); ignite=True flares a hot spot (a beat) -- None = at random."""
+        self._step(ignite)
         out = [(0, 0, 0)] * accent.NUM_PIXELS
         for i in range(accent.NUM_PIXELS):
             x, y = self.pos[i]
             centre, half = self._wave(x, t)
+            half *= swell
             if i >= accent.UPPER:                      # footlights: rows 0..3 as the band's height
                 row = (y - accent.FOOT_Y0) / accent.FOOT_DY
                 y = row / (accent.FOOT_ROWS - 1)

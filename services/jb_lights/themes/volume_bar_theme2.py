@@ -54,10 +54,10 @@ class Ribbon:
         self.shimmer = [1.0] * matrix.COLS
         self.sparks = {}  # (col, row) -> remaining intensity
 
-    def _step_state(self):
-        # Hot spots: occasionally ignite a 2-4 column patch; everything decays.
+    def _step_state(self, ignite=None):
+        # Hot spots: occasionally (or on a beat) ignite a 2-4 column patch; everything decays.
         self.hot = [h * 0.93 for h in self.hot]
-        if random.random() < 0.04:
+        if (random.random() < 0.04) if ignite is None else ignite:
             c0, w = random.randrange(matrix.COLS), random.randint(2, 4)
             for c in range(c0, min(matrix.COLS, c0 + w)):
                 self.hot[c] = 1.0
@@ -68,8 +68,10 @@ class Ribbon:
             if self.sparks[key] < 0.05:
                 del self.sparks[key]
 
-    def frame(self, t):
-        self._step_state()
+    def frame(self, t, swell=1.0, ignite=None):
+        """swell scales the band's thickness (the music's loudness when
+        playing); ignite=True flares a hot spot (a beat) -- None = at random."""
+        self._step_state(ignite)
         frame = matrix.blank()
         for c in range(matrix.COLS):
             x = c / (matrix.COLS - 1)
@@ -78,6 +80,7 @@ class Ribbon:
                       + 0.35 * math.sin(2 * math.pi * 2.3 * x + t * 1.7))
             # Breathing half-thickness, varying along the band.
             half = 1.25 + 0.45 * math.sin(t * 0.8 + x * 4.0) + 0.25 * math.sin(t * 2.3 - x * 7.0)
+            half *= swell
             if random.random() < 0.01:  # sparkle just outside the band
                 row = int(round(center + random.choice((-1, 1)) * (half + 0.8)))
                 if 0 <= row < matrix.ROWS:
