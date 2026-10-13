@@ -67,7 +67,8 @@ one (e.g. the mood picks the palette, the beat picks the moment).
  "playing": true,
  "tempo": 124.0, "energy": 0.71, "brightness": 0.58, "busyness": 0.43,
  "mood": {"arousal": 0.74, "warmth": 0.39, "label": "energetic"},
- "identity": {"title": "...", "artist": "...", "album": "..."}}
+ "identity": {"title": "...", "artist": "...", "album": "..."},
+ "tags": ["synthwave", "80s", "electronic"], "genre": "synthwave"}
 ```
 
 | Field | Meaning |
@@ -77,10 +78,12 @@ one (e.g. the mood picks the palette, the beat picks the moment).
 | `energy` | Sustained loudness and density over the last ~10 s |
 | `brightness` | Sustained brightness over the last ~10 s |
 | `busyness` | How often attacks happen (sparse 0 .. busy 1) |
-| `mood.arousal` | Calm 0 .. energetic 1 (from tempo, energy, busyness) |
+| `mood.arousal` | Calm 0 .. energetic 1 (from tempo, energy, busyness; nudged a little by `tags` like "chill" or "party") |
 | `mood.warmth` | Bright/sharp 0 .. warm/dark 1 (from brightness) |
 | `mood.label` | One of `calm`, `moody`, `bright`, `energetic` -- a convenience; prefer the two axes |
 | `identity` | What is playing, when known (from the source's own metadata today; fingerprinting later). Fields may be `null` |
+| `tags` | What listeners call this song (Last.fm top tags, lowercase, up to 6), `[]` until known or when offline. Added in v1 without a version bump: consumers ignoring unknown fields are unaffected |
+| `genre` | The first well-known genre among `tags`, or `null` |
 
 Mood follows the moment: it is a moving average over seconds, not one value
 per song, so a quiet bridge pulls it down and the chorus brings it back.

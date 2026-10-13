@@ -30,6 +30,7 @@ class SlowAnalyzer:
         self.beats = deque(maxlen=n)
         self.tempo = None
         self.tempo_reads = deque(maxlen=TEMPO_READS)
+        self.nudge = 0.0         # listeners' tags lean arousal a little (tags.mood_nudge)
 
     def step(self, fast: dict):
         self.onset_env.append(fast["_flux"])
@@ -78,7 +79,7 @@ class SlowAnalyzer:
         seconds = max(len(self.beats) / self.fps, 1e-6)
         busyness = float(np.clip(sum(self.beats) / seconds / 3.0, 0, 1))   # 3 beats/s = busy
         tempo_n = 0.5 if self.tempo is None else float(np.clip((self.tempo - 70) / 80, 0, 1))
-        arousal = float(np.clip(0.4 * energy + 0.35 * tempo_n + 0.25 * busyness, 0, 1))
+        arousal = float(np.clip(0.4 * energy + 0.35 * tempo_n + 0.25 * busyness + self.nudge, 0, 1))
         warmth = float(np.clip(1 - brightness, 0, 1))
         if arousal < 0.5:
             label = "moody" if warmth >= 0.5 else "calm"

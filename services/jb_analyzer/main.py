@@ -9,11 +9,13 @@ itself: lights, screens and logs subscribe and decide what to do.
 Capture: a PipeWire monitor of the default output (what the DAC plays) via
 pw-record -- a digital copy of the decoded audio, read without disturbing
 playback. Identity comes from the phone's own metadata for now
-(jukebox/jb-source-phone/now-playing); fingerprinting comes later.
+(jukebox/jb-source-phone/now-playing); listeners' tags and genre from Last.fm
+(tags.py) when a lastfm_key is configured. Fingerprinting comes later, if a
+source without metadata ever needs it.
 
 Stages built here: 0 capture, 1 fast layer (dsp.py), 2 signal-level events
-(levels.py), 3 build/drop (trajectory.py), 4 local mood (slow.py), 6 the
-published stream. See docs/Audio Analyzer — Architecture.md.
+(levels.py), 3 build/drop (trajectory.py), 4 local mood (slow.py), 5 tags
+(tags.py; no fingerprinting), 6 the published stream. See docs/Audio Analyzer — Architecture.md.
 """
 
 import asyncio
@@ -27,6 +29,7 @@ from shared.bus import Bus
 from services.jb_analyzer.dsp import FastAnalyzer
 from services.jb_analyzer.levels import Levels
 from services.jb_analyzer.slow import SlowAnalyzer
+from services.jb_analyzer.tags import TagLookup, genre_of, mood_nudge
 from services.jb_analyzer.trajectory import Trajectory
 
 SERVICE_NAME = "jb-analyzer"
@@ -56,6 +59,11 @@ async def main() -> None:
     fps = fast.fps
     levels, traj, slow = Levels(fps), Trajectory(fps), SlowAnalyzer(fps)
     identity = {"title": None, "artist": None, "album": None}
+    song = {"tags": [], "genre": None}
+    lookups = set()                                    # in-flight tag lookups (kept referenced)
+    lookup = TagLookup(cfg.get("lastfm_key"))
+    if not lookup.key:
+        log.info("no lastfm_key configured; songs go untagged")
 
     async with Bus(SERVICE_NAME, host=cfg["mqtt_host"], port=cfg["mqtt_port"]) as bus:
         log.info("connected to bus at %s:%s", cfg["mqtt_host"], cfg["mqtt_port"])
@@ -66,7 +74,7 @@ async def main() -> None:
 
         async def publish_slow(force=False):
             state = {"v": V, "t": round(time.monotonic(), 3), **slow.state(levels.sounding),
-                     "identity": dict(identity)}
+                     "identity": dict(identity), **song}
             comparable = {k: v for k, v in state.items() if k != "t"}
             if force or comparable != last_slow:
                 last_slow.clear()
@@ -80,7 +88,21 @@ async def main() -> None:
                     slow.reset()                       # a new song: its own tempo
                 if new != identity:
                     identity.update(new)
+                    song.update(tags=[], genre=None)
+                    slow.nudge = 0.0
                     await publish_slow(force=True)
+                    t = asyncio.create_task(tag_song(dict(new)))
+                    lookups.add(t)
+                    t.add_done_callback(lookups.discard)
+
+        async def tag_song(which):
+            tags = await lookup.lookup(which["artist"], which["title"])
+            if tags is None or which != identity:
+                return                                 # unknown, or the song already changed
+            song.update(tags=tags, genre=genre_of(tags))
+            slow.nudge = mood_nudge(tags)
+            log.info("tags for %s - %s: %s", which["artist"], which["title"], ", ".join(tags) or "none")
+            await publish_slow(force=True)
 
         async def analyse():
             frame_bytes = HOP * CHANNELS * 4
