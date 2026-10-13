@@ -296,8 +296,12 @@ async def main() -> None:
                     # iOS auto-advanced to on its own (that's exactly the
                     # "iOS's queue is never used" principle this whole
                     # service exists to enforce).
-                    log.info("queue empty, pausing instead of letting iOS auto-advance run")
-                    await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+                    # "stop", not "pause": the song iOS jumped to was never
+                    # chosen, so it's paused AND cleared -- the screen shows
+                    # nothing playing, as when Reset cancels the last song.
+                    log.info("queue empty, stopping instead of letting iOS auto-advance run")
+                    await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
+                    q.playing = False
                     q.expected_title = None
                 await publish_queue(bus, q)
 
