@@ -143,6 +143,8 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
     for act in actions:
         if act == "skip":
             q.expected_title = None
+            # The button lights blink Reset twice for this.
+            await bus.publish("jukebox/jb-core/skipped", {"by": "reset"})
             next_track = q.pop_next()
             if next_track:
                 log.info("Reset held: cancelling the song; next: %s", next_track["title"])

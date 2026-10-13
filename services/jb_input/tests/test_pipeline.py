@@ -74,5 +74,7 @@ def test_message_shapes():
     assert message_for(Action("x.y", 3, "knob", "turn", 2.0), False) == (
         "jukebox/jb-input/action", {"action": "x.y", "value": 3, "control": "knob", "gesture": "turn"})
     assert message_for(ControlEvent("key.B", "down", 1.0), False) is None
+    assert message_for(ControlEvent("reset", "down", 1.0), False) == (   # Reset: always (the lights)
+        "jukebox/jb-input/raw", {"control": "reset", "state": "down"})
     assert message_for(ControlEvent("key.B", "down", 1.0), True) == (
         "jukebox/jb-input/raw", {"control": "key.B", "state": "down"})

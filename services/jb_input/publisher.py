@@ -7,7 +7,9 @@ namespace and style as the other jb-* services.
                              "steps": n (turn/push_turn only)}
   jukebox/jb-input/action   {"action", "value", "control", "gesture"} -- only for gestures
                             given an action in config (none are, for now)
-  jukebox/jb-input/raw      {"control": "key.B", "state": "down"|"up"} -- only if publish_raw
+  jukebox/jb-input/raw      {"control": "key.B", "state": "down"|"up"} -- only if publish_raw,
+                            except Reset's, always sent: the button lights show
+                            it pressed (red while held)
   jukebox/jb-input/heartbeat  (from the shared Bus, like every service)
 """
 
@@ -15,6 +17,8 @@ from services.jb_input.config import SERVICE_NAME
 from services.jb_input.events import Action, ControlEvent, FaultChange, Gesture, KeyPress
 
 PREFIX = f"jukebox/{SERVICE_NAME}"
+# Controls whose press/release always go out on /raw (the lights need them).
+ALWAYS_RAW = {"reset"}
 
 
 def topic(name: str) -> str:
@@ -38,7 +42,7 @@ def message_for(event, publish_raw: bool):
     if isinstance(event, Action):
         return topic("action"), {"action": event.action, "value": event.value,
                                  "control": event.control, "gesture": event.gesture}
-    if isinstance(event, ControlEvent) and publish_raw:
+    if isinstance(event, ControlEvent) and (publish_raw or event.control in ALWAYS_RAW):
         return topic("raw"), {"control": event.control, "state": event.state}
     return None
 

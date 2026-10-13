@@ -35,7 +35,8 @@ from rpi_ws281x import Color
 
 from services.jb_lights import buttons
 
-TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected")
+TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected",
+          "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw")
 
 WHITE = Color(0, 0, 0, int(255 * 0.70))
 GREEN = Color(0, 200, 0, 0)
@@ -50,12 +51,15 @@ CONFIRM_ON_S, CONFIRM_OFF_S = 0.22, 0.15
 REJECT_BLINKS = 5         # a digit with no letter: slow, lingering red blinks
 REJECT_ON_S, REJECT_OFF_S = 0.30, 0.20
 CANCEL_BLINKS = 3         # RESET acknowledges the cancel
+RESET_BLINKS = 2          # holding Reset: the song cancelled, and again when the power menu opens
+RESET_ON_S, RESET_OFF_S = 0.18, 0.14
 CANCEL_ON_S, CANCEL_OFF_S = 0.15, 0.12
 
 
 class Theme1:
     def __init__(self, strip):
         self.strip = strip
+        self.reset_held = False
 
     def paint(self, colors=None):
         colors = colors or {}
@@ -64,11 +68,18 @@ class Theme1:
         self.strip.show()
 
     def show_entry(self, letter):
-        """Resting look for jb-core's entry state: a waiting letter, or idle."""
-        if letter:
-            self.paint({buttons.index(letter): GREEN, buttons.RESET: RED})
-        else:
-            self.paint()
+        """Resting look for jb-core's entry state: a waiting letter, or idle;
+        RESET red while it's held down."""
+        colors = {buttons.index(letter): GREEN, buttons.RESET: RED} if letter else {}
+        if self.reset_held:
+            colors[buttons.RESET] = RED
+        self.paint(colors)
+
+    def reset_blink(self, letter):
+        """RESET blinks red twice: the song was cancelled, or the power menu
+        opened (holding Reset)."""
+        base = {buttons.index(letter): GREEN} if letter else {}
+        self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF}, RESET_BLINKS, RESET_ON_S, RESET_OFF_S)
 
     def blink(self, base, on, off, times, on_s, off_s):
         """Alternate base+on and base+off frames."""
@@ -123,26 +134,52 @@ def main():
     theme = Theme1(strip)
     theme.paint()
     letter = None   # jb-core's waiting letter, from the retained entry topic
+    menu = False    # the power menu is open (jukebox/jb-core/power)
+
+    def follow_state(topic, p):
+        """State-only updates (no animation): returns True if handled."""
+        nonlocal letter
+        if topic.endswith("/raw"):
+            if p.get("control") == "reset":
+                theme.reset_held = p.get("state") == "down"
+            return True
+        if topic.endswith("/entry"):
+            letter = p.get("letter") if p.get("state") == "partial" else None
+            return True
+        return False
+
     try:
         while True:
             topic, p = events.get()
             if topic.endswith("/entry"):
                 was = letter
-                letter = p.get("letter") if p.get("state") == "partial" else None
+                follow_state(topic, p)
                 if not (letter is None and was and p.get("reason") == "cancelled"):
                     theme.show_entry(letter)
                     continue
                 theme.cancelled(was)
+            elif topic.endswith("/raw"):
+                follow_state(topic, p)
+                theme.show_entry(letter)
+                continue
+            elif topic.endswith("/power"):
+                opened = p.get("state") == "menu" and not menu
+                menu = p.get("state") == "menu"
+                if not opened:
+                    continue
+                theme.reset_blink(letter)
+            elif topic.endswith("/skipped"):
+                theme.reset_blink(letter)
             elif topic.endswith("/selection"):
                 theme.selected(p["slot"])
             elif topic.endswith("/rejected"):
                 theme.rejected(p["key"])
-            # Catch up on whatever came in during the animation: keep only
-            # the entry state, then show it.
+            # Catch up on whatever came in during the animation: keep the
+            # state (entry, Reset held, menu), not the animations, then show it.
             while not events.empty():
                 t, q = events.get_nowait()
-                if t.endswith("/entry"):
-                    letter = q.get("letter") if q.get("state") == "partial" else None
+                if not follow_state(t, q) and t.endswith("/power"):
+                    menu = q.get("state") == "menu"
             theme.show_entry(letter)
     except KeyboardInterrupt:
         pass
