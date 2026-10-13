@@ -62,14 +62,17 @@ DEEP_SCHEMA = """
         PRIMARY KEY (phone_mac, album)
     );
     -- Every album on the phone (names only, the phone's order): what the
-    -- board's Albums view lists. Contents come later, on demand.
+    -- board's Albums view lists. Contents come later, on demand. Keyed by
+    -- position: names repeat (7 pairs on the user's phone, e.g. two
+    -- "Greatest Hits"), and read_albums tells them apart.
     CREATE TABLE IF NOT EXISTS album_index (
         phone_mac TEXT NOT NULL,
-        name TEXT NOT NULL,
         position INTEGER NOT NULL,
-        PRIMARY KEY (phone_mac, name)
+        name TEXT NOT NULL,
+        PRIMARY KEY (phone_mac, position)
     );
-    -- An album's songs, fetched when someone first opens it. uid is the
+    -- An album's songs, fetched when someone first opens it, under its key
+    -- (read_albums: the name, or "Name (2)" for a repeated one). uid is the
     -- phone's ID for the song, the same as in Songs, so it matches the
     -- end of the library's play path exactly (unlike titles, which repeat).
     CREATE TABLE IF NOT EXISTS album_tracks (
@@ -135,6 +138,11 @@ def get_db() -> sqlite3.Connection:
         )
         conn.execute("DROP TABLE tracks")
         conn.execute("ALTER TABLE tracks_v2 RENAME TO tracks")
+    # album_index used to be keyed by name, which merged albums sharing one;
+    # rebuild it (it's refilled by jb-crawl's daily album list).
+    pk = {r[1]: r[5] for r in conn.execute("PRAGMA table_info(album_index)")}
+    if pk.get("name"):
+        conn.execute("DROP TABLE album_index")
     conn.executescript(DEEP_SCHEMA)
     conn.commit()
     return conn
@@ -198,8 +206,8 @@ def store_deep(conn: sqlite3.Connection, mac: str, branch: str, data: dict) -> i
     elif branch == "album_index":
         names = data["albums"]
         conn.execute("DELETE FROM album_index WHERE phone_mac=?", (mac,))
-        conn.executemany("INSERT OR IGNORE INTO album_index (phone_mac, name, position) VALUES (?, ?, ?)",
-                         [(mac, n, i) for i, n in enumerate(names)])
+        conn.executemany("INSERT INTO album_index (phone_mac, position, name) VALUES (?, ?, ?)",
+                         [(mac, i, n) for i, n in enumerate(names)])
         conn.execute("DELETE FROM album_recent WHERE phone_mac=?", (mac,))
         conn.executemany("INSERT OR IGNORE INTO album_recent (phone_mac, album, rank) VALUES (?, ?, ?)",
                          [(mac, a, i) for i, a in enumerate(data.get("recent", []))])
@@ -233,12 +241,24 @@ def store_deep(conn: sqlite3.Connection, mac: str, branch: str, data: dict) -> i
     return changed
 
 
+def album_key(title: str, nth: int) -> str:
+    """An album's key: its name, or "Name (2)" for the second album with
+    that name (nth counts from 0), so albums sharing a name stay apart."""
+    return title if nth == 0 else f"{title} ({nth + 1})"
+
+
 def read_albums(conn: sqlite3.Connection) -> dict:
-    """{albums: [{name, rank}] in the phone's order, contents: {name: [{title,
-    uid}] in album order}} -- contents only for albums opened so far."""
-    albums = [{"name": n, "rank": r} for n, r in conn.execute(
-        "SELECT i.name, r.rank FROM album_index i LEFT JOIN album_recent r"
-        " ON r.phone_mac = i.phone_mac AND r.album = i.name ORDER BY i.phone_mac, i.position")]
+    """{albums: [{name (the key), title, nth, rank}] in the phone's order,
+    contents: {key: [{title, uid}] in album order}} -- contents only for
+    albums opened so far. nth = which album of that title it is (0 = first),
+    what jb-crawl needs to open the right one."""
+    albums, seen = [], {}
+    for title, rank in conn.execute(
+            "SELECT i.name, r.rank FROM album_index i LEFT JOIN album_recent r"
+            " ON r.phone_mac = i.phone_mac AND r.album = i.name ORDER BY i.phone_mac, i.position"):
+        nth = seen.get(title, 0)
+        seen[title] = nth + 1
+        albums.append({"name": album_key(title, nth), "title": title, "nth": nth, "rank": rank})
     contents = {}
     for album, title, uid in conn.execute(
             "SELECT album, title, uid FROM album_tracks ORDER BY phone_mac, album, position"):

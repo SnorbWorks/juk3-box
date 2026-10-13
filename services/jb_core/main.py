@@ -317,6 +317,21 @@ async def main() -> None:
                             await try_autoplay(bus, q, log)
                         else:
                             await publish_queue(bus, q)
+                elif action == "select_album":
+                    # Picking an album queues its songs in album order (the
+                    # user's design); like a single pick, they start now if
+                    # nothing is playing, else wait their turn.
+                    tracks = [t for t in payload.get("tracks") or [] if t]
+                    if tracks:
+                        q.manual.extend(tracks)
+                        log.info("queued album %r: %d songs", payload.get("album"), len(tracks))
+                        if not q.phone_connected:
+                            await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
+                            await publish_queue(bus, q)
+                        elif not q.playing:
+                            await try_autoplay(bus, q, log)
+                        else:
+                            await publish_queue(bus, q)
                 elif action == "shuffle_on":
                     q.shuffle_active = True
                     q.refill_shuffle()

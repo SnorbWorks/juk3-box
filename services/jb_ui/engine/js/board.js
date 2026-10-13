@@ -53,12 +53,15 @@ export function albumSongs(tracks, name) {
 }
 
 // Ask for an album's songs if they aren't known yet (jb-crawl fetches them).
+// name is the album's key; title + nth tell jb-crawl which folder it is
+// (names repeat: the second "Greatest Hits" is "Greatest Hits (2)").
 function requestAlbum(name) {
   if (!phoneAlbums().length || store.get('albums')?.contents?.[name]) return;
   const st = store.get('albumFetch');
   if (st?.name === name && (st.state === 'loading' || st.state === 'waiting')) return;
+  const a = phoneAlbums().find(x => x.name === name);
   store.set('albumFetch', { name, state: 'loading' });
-  publish('jukebox/jb-crawl/cmd', { action: 'album', name });
+  publish('jukebox/jb-crawl/cmd', { action: 'album', name, title: a?.title ?? name, nth: a?.nth ?? 0 });
 }
 
 function songsFor(tracks, sort, filter) {
@@ -170,7 +173,11 @@ export function pick(index) {
   if (!slot?.item) return null;
   if (slot.item.category !== undefined) {
     state = { sort: state.sort, filter: { field: state.sort, value: slot.item.category }, page: 0, categoryPage: state.page };
-    if (state.sort === 'album') requestAlbum(slot.item.category);
+    if (state.sort === 'album') {
+      // Picking an album plays it: its songs are queued once known (main.js).
+      requestAlbum(slot.item.category);
+      store.set('albumPlay', { name: slot.item.category, at: Date.now() });
+    }
     changed();
     return null;
   }

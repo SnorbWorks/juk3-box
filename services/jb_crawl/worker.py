@@ -340,21 +340,23 @@ class Walker:
         await self.up()
         return {"albums": names, "recent": recent}
 
-    async def album(self, name: str) -> dict:
+    async def album(self, name: str, nth: int = 0, key: str | None = None) -> dict:
         """From My Music: one album's songs, in album order, with each song's
         phone ID -- the same ID as in Songs, so it maps exactly onto the
-        library's play path (seen 2026-10-12)."""
+        library's play path (seen 2026-10-12). nth picks which album of that
+        name (they can repeat); the result is stored under `key`."""
         await self.child("Albums")
         listing = await self.ls()
         emit({"progress": f"albums listed ({len(listing)})"})
-        path = next((p for p, n, f in listing if f and n == name), None)
+        matches = [p for p, n, f in listing if f and n == name]
+        path = matches[nth] if nth < len(matches) else None
         tracks = None
         if path:
             await self.down(path, name)
             tracks = [{"title": n, "uid": p.rsplit("/item", 1)[-1]} for p, n, f in await self.ls() if not f]
             await self.up()
         await self.up()
-        return {"name": name, "tracks": tracks}
+        return {"name": key or name, "tracks": tracks}
 
     async def back_to_songs(self):
         while len(self.stack) > 2:
@@ -378,7 +380,7 @@ class Walker:
         await self.new_session()
 
 
-async def run(mac: str, branches: list, album: str | None = None):
+async def run(mac: str, branches: list, album: str | None = None, nth: int = 0, key: str | None = None):
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
     w = Walker(bus, mac)
     loop = asyncio.get_running_loop()
@@ -387,7 +389,7 @@ async def run(mac: str, branches: list, album: str | None = None):
         if album is not None:
             # On demand (someone opened an album): no reconnect, back to Songs after.
             await w.to_my_music()
-            emit({"album": await w.album(album)})
+            emit({"album": await w.album(album, nth, key)})
             await w.back_to_songs()
             emit({"done": True})
             return
@@ -425,9 +427,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mac", required=True)
     ap.add_argument("--branches", default="", help="comma list: album_index,playlists,artists,albums,genres")
-    ap.add_argument("--album", help="fetch just this album's songs (on demand)")
+    ap.add_argument("--album", help="fetch just this album's songs (on demand): its title")
+    ap.add_argument("--nth", type=int, default=0, help="which album of that title (0 = first)")
+    ap.add_argument("--key", help="the album's key to store it under (default: the title)")
     args = ap.parse_args()
-    asyncio.run(run(args.mac, [b for b in args.branches.split(",") if b], args.album))
+    asyncio.run(run(args.mac, [b for b in args.branches.split(",") if b], args.album, args.nth, args.key))
 
 
 if __name__ == "__main__":

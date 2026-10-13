@@ -1,7 +1,7 @@
 // JUKE.BOX UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { openFilter, pick, setSort, upLevel } from './board.js';
+import { albumSongs, openFilter, pick, setSort, upLevel } from './board.js';
 import { connectBus, publish } from './bus.js';
 import { startFeatured } from './featured.js';
 import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, rotate } from './focus.js';
@@ -198,6 +198,28 @@ function openPower() {
   focusKey('popup:power:cancel');
 }
 
+// Picking an album plays it (the user's design): once its songs are known --
+// at once if they were fetched before, else when jb-crawl's fetch lands --
+// they go to jb-core as one pick, in album order. A failed fetch drops it.
+function watchAlbumPlay() {
+  const play = () => {
+    const want = store.get('albumPlay');
+    if (!want) return;
+    const fetch = store.get('albumFetch');
+    if (fetch?.name === want.name && fetch.state === 'failed') {
+      store.set('albumPlay', null);
+      return;
+    }
+    const songs = albumSongs(store.get('tracks') || [], want.name);
+    if (!songs) return;                     // not fetched yet
+    store.set('albumPlay', null);
+    if (songs.length) publish('jukebox/jb-core/cmd', { action: 'select_album', album: want.name, tracks: songs });
+  };
+  store.watch(html, 'albumPlay', play);
+  store.watch(html, 'albums', play);
+  store.watch(html, 'albumFetch', play);
+}
+
 function watchPower() {
   store.watch(html, 'power', p => {
     if (p?.state === 'menu') {
@@ -304,6 +326,7 @@ async function start() {
   initPopups(theme.blocks);
   watchSystem();
   watchPower();
+  watchAlbumPlay();
   watchIdle();
   startFeatured();
   document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context()));

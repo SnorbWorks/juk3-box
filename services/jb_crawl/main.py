@@ -61,7 +61,7 @@ class Supervisor:
     def __init__(self, bus: Bus, cfg: dict, log):
         self.bus, self.log = bus, log
         self.enabled = tuple(b for b in cfg.get("branches", DEFAULT_BRANCHES) if b in policy.BRANCHES)
-        self.album_queue = []        # album names someone opened, oldest first
+        self.album_queue = []        # albums someone opened ({key, title, nth}), oldest first
         self.wake = asyncio.Event()  # an album request shouldn't wait for the next tick
         self.state = policy.load()
         self.mac = None
@@ -118,9 +118,12 @@ class Supervisor:
         elif topic.endswith(f"{SERVICE_NAME}/cmd") and p.get("action") == "album" and p.get("name"):
             # Someone opened an album whose songs aren't known yet: fetch
             # just that one, now (no idle wait -- a person is waiting).
-            if p["name"] not in self.album_queue:
-                self.album_queue.append(p["name"])
-                await self.album_state(p["name"], "loading")
+            # name = the album's key; title + nth say which folder it is
+            # (names repeat), defaulting to the key as the title.
+            req = {"key": p["name"], "title": p.get("title") or p["name"], "nth": int(p.get("nth") or 0)}
+            if all(r["key"] != req["key"] for r in self.album_queue):
+                self.album_queue.append(req)
+                await self.album_state(req["key"], "loading")
             self.wake.set()
 
     async def album_state(self, name: str, state: str, reason: str | None = None):
@@ -146,13 +149,15 @@ class Supervisor:
         """On-demand album fetches, one worker per album, before any metered
         crawl. A pick still revokes the lease and stops one mid-way."""
         while self.album_queue and self.mac and not self.worker:
-            name = self.album_queue[0]
+            req = self.album_queue[0]
+            name = req["key"]
             if not await self.take_lease():
                 await self.album_state(name, "waiting", f"phone busy: {self.lease.get('reason')}")
                 return  # try again on the next tick
             ok = False
             try:
-                ok = await self.crawl(["--album", name], label=f"album {name!r}")
+                ok = await self.crawl(["--album", req["title"], "--nth", str(req["nth"]), "--key", name],
+                                      label=f"album {name!r}")
             finally:
                 await self.bus.publish("jukebox/jb-source-phone/cmd", {"action": "lease_release", "holder": HOLDER})
             self.album_queue.pop(0)

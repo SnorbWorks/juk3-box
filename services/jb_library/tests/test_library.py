@@ -164,8 +164,9 @@ def test_album_index_lists_every_album_with_its_recent_rank(db):
     lib.store_deep(db, MAC, "album_index", {"albums": ["Abbey Road", "Dawn FM", "Mezzanine"],
                                             "recent": ["Dawn FM", "Abbey Road"]})
     got = lib.read_albums(db)
-    assert got["albums"] == [{"name": "Abbey Road", "rank": 1}, {"name": "Dawn FM", "rank": 0},
-                             {"name": "Mezzanine", "rank": None}]
+    assert got["albums"] == [{"name": "Abbey Road", "title": "Abbey Road", "nth": 0, "rank": 1},
+                             {"name": "Dawn FM", "title": "Dawn FM", "nth": 0, "rank": 0},
+                             {"name": "Mezzanine", "title": "Mezzanine", "nth": 0, "rank": None}]
     assert got["contents"] == {}
 
 
@@ -180,3 +181,21 @@ def test_opened_album_matches_songs_by_phone_id_not_title(db):
     assert got == [("Home", 0, None, None), ("Home", 1, "Live", 2), ("Intro", 0, "Live", 1)]
     assert lib.read_albums(db)["contents"] == {"Live": [{"title": "Intro", "uid": "333"},
                                                          {"title": "Home", "uid": "222"}]}
+
+
+def test_albums_sharing_a_name_stay_apart(db):
+    lib.store_deep(db, MAC, "album_index", {"albums": ["Greatest Hits", "Abbey Road", "Greatest Hits"], "recent": []})
+    got = [(a["name"], a["title"], a["nth"]) for a in lib.read_albums(db)["albums"]]
+    assert got == [("Greatest Hits", "Greatest Hits", 0), ("Abbey Road", "Abbey Road", 0),
+                   ("Greatest Hits (2)", "Greatest Hits", 1)]
+
+
+def test_old_name_keyed_album_index_is_rebuilt(tmp_path, monkeypatch):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE album_index (phone_mac TEXT, name TEXT, position INTEGER, PRIMARY KEY (phone_mac, name))")
+    old.commit(); old.close()
+    monkeypatch.setattr(lib, "DB_PATH", str(path))
+    conn = lib.get_db()
+    pk = {r[1]: r[5] for r in conn.execute("PRAGMA table_info(album_index)")}
+    assert pk["position"] and not pk["name"]
