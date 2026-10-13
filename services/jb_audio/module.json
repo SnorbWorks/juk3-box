@@ -1,0 +1,12 @@
+{
+  "contract": 1,
+  "id": "jb-audio",
+  "name": "Audio output",
+  "description": "Owns the volume of the sound output.",
+  "version": "1.0.0",
+  "roles": ["output"],
+  "publishes": ["jukebox/jb-audio/state"],
+  "subscribes": ["jukebox/jb-audio/cmd"],
+  "commands": ["volume_delta", "mute", "unmute", "toggle_mute"],
+  "essential": true
+}

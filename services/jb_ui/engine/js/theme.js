@@ -1,7 +1,8 @@
 // Applies a theme's manifest: styles, fonts, background and sizing.
 
 export async function fetchTheme() {
-  const res = await fetch('/api/theme');
+  // The admin preview passes its own query (which theme, drafts) through.
+  const res = await fetch('/api/theme' + location.search);
   if (!res.ok) throw new Error(`/api/theme returned ${res.status}`);
   return res.json();
 }

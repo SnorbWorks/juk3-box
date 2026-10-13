@@ -7,6 +7,12 @@ import { libraryIndex } from './tracks.js';
 
 let client = null;
 
+// The admin's preview runs this same engine in a browser elsewhere on the
+// network (index.html?preview). It shows the live jukebox but must never
+// act on it: a keypad pick seen by both the kiosk and a preview would be
+// picked twice. So a preview publishes nothing.
+export const PREVIEW = new URLSearchParams(location.search).has('preview');
+
 // Only what the engine uses. Not jukebox/#: that would also pull in large
 // payloads it ignores (e.g. the retained crawl-result).
 const HANDLERS = {
@@ -27,6 +33,9 @@ const HANDLERS = {
   'jukebox/jb-core/power': p => store.set('power', p),
   'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
+  // The owner published a change in the admin (settings, layouts, theme):
+  // start again with it. A preview is reloaded by the admin instead.
+  'jukebox/jb-admin/changed': () => { if (!PREVIEW) location.reload(); },
 };
 
 // The knob arrives from jb-input, which grabs the keypad exclusively, so
@@ -45,6 +54,7 @@ function activity() {
 }
 
 export function publish(topic, payload) {
+  if (PREVIEW) return;
   client?.publish(topic, JSON.stringify(payload));
 }
 
@@ -52,7 +62,9 @@ export function connectBus() {
   // timerVariant 'native': the default keepalive timers break when NTP
   // jumps the Pi's clock forward at boot (no RTC), and the connection then
   // drops every few seconds forever. See the 2026-09-29 fix (6d1ccaf).
-  client = mqtt.connect('ws://localhost:9001', { timerVariant: 'native' });
+  // The bus is on the same machine as the page: the kiosk loads it from
+  // 127.0.0.1, the admin preview from the jukebox's network name.
+  client = mqtt.connect(`ws://${location.hostname || 'localhost'}:9001`, { timerVariant: 'native' });
   client.on('connect', () => {
     store.set('bus', 'connected');
     client.subscribe(Object.keys(HANDLERS));

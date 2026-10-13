@@ -1,0 +1,13 @@
+{
+  "contract": 1,
+  "id": "jb-library",
+  "name": "Music library",
+  "description": "Keeps the phone's songs, playlists and albums with cover art, play counts and favorites.",
+  "version": "1.0.0",
+  "roles": ["source"],
+  "publishes": ["jukebox/jb-library/tracks", "jukebox/jb-library/playlists", "jukebox/jb-library/albums"],
+  "subscribes": ["jukebox/jb-library/cmd", "jukebox/jb-source-phone/crawl-result", "jukebox/jb-source-phone/now-playing"],
+  "commands": ["favorite"],
+  "settings": "jb-library",
+  "essential": true
+}

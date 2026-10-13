@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "id": "jb-source-phone",
+  "name": "Phone (Bluetooth)",
+  "description": "Plays music from a paired phone over Bluetooth and reads its library.",
+  "version": "1.0.0",
+  "roles": ["source"],
+  "publishes": ["jukebox/jb-source-phone/connected", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-phone/lease", "jukebox/jb-source-phone/reconnect", "jukebox/jb-source-phone/crawl-result", "jukebox/jb-source-phone/play-error"],
+  "subscribes": ["jukebox/jb-source-phone/cmd"],
+  "essential": true
+}

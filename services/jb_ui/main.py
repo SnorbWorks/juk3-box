@@ -9,11 +9,13 @@ Routes:
   /api/theme           the active theme: manifest, layouts and block
                        markup, validated and cleaned
   /themes/<id>/...     files from that theme's folder
+  /media/<file>        pictures the owner uploaded (jb-admin's media library)
   /legacy/...          the first-build song board, kept until the engine
                        can do everything it did
 """
 
 import json
+import re
 from pathlib import Path
 
 from aiohttp import web
@@ -40,6 +42,12 @@ DEFAULTS = {
     "fallback_theme": "bare",
     # Background videos re-encoded for the hardware (see media.py).
     "media_cache_dir": "/var/lib/juk3-box/cache/video",
+    # The owner's published layouts, per theme (written by jb-admin; see
+    # docs/contracts/configuration.md).
+    "owner_layouts_dir": "/var/lib/juk3-box/layouts",
+    # Pictures the owner uploaded in the admin (the media library), for
+    # image and logo blocks: "/media/<file>".
+    "media_dir": "/var/lib/juk3-box/media",
 }
 
 # Themes are data only: the engine's own scripts run, nothing else does.
@@ -71,6 +79,46 @@ def read_settings(path: Path) -> dict:
 # Playing is the header of the Now Playing card instead.
 NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playing")
 DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
+
+
+MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp", ".gif")   # no SVG: it can carry scripts
+MEDIA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+
+
+def media_path(folder: Path, name: str) -> Path | None:
+    """A file in the owner's media library, or None for anything that
+    isn't a plain picture name (no folders, no escaping)."""
+    if not MEDIA_NAME_RE.match(name) or ".." in name or Path(name).suffix.lower() not in MEDIA_TYPES:
+        return None
+    return folder / name
+
+
+def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
+                  layout_folders: list, log) -> dict:
+    """What /api/theme sends the engine: the theme (its manifest, layouts
+    with the owner's laid over them, block markup, icons) and the owner's
+    settings. Shared with jb-admin's preview, which adds drafts to
+    `layout_folders`."""
+    layouts, origins, problems = themes.owner_layouts(theme, layout_folders)
+    for p in problems:
+        log.warning("theme %s: using the theme's layout instead: %s", theme.id, p)
+    base = f"/themes/{theme.id}/"
+    return {
+        "id": theme.id,
+        "base": base,
+        "manifest": theme.manifest,
+        "layouts": layouts,
+        "layout_origins": origins,
+        "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
+        "icons": icons.resolve(
+            theme.manifest.get("icons", {}),
+            {name: base + path for name, path in themes.icons(theme.root).items()},
+        ),
+        "browse_images": {name: base + path for name, path in themes.browse_images(theme.root).items()},
+        "settings": settings,
+        "warnings": theme.warnings + problems,
+        "fallback": fallback,
+    }
 
 
 def owner_settings(raw: dict) -> dict:
@@ -134,22 +182,14 @@ class App:
             if bg_path.is_file() and self.videos.is_video(bg_path):
                 self.videos.served_path(bg_path)
         settings = owner_settings(read_settings(self.settings_path))
-        base = f"/themes/{theme.id}/"
-        return web.json_response({
-            "id": theme.id,
-            "base": base,
-            "manifest": theme.manifest,
-            "layouts": theme.layouts,
-            "blocks": markup.load_blocks(ENGINE_DIR / "blocks", theme.root, base),
-            "icons": icons.resolve(
-                theme.manifest.get("icons", {}),
-                {name: base + path for name, path in themes.icons(theme.root).items()},
-            ),
-            "browse_images": {name: base + path for name, path in themes.browse_images(theme.root).items()},
-            "settings": settings,
-            "warnings": theme.warnings,
-            "fallback": fallback,
-        })
+        folders = [("owner", Path(self.cfg["owner_layouts_dir"]) / theme.id)]
+        return web.json_response(theme_payload(theme, fallback, settings, folders, self.log))
+
+    async def media_file(self, request: web.Request) -> web.StreamResponse:
+        path = media_path(Path(self.cfg["media_dir"]), request.match_info["name"])
+        if path is None or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path)
 
     async def theme_file(self, request: web.Request) -> web.StreamResponse:
         root = themes.find_theme_dir(request.match_info["theme_id"], self.theme_dirs)
@@ -181,6 +221,7 @@ def build_app(cfg: dict, log) -> web.Application:
     app.router.add_get("/", app_state.index)
     app.router.add_get("/api/theme", app_state.api_theme)
     app.router.add_get("/themes/{theme_id}/{path:.+}", app_state.theme_file)
+    app.router.add_get("/media/{name}", app_state.media_file)
     app.router.add_static("/engine/", ENGINE_DIR)
     app.router.add_static("/legacy/", LEGACY_DIR)
     return app

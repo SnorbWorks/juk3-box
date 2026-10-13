@@ -1,0 +1,138 @@
+{
+  "format": 1,
+  "about": "The blocks this engine knows and the settings each takes, as data for the page builder (jb-admin) and anyone writing a theme. Keep in step with KNOWN_BLOCKS (themes.py), BLOCKS (engine/js/blocks.js) and docs/theme-format.md.",
+  "layouts": {
+    "frame": { "label": "Frame", "description": "What stays on screen while screens change: the sidebar, the logo, Now Playing. Holds the screen block, where every screen appears." },
+    "home": { "label": "Home", "description": "The resting screen: your rows of cards." },
+    "all-songs": { "label": "All Songs", "description": "The song board guests pick from with the keypad." },
+    "collection": { "label": "See All", "description": "A row's full page, opened from See All." }
+  },
+  "groups": [
+    { "id": "content", "label": "Content" },
+    { "id": "music", "label": "Music" },
+    { "id": "navigation", "label": "Navigation" },
+    { "id": "structure", "label": "Structure" }
+  ],
+  "container": {
+    "label": "Container",
+    "description": "Holds other blocks. Choose how it arranges them.",
+    "settings": {
+      "class": { "type": "class", "label": "Style", "help": "CSS classes. The theme's own, or a layout helper below." },
+      "focus": { "type": "text", "label": "Knob group", "help": "A name makes the cards and buttons inside it knob stops, in reading order.", "pattern": "^[a-z][a-z0-9-]*$" },
+      "focus-flow": { "type": "enum", "label": "Knob flow", "options": [
+        { "value": "", "label": "Normal" },
+        { "value": "down-from-rest", "label": "Navigation (turning back walks down it)" }
+      ], "advanced": true }
+    },
+    "helpers": [
+      { "value": "jb-u-row", "label": "Row", "group": "arrange" },
+      { "value": "jb-u-column", "label": "Column", "group": "arrange" },
+      { "value": "jb-u-grid-2", "label": "Grid, 2 across", "group": "arrange" },
+      { "value": "jb-u-grid-3", "label": "Grid, 3 across", "group": "arrange" },
+      { "value": "jb-u-grid-4", "label": "Grid, 4 across", "group": "arrange" },
+      { "value": "jb-u-gap-none", "label": "No gap", "group": "gap" },
+      { "value": "jb-u-gap-small", "label": "Small gap", "group": "gap" },
+      { "value": "jb-u-gap-large", "label": "Large gap", "group": "gap" },
+      { "value": "jb-u-pad-small", "label": "Small padding", "group": "padding" },
+      { "value": "jb-u-pad-medium", "label": "Medium padding", "group": "padding" },
+      { "value": "jb-u-pad-large", "label": "Large padding", "group": "padding" },
+      { "value": "jb-u-grow", "label": "Fill the space", "group": "size" },
+      { "value": "jb-u-scroll", "label": "Scroll", "group": "size" },
+      { "value": "jb-u-center", "label": "Center", "group": "align" }
+    ]
+  },
+  "common": {
+    "class": { "type": "class", "label": "Style", "help": "CSS classes for this block (the theme's own).", "advanced": true }
+  },
+  "blocks": {
+    "heading": {
+      "label": "Heading", "group": "content", "icon": "heading",
+      "description": "A title of your own.",
+      "settings": {
+        "text": { "type": "text", "label": "Text", "default": "Heading" },
+        "size": { "type": "enum", "label": "Size", "default": "medium", "options": [
+          { "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Large" }
+        ]},
+        "align": { "type": "enum", "label": "Align", "default": "start", "options": [
+          { "value": "start", "label": "Left" }, { "value": "center", "label": "Center" }, { "value": "end", "label": "Right" }
+        ]}
+      }
+    },
+    "text": {
+      "label": "Text", "group": "content", "icon": "text",
+      "description": "A paragraph of your own: a welcome, house rules.",
+      "settings": {
+        "text": { "type": "longtext", "label": "Text", "default": "Write something here." },
+        "align": { "type": "enum", "label": "Align", "default": "start", "options": [
+          { "value": "start", "label": "Left" }, { "value": "center", "label": "Center" }, { "value": "end", "label": "Right" }
+        ]}
+      }
+    },
+    "image": {
+      "label": "Image", "group": "content", "icon": "image",
+      "description": "A picture from your media library or the theme.",
+      "settings": {
+        "src": { "type": "picture", "label": "Picture" },
+        "alt": { "type": "text", "label": "Description", "help": "What the picture shows." },
+        "fit": { "type": "enum", "label": "Fit", "default": "contain", "options": [
+          { "value": "contain", "label": "Whole picture" }, { "value": "cover", "label": "Fill the space" }
+        ]}
+      }
+    },
+    "spacer": {
+      "label": "Spacer", "group": "content", "icon": "spacer",
+      "description": "Empty space between blocks.",
+      "settings": {
+        "size": { "type": "enum", "label": "Size", "default": "medium", "options": [
+          { "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Large" }
+        ]}
+      }
+    },
+    "section": {
+      "label": "Card row", "group": "music", "icon": "rows",
+      "description": "A row of song or link cards. Song cards play when clicked; link cards open the board.",
+      "presets": [
+        { "label": "New songs", "values": { "type": "new", "limit": 2 } },
+        { "label": "Featured artist", "values": { "type": "featured-artist" } },
+        { "label": "Browse", "values": { "type": "browse", "sorts": "artist,album,top-100,most-played" } },
+        { "label": "Playlists", "values": { "type": "playlists", "limit": 12 } },
+        { "label": "Recents", "values": { "type": "recents", "limit": 18 } }
+      ],
+      "settings": {
+        "type": { "type": "enum", "label": "Shows", "required": true, "options": [
+          { "value": "new", "label": "New songs" },
+          { "value": "recents", "label": "Recently played" },
+          { "value": "featured-artist", "label": "Featured artist" },
+          { "value": "playlists", "label": "Playlists" },
+          { "value": "browse", "label": "Browse shortcuts" }
+        ]},
+        "title": { "type": "text", "label": "Title", "help": "Leave empty for the usual title." },
+        "limit": { "type": "int", "label": "How many cards", "min": 1, "max": 100, "help": "Leave empty for the usual number." },
+        "sorts": { "type": "multi", "label": "Shortcuts", "only_when": { "type": "browse" }, "default": "artist,album,top-100,most-played", "options": [
+          { "value": "title", "label": "Title" }, { "value": "artist", "label": "Artist" }, { "value": "album", "label": "Album" },
+          { "value": "genre", "label": "Genre" }, { "value": "playlist", "label": "Playlist" },
+          { "value": "top-100", "label": "Top 100" }, { "value": "most-played", "label": "Most played" }
+        ]},
+        "see-all": { "type": "bool", "label": "Show See All", "default": true },
+        "show": { "type": "bool", "label": "Show this row", "default": true }
+      }
+    },
+    "now-playing": { "label": "Now Playing", "group": "music", "icon": "now-playing", "description": "The song playing: cover, title, progress. Opens the Now Playing overlay.", "settings": {} },
+    "up-next": {
+      "label": "Up Next", "group": "music", "icon": "queue", "description": "The queue.",
+      "settings": { "limit": { "type": "int", "label": "How many songs", "min": 1, "max": 20, "default": 5 } }
+    },
+    "board": { "label": "Song board", "group": "music", "icon": "board", "description": "The page of songs with their keypad codes.", "settings": {}, "only_in": ["all-songs"] },
+    "collection": { "label": "See All cards", "group": "music", "icon": "grid", "description": "All of a row's cards, for the See All screen.", "settings": {}, "only_in": ["collection"] },
+    "page-info": { "label": "Page info", "group": "music", "icon": "info", "description": "The board's page and sort, e.g. \"Artists · Queen  1 of 2\".", "settings": {}, "only_in": ["all-songs"] },
+    "pager": { "label": "Page buttons", "group": "navigation", "icon": "pager", "description": "Previous and next page, for the knob.", "settings": {}, "only_in": ["all-songs"] },
+    "logo": {
+      "label": "Logo", "group": "navigation", "icon": "logo", "description": "Your logo, or the word JUKE.BOX.",
+      "settings": { "src": { "type": "picture", "label": "Picture", "help": "Leave empty for the word JUKE.BOX." } }
+    },
+    "nav": { "label": "Navigation", "group": "navigation", "icon": "nav", "description": "The buttons you chose in Settings: Home, Volume, Shuffle...", "settings": {} },
+    "header": { "label": "Screen title", "group": "navigation", "icon": "header", "description": "The screen's title and subtitle, with a Back button.", "settings": {} },
+    "connection": { "label": "Phone badge", "group": "navigation", "icon": "phone", "description": "Which phone is connected.", "settings": {} },
+    "screen": { "label": "Screen", "group": "structure", "icon": "screen", "description": "Where each screen appears. The frame needs exactly one.", "settings": {}, "only_in": ["frame"], "required_in": ["frame"], "unique": true }
+  }
+}

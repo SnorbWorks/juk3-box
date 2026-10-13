@@ -68,3 +68,40 @@ html, body {
   align-items: center;
   justify-content: center;
 }
+
+/* Layout helpers for containers the owner adds in the page builder, so a
+   new row or grid works under any theme. Themes may restyle them.
+   docs/theme-format.md, "Layout helpers". */
+.jb-u-row, .jb-u-column, .jb-u-grid-2, .jb-u-grid-3, .jb-u-grid-4 {
+  gap: var(--jb-u-gap, 2vmin);
+  min-width: 0;
+}
+.jb-u-row { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+.jb-u-column { display: flex; flex-direction: column; }
+.jb-u-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.jb-u-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.jb-u-grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.jb-u-row > *, .jb-u-column > * { min-width: 0; }
+.jb-u-grow { flex: 1 1 0; min-height: 0; min-width: 0; }
+.jb-u-scroll { overflow-y: auto; min-height: 0; }
+.jb-u-center { align-items: center; justify-content: center; text-align: center; }
+.jb-u-gap-none { --jb-u-gap: 0; }
+.jb-u-gap-small { --jb-u-gap: 1vmin; }
+.jb-u-gap-large { --jb-u-gap: 4vmin; }
+.jb-u-pad-small { padding: 1vmin; }
+.jb-u-pad-medium { padding: 2.5vmin; }
+.jb-u-pad-large { padding: 5vmin; }
+
+/* Owner content blocks: plain defaults that sit well on a dark theme. */
+jb-heading, jb-text, jb-image, jb-spacer { display: block; }
+jb-heading > h2 { margin: 0; font-size: 3.2vmin; font-weight: 700; line-height: 1.15; }
+jb-heading[size="small"] > h2 { font-size: 2.2vmin; }
+jb-heading[size="large"] > h2 { font-size: 5vmin; }
+jb-text > p { margin: 0; font-size: 1.8vmin; line-height: 1.45; opacity: 0.85; white-space: pre-line; }
+jb-heading[align="center"], jb-text[align="center"] { text-align: center; }
+jb-heading[align="end"], jb-text[align="end"] { text-align: end; }
+jb-image > img { display: block; width: 100%; height: auto; border-radius: 1vmin; }
+jb-image[fit="cover"] > img { height: 100%; object-fit: cover; }
+jb-spacer { height: 3vmin; }
+jb-spacer[size="small"] { height: 1.5vmin; }
+jb-spacer[size="large"] { height: 6vmin; }

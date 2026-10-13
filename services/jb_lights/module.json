@@ -1,0 +1,9 @@
+{
+  "contract": 1,
+  "id": "jb-lights",
+  "name": "Cabinet lights",
+  "description": "Drives the button lights, the volume bar, the upper panel and the footlights, following the music.",
+  "version": "1.0.0",
+  "roles": ["output"],
+  "subscribes": ["jukebox/analysis/audio/#", "jukebox/jb-audio/state", "jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected", "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw"]
+}

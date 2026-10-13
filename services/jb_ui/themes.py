@@ -20,6 +20,7 @@ REQUIRED_LAYOUTS = ("frame", "home", "all-songs")
 KNOWN_BLOCKS = {
     "screen", "logo", "nav", "now-playing", "up-next", "board",
     "section", "page-info", "pager", "header", "connection", "collection",
+    "heading", "text", "image", "spacer",
 }
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -254,3 +255,56 @@ def icons(root: Path) -> dict[str, str]:
 def browse_images(root: Path) -> dict[str, str]:
     """Browse card pictures, named after the sort: assets/browse/artist.jpg."""
     return named_assets(root, "browse", PHOTO_TYPES)
+
+
+def owner_layouts(theme: Theme, folders: list[tuple[str, Path]]) -> tuple[dict[str, dict], dict[str, str], list[str]]:
+    """The theme's layouts with the owner's versions laid over them
+    (docs/contracts/configuration.md, Owner layouts).
+
+    `folders` are (origin, folder) pairs, first wins: the admin preview
+    passes ("draft", drafts) before ("owner", published); the kiosk only
+    ("owner", published). Each folder holds <layout>.json files for this
+    theme. An owner layout is checked exactly like a theme's; one that
+    fails is skipped, with the reason in the returned problems, and the
+    theme's own layout is used. A bad edit never blanks the screen.
+
+    Returns (layouts, origin of each layout, problems).
+    """
+    layouts = dict(theme.layouts)
+    origins = {name: "theme" for name in layouts}
+    problems: list[str] = []
+    done: set[str] = set()
+    for origin, folder in folders:
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob("*.json")):
+            name = path.stem
+            if name in done or not ID_RE.match(name):
+                continue
+            try:
+                tree = json.loads(path.read_text())
+            except (OSError, ValueError) as e:
+                problems.append(f"{origin} layout {name}: {e}")
+                continue
+            found, _ = check_layout(name, tree)
+            if found:
+                problems.extend(f"{origin} layout {name}: {p}" for p in found)
+                continue
+            layouts[name] = tree
+            origins[name] = origin
+            done.add(name)
+    return layouts, origins, problems
+
+
+def check_layout(name: str, tree) -> tuple[list[str], list[str]]:
+    """(problems, warnings) for one layout tree, as a theme's would get."""
+    problems: list[str] = []
+    warnings: list[str] = []
+    if not ID_RE.match(name):
+        return [f"{name!r} isn't a usable layout name"], []
+    screens = _check_node(tree, f"layout {name}", problems, warnings)
+    if name == "frame" and screens != 1:
+        problems.append(f"the frame must hold exactly one screen block, found {screens}")
+    if name != "frame" and screens:
+        problems.append("only the frame may hold a screen block")
+    return problems, warnings

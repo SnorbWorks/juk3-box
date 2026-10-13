@@ -21,7 +21,8 @@ def run(tmp_path, check, theme=None, setup=None):
     added.mkdir()
     if setup:
         setup(added)
-    cfg = {**main.DEFAULTS, "theme_dirs": [str(SHIPPED), str(added)], "settings_path": str(settings)}
+    cfg = {**main.DEFAULTS, "theme_dirs": [str(SHIPPED), str(added)], "settings_path": str(settings),
+           "owner_layouts_dir": str(tmp_path / "layouts")}
 
     async def go():
         async with TestClient(TestServer(main.build_app(cfg, logging.getLogger("test")))) as client:
@@ -112,3 +113,40 @@ def test_owner_board_and_idle_settings_are_cleaned():
         assert main.owner_settings({"songs_per_page": bad})["songs_per_page"] == 100, bad
     for bad in (-1, "5", None, False):
         assert main.owner_settings({"idle_home_minutes": bad})["idle_home_minutes"] == 5, bad
+
+
+def test_owner_layouts_replace_the_themes_and_bad_ones_are_ignored(tmp_path):
+    owner = tmp_path / "layouts" / "bare"
+    owner.mkdir(parents=True)
+    home = {"class": "mine", "children": [{"block": "section", "type": "recents", "limit": 4}]}
+    (owner / "home.json").write_text(json.dumps(home))
+    (owner / "all-songs.json").write_text('{"children": [{"block": "screen"}]}')   # screen outside the frame
+    (owner / "frame.json").write_text("{not json")
+
+    async def check(client):
+        data = await (await client.get("/api/theme")).json()
+        assert data["layouts"]["home"] == home
+        assert data["layout_origins"] == {"frame": "theme", "home": "owner", "all-songs": "theme"}
+        assert data["layouts"]["frame"]["children"]          # the theme's frame, still whole
+        assert any("all-songs" in w for w in data["warnings"])
+        assert any("frame" in w for w in data["warnings"])
+    run(tmp_path, check)
+
+
+def test_media_library_serves_plain_pictures_only(tmp_path):
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "photo.jpg").write_bytes(b"jpg")
+    (media / "evil.svg").write_text("<svg/>")
+    (tmp_path / "secret.jpg").write_bytes(b"no")
+    settings = tmp_path / "settings.json"
+    cfg = {**main.DEFAULTS, "theme_dirs": [str(SHIPPED)], "settings_path": str(settings),
+           "owner_layouts_dir": str(tmp_path / "layouts"), "media_dir": str(media)}
+
+    async def go():
+        async with TestClient(TestServer(main.build_app(cfg, logging.getLogger("test")))) as client:
+            assert (await client.get("/media/photo.jpg")).status == 200
+            assert (await client.get("/media/evil.svg")).status == 404
+            assert (await client.get("/media/..%2Fsecret.jpg")).status == 404
+            assert (await client.get("/media/nope.jpg")).status == 404
+    asyncio.run(go())

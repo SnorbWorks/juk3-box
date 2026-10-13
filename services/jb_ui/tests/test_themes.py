@@ -131,3 +131,52 @@ def test_broken_json_is_reported(tmp_path):
     p = problems("bare", [tmp_path])
     assert "layouts/home.json:" in p
     assert "home.json is missing" not in p
+
+
+def test_drafts_win_over_published_owner_layouts_which_win_over_the_theme(tmp_path):
+    theme = themes.load_theme("bare", [SHIPPED])
+    draft, owner = tmp_path / "draft", tmp_path / "owner"
+    draft.mkdir()
+    owner.mkdir()
+    (owner / "home.json").write_text(json.dumps({"class": "published", "children": []}))
+    (draft / "home.json").write_text(json.dumps({"class": "draft", "children": []}))
+    (owner / "extra.json").write_text(json.dumps({"children": []}))
+    layouts, origins, found = themes.owner_layouts(theme, [("draft", draft), ("owner", owner)])
+    assert layouts["home"]["class"] == "draft" and origins["home"] == "draft"
+    assert origins["extra"] == "owner" and origins["frame"] == "theme"
+    assert found == []
+    assert theme.layouts["home"].get("class") != "draft"          # the theme itself is untouched
+
+
+def test_a_broken_draft_falls_back_to_the_published_layout(tmp_path):
+    theme = themes.load_theme("bare", [SHIPPED])
+    draft, owner = tmp_path / "draft", tmp_path / "owner"
+    draft.mkdir()
+    owner.mkdir()
+    (draft / "home.json").write_text(json.dumps({"children": [{"block": "screen"}]}))
+    (owner / "home.json").write_text(json.dumps({"class": "published", "children": []}))
+    layouts, origins, found = themes.owner_layouts(theme, [("draft", draft), ("owner", owner)])
+    assert origins["home"] == "owner" and len(found) == 1
+
+
+def test_check_layout():
+    assert themes.check_layout("home", {"children": [{"block": "nav"}]}) == ([], [])
+    assert themes.check_layout("frame", {"children": []})[0]
+    assert themes.check_layout("../x", {"children": []})[0]
+    assert themes.check_layout("home", {"children": [{"block": "rocket"}]})[1]      # unknown: warning only
+
+
+def test_block_schema_matches_the_engine():
+    import re
+    here = Path(__file__).resolve().parents[1]
+    schema = json.loads((here / "block_schema.json").read_text())
+    js = (here / "engine" / "js" / "blocks.js").read_text()
+    table = js[js.index("export const BLOCKS = {"):]
+    table = table[:table.index("\n};")]
+    engine = set(re.findall(r"^\s+'?([a-z-]+)'?:", table, re.M))
+    assert set(schema["blocks"]) == themes.KNOWN_BLOCKS == engine
+    groups = {g["id"] for g in schema["groups"]}
+    for name, block in schema["blocks"].items():
+        assert block["group"] in groups, name
+        for key in block["settings"]:
+            assert themes.SETTING_RE.match(key), (name, key)

@@ -2,7 +2,7 @@
 // its layouts. Behavior lives here; the look lives in the theme.
 
 import { albumSongs, openFilter, pick, setSort, upLevel } from './board.js';
-import { connectBus, publish } from './bus.js';
+import { connectBus, PREVIEW, publish } from './bus.js';
 import { startFeatured } from './featured.js';
 import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, rotate } from './focus.js';
 import { renderLayout } from './layout.js';
@@ -87,7 +87,7 @@ function showScreen(name, { remember = true } = {}) {
   else if (remember && from && from !== name) history.push(from);
   const layout = theme.layouts[name] || (name === 'collection' ? DEFAULT_COLLECTION_LAYOUT : null);
   if (layout) {
-    holder.replaceChildren(renderLayout(layout, context()));
+    holder.replaceChildren(renderLayout(layout, context(), PREVIEW ? name : undefined));
   } else {
     // The theme has no layout for this screen (only home and all-songs
     // are required). The engine's own version comes later; for now, say so.
@@ -301,7 +301,8 @@ function watchSystem() {
 function watchIdle() {
   setInterval(() => {
     const minutes = theme.settings.idle_home_minutes;
-    if (!minutes || (store.get('screen') === 'home' && !popupOpen())) return;
+    // A preview stays on the screen the page builder is showing.
+    if (PREVIEW || !minutes || (store.get('screen') === 'home' && !popupOpen())) return;
     if (store.get('nowPlaying')?.status === 'playing') return;
     const last = Math.max(store.get('activity') || 0, startedAt);
     if (Date.now() - last < minutes * 60000) return;
@@ -329,8 +330,10 @@ async function start() {
   watchAlbumPlay();
   watchIdle();
   startFeatured();
-  document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context()));
-  showScreen('home');
+  document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context(), PREVIEW ? 'frame' : undefined));
+  // The admin preview can open on any screen (?screen=all-songs).
+  const first = PREVIEW && new URLSearchParams(location.search).get('screen');
+  showScreen(first && theme.layouts[first] ? first : 'home');
   goToRest();
   watchKeyboard();
   connectBus();

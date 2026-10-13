@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "id": "jb-crawl",
+  "name": "Library crawl",
+  "description": "Walks the phone's playlists and albums in the background, when nothing is playing.",
+  "version": "1.0.0",
+  "roles": ["service"],
+  "publishes": ["jukebox/jb-crawl/status", "jukebox/jb-crawl/album"],
+  "subscribes": ["jukebox/jb-crawl/cmd"],
+  "commands": ["crawl_now", "album"]
+}

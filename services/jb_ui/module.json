@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "id": "jb-ui",
+  "name": "Cabinet screen",
+  "description": "Serves the kiosk's screen: the engine and the active theme. Listens on the jukebox itself only.",
+  "version": "1.0.0",
+  "roles": ["output"],
+  "subscribes": ["jukebox/jb-admin/changed"],
+  "settings": "jb-ui",
+  "essential": true
+}

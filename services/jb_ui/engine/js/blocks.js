@@ -24,6 +24,11 @@ export const BLOCKS = {
   pager: fillPager,
   header: fillHeader,
   connection: fillConnection,
+  // Content the owner places with the page builder.
+  heading: fillText('h2'),
+  text: fillText('p'),
+  image: fillImage,
+  spacer: () => {},
 };
 
 function fillLogo(el, node, ctx) {
@@ -36,10 +41,37 @@ function fillLogo(el, node, ctx) {
   };
   if (!node.src) return text();
   const img = document.createElement('img');
-  img.src = ctx.base + node.src;
+  img.src = assetUrl(node.src, ctx);
   img.alt = 'JUKE.BOX';
   img.onerror = text;
   el.append(img);
+}
+
+// A picture setting: a file in the theme ("assets/logo.png") or one the
+// owner uploaded to the media library ("/media/photo.jpg").
+function assetUrl(src, ctx) {
+  return String(src).startsWith('/media/') ? String(src) : ctx.base + src;
+}
+
+// Heading and text blocks: the owner's words, always as plain text.
+function fillText(tag) {
+  return (el, node) => {
+    const t = document.createElement(tag);
+    t.className = `jb-${node.block}-text`;
+    t.textContent = node.text ?? '';
+    el.replaceChildren(t);
+  };
+}
+
+function fillImage(el, node, ctx) {
+  if (!node.src) {
+    el.dataset.placeholder = 'image';
+    return;
+  }
+  const img = document.createElement('img');
+  img.src = assetUrl(node.src, ctx);
+  img.alt = node.alt ?? '';
+  el.replaceChildren(img);
 }
 
 // Elements in a template marked data-stop="name" become knob stops.
