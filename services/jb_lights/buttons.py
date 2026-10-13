@@ -17,7 +17,7 @@ nothing driving the pin it falls low and the buttons see a stuck-high line
 
 import subprocess
 
-from rpi_ws281x import Color, PixelStrip, ws
+from rpi_ws281x import Color
 
 NUM_PIXELS = 23
 GPIO = 12
@@ -33,13 +33,14 @@ def index(key: str) -> int:
     return 12 + DIGITS.index(key)
 
 
-def open_strip() -> PixelStrip:
-    strip = PixelStrip(NUM_PIXELS, GPIO, 800000, 10, True, 255, 0, ws.SK6812_STRIP_GRBW)
-    strip.begin()
-    return strip
+def open_strip():
+    """The buttons' chain, from the controller it shares with the accent
+    chain (pwm_chains: both PWM channels share one DMA engine)."""
+    from services.jb_lights import pwm_chains   # here, not at the top: pwm_chains imports this module
+    return pwm_chains.get().buttons
 
 
-def close_strip(strip: PixelStrip) -> None:
+def close_strip(strip) -> None:
     """All off, then park the pin HIGH so the inverted line rests low."""
     for i in range(NUM_PIXELS):
         strip.setPixelColor(i, Color(0, 0, 0, 0))
