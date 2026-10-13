@@ -94,8 +94,28 @@ function categoriesFor(tracks, field) {
 
 let state = { sort: 'title', filter: null, page: 0 };
 
+// The album browser shows cover cards, 40 a page (4 per letter: A1-A4 ...
+// K1-K4), 8 to a row in the theme -- the user's design. Everything else uses
+// the owner's songs per page.
+const ALBUM_CARD_DIGITS = 4;
+
+function albumCards() {
+  return state.sort === 'album' && !state.filter && phoneAlbums().length > 0;
+}
+
 function digitsPerLetter() {
+  if (albumCards()) return ALBUM_CARD_DIGITS;
   return store.get('settings')?.songs_per_page / LETTERS.length || DIGITS.length;
+}
+
+// An album's cover: from its own songs once opened, else from a song the
+// library (iTunes) puts on an album of that name.
+export function albumCover(tracks, key) {
+  const songs = albumSongs(tracks, key);
+  const own = songs?.find(t => t.artwork_url)?.artwork_url;
+  if (own) return own;
+  const title = phoneAlbums().find(a => a.name === key)?.title ?? key;
+  return tracks.find(t => t.album === title && t.artwork_url)?.artwork_url || null;
 }
 
 // While an opened album's songs are being fetched: { loading } or { failed }.
@@ -111,8 +131,9 @@ function albumStatus() {
 export function view() {
   const tracks = store.get('tracks') || [];
   const isCategory = SORTS[state.sort]?.category && !state.filter;
+  const cards = albumCards();
   const all = isCategory
-    ? categoriesFor(tracks, state.sort).map(value => ({ category: value }))
+    ? categoriesFor(tracks, state.sort).map(value => (cards ? { category: value, cover: albumCover(tracks, value) } : { category: value }))
     : songsFor(tracks, state.sort, state.filter);
   const digits = digitsPerLetter();
   const perPage = digits * LETTERS.length;
@@ -133,6 +154,8 @@ export function view() {
     pages,
     digits,
     isCategory,
+    cards,      // the album browser: cover cards rather than rows
+    turn: state.turn || null,   // the last page turn: {seq, dir}
     slots,
   };
 }
@@ -147,9 +170,14 @@ export function setSort(sort) {
   changed();
 }
 
+// Each turn is numbered so the board can animate exactly the turns (a swipe
+// in their direction) and nothing else.
+let turnSeq = 0;
+
 export function turnPage(dir) {
   const { page, pages } = view();
   state.page = (((page + dir) % pages) + pages) % pages;
+  state.turn = { seq: ++turnSeq, dir };
   changed();
 }
 

@@ -60,33 +60,43 @@ class PhoneBook:
         return sorted(macs, key=lambda m: -(self.phones.get(m, {}).get("last_connected") or 0))
 
 
-async def _objects(system_bus):
-    intro = await system_bus.introspect(BLUEZ, "/")
-    om = system_bus.get_proxy_object(BLUEZ, "/", intro).get_interface("org.freedesktop.DBus.ObjectManager")
-    return await om.call_get_managed_objects()
+ADAPTER = "/org/bluez/hci0"
+
+
+async def _props(system_bus, path: str, iface: str) -> dict:
+    intro = await system_bus.introspect(BLUEZ, path)
+    p = system_bus.get_proxy_object(BLUEZ, path, intro).get_interface("org.freedesktop.DBus.Properties")
+    return await p.call_get_all(iface)
 
 
 async def speaker_ready(system_bus) -> bool:
     """True once WirePlumber has registered the A2DP sink (~2 min into boot);
     a phone can't connect for audio before that."""
-    for path, ifaces in (await _objects(system_bus)).items():
-        adapter = ifaces.get("org.bluez.Adapter1")
-        if adapter and A2DP_SINK in [u.lower() for u in adapter["UUIDs"].value]:
-            return True
-    return False
+    adapter = await _props(system_bus, ADAPTER, "org.bluez.Adapter1")
+    return A2DP_SINK in [u.lower() for u in adapter["UUIDs"].value]
 
 
 async def phones(system_bus) -> list:
-    """Paired, trusted devices that can send audio: [(mac, path, name, connected)]."""
+    """Paired, trusted devices that can send audio: [(mac, path, name, connected)].
+
+    Reads just the adapter's device nodes and each one's Device1 properties --
+    not GetManagedObjects, which returns every object BlueZ holds, including
+    each song and album the phone exposes for browsing (1,841 of them with
+    the user's library), and polled every 3 s that cost a third of a CPU core
+    (2026-10-12)."""
     out = []
-    for path, ifaces in (await _objects(system_bus)).items():
-        dev = ifaces.get("org.bluez.Device1")
-        if not dev:
+    for node in (await system_bus.introspect(BLUEZ, ADAPTER)).nodes:
+        if not node.name.startswith("dev_"):
             continue
+        path = f"{ADAPTER}/{node.name}"
+        try:
+            dev = await _props(system_bus, path, "org.bluez.Device1")
+        except Exception:
+            continue  # gone between listing and reading
         uuids = [u.lower() for u in dev["UUIDs"].value] if "UUIDs" in dev else []
         if dev["Paired"].value and dev["Trusted"].value and A2DP_SOURCE in uuids:
             name = dev["Name"].value if "Name" in dev else dev["Address"].value
-            out.append((dev["Address"].value, str(path), name, dev["Connected"].value))
+            out.append((dev["Address"].value, path, name, dev["Connected"].value))
     return out
 
 

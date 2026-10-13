@@ -101,11 +101,44 @@ function fillUpNext(el, node, ctx) {
 // the keypad; how they're arranged is the theme's CSS.
 function fillBoard(el, node, ctx) {
   const groups = new Map();
+  let lastTurn = 0;
+
+  // A page turn swipes: the page slides out the way it's going and fades,
+  // the new one slides in from the other side. Only transform and opacity
+  // animate (cheap on the Pi). Themes can set --jb-page-ms (whole swipe)
+  // and --jb-page-shift (how far, as a fraction of the board's width).
+  const swipe = dir => {
+    const style = getComputedStyle(el);
+    const ms = parseFloat(style.getPropertyValue('--jb-page-ms')) || 360;
+    const shift = (parseFloat(style.getPropertyValue('--jb-page-shift')) || 0.22) * el.clientWidth;
+    el.getAnimations().forEach(a => a.cancel());
+    const out = el.animate(
+      [{ transform: 'translateX(0)', opacity: 1 }, { transform: `translateX(${-dir * shift}px)`, opacity: 0 }],
+      { duration: ms * 0.42, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' });
+    out.onfinish = () => {
+      draw();
+      out.cancel();
+      el.animate(
+        [{ transform: `translateX(${dir * shift}px)`, opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }],
+        { duration: ms * 0.58, easing: 'cubic-bezier(0.15, 0.85, 0.25, 1)' });
+    };
+  };
 
   const render = () => {
+    const turn = view().turn;
+    if (turn && turn.seq !== lastTurn) {
+      lastTurn = turn.seq;
+      swipe(turn.dir);
+    } else if (!el.getAnimations().length) {
+      draw();
+    }
+  };
+
+  const draw = () => {
     const v = view();
     el.style.setProperty('--jb-digits', v.digits);
     el.toggleAttribute('data-category', v.isCategory);
+    el.toggleAttribute('data-cards', !!v.cards);   // the album browser: cover cards
     el.toggleAttribute('data-loading', !!v.album?.loading);
     groups.clear();
     for (const slotInfo of v.slots) {
@@ -120,11 +153,13 @@ function fillBoard(el, node, ctx) {
       s.className = 'jb-slot';
       s.dataset.code = slotInfo.code;
       s.dataset.artScope = '';
-      s.append(fromTemplate(ctx.blocks['song-card']));
       const item = slotInfo.item;
+      s.append(fromTemplate(ctx.blocks[v.cards ? 'album-card' : 'song-card']));
       if (!item) {
         s.dataset.empty = '';
         bind(s, { code: slotInfo.code });
+      } else if (v.cards) {
+        bind(s, { code: slotInfo.code, title: item.category, cover: sized(item.cover, 400) });
       } else if (item.category !== undefined) {
         // An artist, album or genre: picking it shows its songs.
         bind(s, { code: slotInfo.code, title: item.category });
