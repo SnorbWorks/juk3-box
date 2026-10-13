@@ -51,7 +51,7 @@ function render(body, s) {
         phone?.connected ? 'Connected over Bluetooth' : 'Connect from the phone\'s Bluetooth settings'),
       stat('volume-2', 'Volume', typeof vol?.volume === 'number' ? `${Math.round(vol.volume * 100)}%` : '—',
         vol?.muted ? 'Muted' : null),
-      stat('palette', 'Theme', s.theme, h('a', { href: '#/themes' }, 'Change theme')),
+      stat('palette', 'Theme', s.theme_name || s.theme, h('a', { href: '#/themes' }, 'Change theme')),
       stat('activity', 'Modules', `${up.length} of ${declared.length} running`,
         down.length ? `Down: ${down.map(m => m.name).join(', ')}` : 'All good')),
     h('div.card',

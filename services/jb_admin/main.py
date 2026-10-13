@@ -269,7 +269,14 @@ class Admin:
             "live": self.live,
             "bus": self.bus is not None,
             "theme": self.active_theme(),
+            "theme_name": self.theme_name(self.active_theme()),
         })
+
+    def theme_name(self, theme_id: str) -> str:
+        try:
+            return themes.load_theme(theme_id, self.theme_dirs).manifest.get("name") or theme_id
+        except themes.ThemeError:
+            return theme_id
 
     # Settings -----------------------------------------------------------------
 
