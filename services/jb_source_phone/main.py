@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
@@ -6,6 +7,7 @@ from dbus_next.errors import DBusError, InterfaceNotFoundError
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
+from services.jb_source_phone import reconnect as rc
 
 SERVICE_NAME = "jb-source-phone"
 BLUEZ = "org.bluez"
@@ -367,6 +369,10 @@ async def main() -> None:
             phone = candidate
             phone.mac = device_path.rsplit("dev_", 1)[-1].replace("_", ":")
             log.info("phone connected: %s (%s)", phone.name, phone.mac)
+            try:
+                book.touch(phone.mac, phone.name, time.time())
+            except OSError:
+                log.exception("couldn't update the phone book")
             await bus.publish(
                 f"jukebox/{SERVICE_NAME}/connected",
                 {"connected": True, "name": phone.name, "mac": phone.mac},
@@ -517,6 +523,71 @@ async def main() -> None:
         log.info("played %r after re-sync", title)
         return True
 
+    # -- reconnecting on our own (reconnect.py has the policy) --------------
+    book = rc.PhoneBook()
+    reconnect_task = None
+    reconnect_until = 0.0
+
+    async def publish_reconnect(bus: Bus, state: str, **extra):
+        await bus.publish(f"jukebox/{SERVICE_NAME}/reconnect", {"state": state, **extra}, retain=True)
+
+    def start_reconnect(bus: Bus, event: str, was_playing: bool = False):
+        nonlocal reconnect_task, reconnect_until
+        window = rc.window_for(event, was_playing)
+        if window is None:
+            log.info("phone dropped while idle: not reconnecting (it may have been the owner's choice)")
+            return
+        reconnect_until = max(reconnect_until, now() + window)
+        if reconnect_task is None or reconnect_task.done():
+            reconnect_task = asyncio.create_task(reconnect_loop(bus, event))
+
+    async def reconnect_loop(bus: Bus, event: str):
+        started = now()
+        log.info("reconnecting (%s), for up to %.0fs", event, reconnect_until - started)
+        try:
+            while now() < reconnect_until:
+                if lease:
+                    await publish_reconnect(bus, "paused", reason=f"{lease['holder']} holds the browse lease")
+                elif not await rc.speaker_ready(system_bus):
+                    await publish_reconnect(bus, "waiting", reason="audio not ready yet")
+                else:
+                    devs = await rc.phones(system_bus)
+                    if any(d[3] for d in devs):
+                        log.info("a phone is connected; reconnect done")
+                        return
+                    by_mac = {d[0]: d for d in devs}
+                    for mac in book.order(list(by_mac)):
+                        _, path, name, _ = by_mac[mac]
+                        await publish_reconnect(bus, "trying", name=name, mac=mac)
+                        try:
+                            await rc.connect(system_bus, path)
+                            log.info("reconnected to %s (%s)", name, mac)
+                            return
+                        except Exception as e:
+                            log.info("reconnect to %s failed: %s", name, type(e).__name__)
+                await asyncio.sleep(rc.retry_delay(now() - started))
+            log.info("reconnect gave up after %.0fs; tap juk3-box on the phone to connect", now() - started)
+        finally:
+            await publish_reconnect(bus, "idle")
+
+    async def watch_connection(bus: Bus):
+        """Starts reconnecting at boot and after a drop mid-song (option C)."""
+        was_connected = None
+        last_playing_at = -1e9
+        while True:
+            try:
+                if playing:
+                    last_playing_at = now()
+                connected = any(d[3] for d in await rc.phones(system_bus))
+                if was_connected is None and not connected:
+                    start_reconnect(bus, "boot")
+                elif was_connected and not connected:
+                    start_reconnect(bus, "drop", was_playing=now() - last_playing_at < 10)
+                was_connected = connected
+            except Exception:
+                log.exception("connection watch failed")
+            await asyncio.sleep(3)
+
     async def poll_now_playing(bus: Bus):
         # Publish only on change. While playing, position_ms moves every
         # poll so the progress bar still updates; paused/idle goes quiet.
@@ -585,6 +656,7 @@ async def main() -> None:
         asyncio.create_task(bus.run_heartbeat())
         asyncio.create_task(poll_now_playing(bus))
         asyncio.create_task(watch_lease(bus))
+        asyncio.create_task(watch_connection(bus))
         async for _topic, payload in messages:
             try:
                 await handle_command(bus, payload)

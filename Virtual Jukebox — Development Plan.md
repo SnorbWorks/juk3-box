@@ -232,7 +232,7 @@ Throwaway test code that answers ten questions before any real phone service is 
 | 7 | Metadata available for sorting (title, artist, album, recently added) | Sort views | **Title only** when browsing. Full metadata arrives only for the playing track |
 | 8 | Does cover art arrive over AVRCP, and for which tracks? | Artwork strategy | **No.** No art in any metadata |
 | 9 | Do position and duration update well enough for a progress bar? | Now-playing strip | **Yes.** Position updates; the UI interpolates between updates |
-| 10 | Pi-initiated reconnect with the iPhone awake vs. asleep | Auto-reconnect and switching | Not tested. The phone reconnecting on its own (out of range and back) works |
+| 10 | Pi-initiated reconnect with the iPhone awake vs. asleep | Auto-reconnect and switching | **Works** when the Pi connects the A2DP profile (classic Bluetooth); a plain Device1.Connect often went to LE and hung. Reconnects at boot automatically |
 
 Output: a findings note plus the caching, queue and artwork strategies. As decided:
 - **Caching:** tracks keyed by (phone, title, duplicate index); a fresh sync on every new BlueZ player, navigating by folder contents; a failed pick re-syncs and replays the same song (self-heals in about 2.6 s).
@@ -247,7 +247,7 @@ Pairing, multiple phones, and switching between them, built on the Phase 3 findi
 - [ ] Phone registry: name, last seen; connect, disconnect, forget
 - [ ] Switch sequence: pause current phone, disconnect, connect new phone, load its cached library
 - [ ] Connection policy (takeover vs. locked; recommendation: locked)
-- [ ] Auto-reconnect on boot: last active phone, then others by most recent use
+- [x] Auto-reconnect on boot: last active phone, then others by most recent use (Oct 12; `reconnect.py`). Policy (user's option C): at boot try for 10 min; after a drop **mid-song** try for 3 min; a drop while idle is left alone (it may have been the owner's choice, and calling the phone would pull its audio away). Connects the A2DP profile, which forces classic Bluetooth -- a plain Connect let BlueZ wait for the iPhone on LE forever. Verified: reconnected 25 s into boot, first try
 - [x] Publish the connected phone's name (`jukebox/jb-source-phone/connected`, retained: `{connected, name, mac}`)
 - [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork. Built for the phone (crawl, `play_item`, play/pause/next/previous, now-playing; artwork comes from jb-library), but not yet as a shared interface other sources plug into
 - [x] Reconnect hardening: retries while BlueZ finishes building the player; library sync waits for browsing to appear; a failed pick re-syncs and replays
