@@ -52,7 +52,7 @@ one (e.g. the mood picks the palette, the beat picks the moment).
 
 | Field | Meaning |
 | --- | --- |
-| `level` | Overall loudness, smoothed, perceptually weighted (0 silent, 1 very loud) |
+| `level` | Overall loudness, smoothed, perceptually weighted, relative to the song's own loud parts over the last minute or so (0 silent, 1 as loud as this song gets). Ignores the source's volume, so it always uses the full range |
 | `peak` | Highest sample this frame, 0..1 of full scale (1 = clipping) |
 | `bands` | 32 frequency bands, low to high, log-spaced from ~40 Hz to ~16 kHz, perceptually weighted and smoothed so they rise fast and fall gracefully. Consumers with fewer or more columns resample |
 | `brightness` | Where the energy sits: 0 dark and bassy, 1 bright and airy |

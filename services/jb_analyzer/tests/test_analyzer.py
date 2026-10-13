@@ -49,12 +49,21 @@ def test_treble_tone_lights_high_bands_and_reads_bright():
     assert len(f["bands"]) == N_BANDS
 
 
-def test_level_tracks_loudness_and_peak_reads_full_scale():
+def test_loudness_is_absolute_and_peak_reads_full_scale():
     loud = run(tone(1000, 1, amp=1.0))[-1]
     quiet = run(tone(1000, 1, amp=0.01))[-1]
     silent = run(np.zeros(RATE))[-1]
-    assert loud["level"] > 0.9 and quiet["level"] < loud["level"] - 0.4 and silent["level"] < 0.02
+    assert loud["_loudness"] > 0.9 and quiet["_loudness"] < loud["_loudness"] - 0.4
+    assert silent["_loudness"] < 0.02 and silent["level"] < 0.02
     assert loud["peak"] > 0.99
+
+
+def test_level_adapts_to_a_quiet_source_but_follows_dips():
+    # A song sent at a low volume still fills the range once it's playing...
+    frames = run(np.concatenate([tone(1000, 3, amp=0.05), tone(1000, 1, amp=0.005)]))
+    assert frames[int(2.5 * FPS)]["level"] > 0.9
+    # ...and a passage 20 dB quieter than the rest reads well down.
+    assert frames[-1]["level"] < 0.3
 
 
 def test_kicks_at_120_bpm_give_beats_and_tempo():
@@ -106,9 +115,9 @@ def test_breakdown_then_drop():
 def test_mood_axes_separate_slow_dark_from_fast_bright():
     calm, wild = SlowAnalyzer(FPS), SlowAnalyzer(FPS)
     for _ in range(int(10 * FPS)):
-        calm.step({"_flux": 0.1, "level": 0.25, "brightness": 0.2, "beat": False})
+        calm.step({"_flux": 0.1, "_loudness": 0.25, "brightness": 0.2, "beat": False})
     for i in range(int(10 * FPS)):
-        wild.step({"_flux": 5.0 if i % 10 == 0 else 0.1, "level": 0.85, "brightness": 0.8, "beat": i % 10 == 0})
+        wild.step({"_flux": 5.0 if i % 10 == 0 else 0.1, "_loudness": 0.85, "brightness": 0.8, "beat": i % 10 == 0})
     c, w = calm.state(True)["mood"], wild.state(True)["mood"]
     assert c["arousal"] < w["arousal"] and c["warmth"] > w["warmth"]
     assert c["label"] == "moody" and w["label"] in ("bright", "energetic")

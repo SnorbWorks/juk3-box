@@ -95,8 +95,8 @@ async def main() -> None:
                         samples = np.frombuffer(raw, dtype=np.float32).reshape(-1, CHANNELS).mean(axis=1)
                         f = fast.process(samples)
                         now = time.monotonic()
-                        events = levels.step(f["level"], f["peak"])
-                        build = traj.step(f["level"], f["_bass_db"], levels.sounding)
+                        events = levels.step(f["_loudness"], f["peak"])
+                        build = traj.step(f["_loudness"], f["_bass_db"], levels.sounding)
                         if traj.dropped:
                             events.append("drop")
                         slow.step(f)

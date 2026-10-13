@@ -11,6 +11,10 @@ import numpy as np
 
 N_BANDS = 32
 F_LO, F_HI = 40.0, 16000.0
+LEVEL_RANGE_DB = 24.0     # published level spans this far under the recent loud parts
+LEVEL_REF_DECAY_DB = 0.5  # how fast the loud reference forgets (dB per second)
+BAND_TAU_S = 3.0          # how fast each band's range adapts
+BAND_FLOOR_DB = 45.0      # a band this far under the loudest (tilt-levelled) is "nothing there"
 
 
 def a_weighting(freqs):
@@ -44,8 +48,14 @@ class FastAnalyzer:
         self.centroid_lo, self.centroid_hi = np.log(150.0), np.log(8000.0)
         # State
         self.bands = np.zeros(N_BANDS)
-        self.band_ref = np.full(N_BANDS, -40.0)    # auto-range: a slow-moving loud reference per band (dB)
+        self.band_mean = None                      # auto-range: each band's running mean and variance (dB)
+        self.band_var = None
+        centres = np.sqrt(edges[:-1] * edges[1:])
+        self.tilt = 4.5 * np.log2(centres / 1000.0)  # music falls ~4.5 dB/octave; level it out for "is anything there"
+        self.band_ref = -120.0                     # the loudest tilted band lately
         self.level = 0.0
+        self.loudness = 0.0
+        self.loud_ref = -60.0
         self.prev_log = None
         self.prev_bass_db = -120.0
         self.flux_hist = []                        # bass flux, last ~1.5 s, for the beat threshold
@@ -60,20 +70,38 @@ class FastAnalyzer:
         power = (np.abs(spec) / self.win_gain) ** 2               # full-scale sine bin -> 1.0
         wpower = power * self.weight
 
-        # Level: A-weighted RMS in dBFS -> 0..1 over -60..0 dB, smoothed
-        # (fast attack, slower release).
+        # Loudness: A-weighted RMS in dBFS -> 0..1 over -60..0 dB, smoothed
+        # (fast attack, slower release). Absolute, so it also moves with the
+        # phone's volume: silence, energy and build-ups read this.
         rms_db = 10 * np.log10(np.sum(wpower) / 2 + 1e-12)        # /2: a sine's power is half its peak
         target = float(np.clip((rms_db + 60) / 60, 0, 1))
-        self.level += (target - self.level) * (0.6 if target > self.level else 0.15)
+        self.loudness += (target - self.loudness) * (0.6 if target > self.loudness else 0.15)
+        # Level (published): the same, against this song's own loud parts
+        # lately, so a quiet master or a low phone volume still uses the
+        # whole range. Real silence still reads 0.
+        self.loud_ref = max(rms_db, self.loud_ref - LEVEL_REF_DECAY_DB / self.fps, -60.0)
+        rel = float(np.clip((rms_db - (self.loud_ref - LEVEL_RANGE_DB)) / LEVEL_RANGE_DB, 0, 1))
+        rel *= float(np.clip((rms_db + 70) / 10, 0, 1))
+        self.level += (rel - self.level) * (0.6 if rel > self.level else 0.15)
         peak = float(np.max(np.abs(samples))) if n else 0.0
 
-        # Bands: mean weighted power per band in dB, auto-ranged against a
-        # slowly decaying loud reference so quiet and loud songs both use the
-        # whole height; rise fast, fall gracefully.
-        band_db = np.array([10 * np.log10(np.mean(wpower[b]) + 1e-12) for b in self.band_bins])
-        self.band_ref = np.maximum(band_db, self.band_ref - 6.0 / self.fps)   # loses 6 dB per second
-        self.band_ref = np.maximum(self.band_ref, -70.0)
-        target_bands = np.clip((band_db - (self.band_ref - 42)) / 42, 0, 1)
+        # Bands: each band against its own recent behaviour (a running mean
+        # and spread over a few seconds), so every column moves with the music
+        # whatever the song's tonal balance or the phone's volume -- music only
+        # swings a band by ~5 dB, so a fixed dB window looks like a flat wall.
+        # A band far under the loudest one (nothing there) stays dark.
+        band_db = np.array([10 * np.log10(np.mean(power[b]) + 1e-12) for b in self.band_bins])
+        a = 1 / (BAND_TAU_S * self.fps)
+        if self.band_mean is None:
+            self.band_mean, self.band_var = band_db.copy(), np.full(N_BANDS, 9.0)
+        dev = band_db - self.band_mean
+        self.band_mean += a * dev
+        self.band_var += a * (dev * dev - self.band_var)
+        spread = np.maximum(np.sqrt(self.band_var), 2.5)
+        tilted = band_db + self.tilt
+        self.band_ref = max(float(tilted.max()), self.band_ref - 6.0 / self.fps)
+        present = np.clip((tilted - (self.band_ref - BAND_FLOOR_DB)) / 12, 0, 1)
+        target_bands = np.clip(0.38 + dev / (3.2 * spread), 0, 1) * present
         up = target_bands > self.bands
         self.bands = np.where(up, self.bands + (target_bands - self.bands) * 0.65,
                               self.bands + (target_bands - self.bands) * 0.18)
@@ -115,6 +143,7 @@ class FastAnalyzer:
             "beat": beat,
             "onset": round(onset, 3),
             # internals for the slower layers (not published as-is)
+            "_loudness": round(self.loudness, 3),
             "_bass_db": bass_db,
             "_rms_db": rms_db,
             "_flux": flux,
