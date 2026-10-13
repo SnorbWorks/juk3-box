@@ -12,7 +12,9 @@ skyline, so at idle it should look like a city at night, in slow motion.
   - the two swooshes = bridges -> a string of soft bridge lights, the odd
     car crossing
   - circle -> the moon, a soft pale glow breathing very slowly
-  - footlights -> white, breathing
+  - footlights -> the city reflected on the grill below: a night-blue glow
+    with the warm light of the windows above each spot, and every car
+    traced along them as it drives by (user, 2026-10-13)
 
 Shapes come from the same map-based detection as accent-diner; bridges are
 pixels 92-104 and the circle 77-85 (their chain ranges from the mapping).
@@ -42,12 +44,17 @@ HEADLIGHT = (255, 240, 210)
 TAILLIGHT = (255, 10, 0)
 BRIDGE = (70, 80, 110)            # cool bridge-cable lights
 MOON = (150, 170, 210)
+NIGHT = (10, 22, 80)             # footlights: the night sky's blue between the buildings
+FOOT_WINDOW = (150, 100, 40)      # footlights: window light spilling down
 
 WINDOW_LIT = 0.38                 # share of windows lit at any moment
 WINDOW_TOGGLE_PER_S = 0.012       # chance per window per second to switch
 CAR_SPEED = (1.2, 2.2)            # pixels per second: slow motion
 CAR_SPAWN_PER_S = 0.06            # per street, per second
 BLINK_S, BLINK_ON_S = 1.8, 0.35   # aviation lights: a short flash every 1.8 s
+FOOT_SPREAD = 0.04                # footlights reflect the windows within about this much x
+FOOT_WARM = (0.25, 0.5)           # lit share of the windows above: blue below, fully warm above
+FOOT_CAR = 0.7                    # a car's trace on the footlights
 
 
 def mix(c, k):
@@ -56,6 +63,10 @@ def mix(c, k):
 
 def add(a, b):
     return tuple(min(255.0, x + y) for x, y in zip(a, b))
+
+
+def blend(a, b, k):
+    return tuple(x + (y - x) * k for x, y in zip(a, b))
 
 
 class City:
@@ -81,6 +92,14 @@ class City:
                 self.bridges.append(seg)                                 # chain order follows the curve
             else:
                 self.streets.append(sorted(seg, key=lambda i: pos[i][0]))  # left -> right
+        # Footlights: which windows each column reflects.
+        self.reflect = []
+        for col in range(accent.FOOT_COLS):
+            x = (col + 0.5) / accent.FOOT_COLS
+            w = [(i, math.exp(-((pos[i][0] - x) / FOOT_SPREAD) ** 2)) for i in self.windows]
+            w = [(i, k) for i, k in w if k > 0.02]
+            total = sum(k for _, k in w)
+            self.reflect.append([(i, k / total) for i, k in w])
         self.cars = []          # [lane, position (px along lane), speed (px/s, signed), colour]
         for lane in self.streets + self.bridges:
             if self.rnd.random() < 0.6:
@@ -138,9 +157,25 @@ class City:
             if self.rnd.random() < CAR_SPAWN_PER_S * dt and sum(c[0] is lane for c in self.cars) < 2:
                 self._spawn(lane)
 
-        breath = 0.22 + 0.2 * (0.5 - 0.5 * math.cos(t * 2 * math.pi / 7))  # footlights: white, breathing
-        for i in range(accent.UPPER, accent.NUM_PIXELS):
-            out[i] = mix((255, 245, 230), breath)
+        # Footlights: night blue, breathing, turning warm under lit windows;
+        # each car leaves a trace at its x as it drives by.
+        night = mix(NIGHT, 0.8 + 0.2 * math.sin(t * 2 * math.pi / 9))
+        foot = []
+        for weights in self.reflect:
+            lit = sum(k * self.window_level[i] for i, k in weights if self.windows[i])
+            foot.append(blend(night, FOOT_WINDOW, min(1.0, max(0.0, (lit - FOOT_WARM[0]) / (FOOT_WARM[1] - FOOT_WARM[0])))))
+        for lane, p, _, colour in self.cars:
+            k = min(len(lane) - 1.0, max(0.0, p))
+            a, z = lane[int(k)], lane[min(len(lane) - 1, int(k) + 1)]
+            x = self.pos[a][0] + (self.pos[z][0] - self.pos[a][0]) * (k - int(k))
+            edge = min(1.0, p + 1.5, len(lane) + 0.5 - p)               # fade in/out at the lane's ends
+            for col in range(accent.FOOT_COLS):
+                w = max(0.0, 1 - abs((col + 0.5) / accent.FOOT_COLS - x) * accent.FOOT_COLS / 1.6)
+                if w and edge > 0:
+                    foot[col] = add(foot[col], mix(colour, FOOT_CAR * w * edge))
+        for row in range(accent.FOOT_ROWS):
+            for col in range(accent.FOOT_COLS):
+                out[accent.foot_index(row, col)] = foot[col]
         return [(int(r), int(g), int(b)) for r, g, b in out]
 
 

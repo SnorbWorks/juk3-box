@@ -122,3 +122,25 @@ def test_malformed_messages_are_ignored():
     for payload in (b"not json", b"[1, 2]", b'{"level": null}', b'{"bands": "x", "level": "loud"}'):
         feed._on_message(None, None, Msg("jukebox/analysis/audio/fast", payload))
     assert feed.snapshot().look == "idle"
+
+
+def test_idle_washes_into_the_ribbon_every_few_minutes_then_back():
+    from services.jb_lights.audio_feed import INTERLUDE_EVERY_S, INTERLUDE_S
+    p = LookPicker()
+    assert p.update(0, False, None) == "idle"
+    assert p.update(INTERLUDE_EVERY_S - 1, False, None) == "idle"
+    assert p.update(INTERLUDE_EVERY_S + 1, False, None) == "ribbon"
+    assert p.update(INTERLUDE_EVERY_S + INTERLUDE_S - 1, False, None) == "ribbon"
+    assert p.update(INTERLUDE_EVERY_S + INTERLUDE_S + 1, False, None) == "idle"
+
+
+def test_music_during_the_wash_takes_over_and_the_idle_clock_restarts_after():
+    from services.jb_lights.audio_feed import IDLE_AFTER_S, INTERLUDE_EVERY_S
+    p = LookPicker()
+    p.update(0, False, None)
+    assert p.update(INTERLUDE_EVERY_S + 5, False, None) == "ribbon"
+    look, t = play(p, INTERLUDE_EVERY_S + 10, 2, 0.8)
+    assert look == "eq"                                   # a lively song starts lively
+    quiet = t + IDLE_AFTER_S
+    assert p.update(quiet + 1, False, 0.8) == "idle"
+    assert p.update(quiet + INTERLUDE_EVERY_S - 5, False, 0.8) == "idle"

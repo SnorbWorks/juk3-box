@@ -21,3 +21,25 @@ def test_positions_share_one_picture():
     assert all(y > 1 for _, y in foot)               # footlights sit below the upper panel
     assert pos[0][1] > 0.9 and pos[188][1] < 0.1      # pixel 1 bottom strip, 189 top bar
     assert pos[accent.foot_index(0, 0)][0] < pos[accent.foot_index(0, 39)][0]
+
+
+def test_city_footlights_reflect_the_panel_and_trace_the_cars():
+    from services.jb_lights.themes.accent_city import City
+    city = City(accent.positions())
+    frame = None
+    for k in range(40):
+        frame = city.frame(k / 40, 1 / 40)
+    foot = frame[accent.UPPER:]
+    assert all(b > 0 for _, _, b in foot)                       # night blue everywhere
+    assert any(r > b for r, _, b in foot)                       # warm window light somewhere
+    for row in range(1, accent.FOOT_ROWS):                      # all four rows show the same street
+        for col in range(accent.FOOT_COLS):
+            assert frame[accent.foot_index(row, col)] == frame[accent.foot_index(0, col)]
+    street = [c for c in city.cars if c[0] in city.streets]
+    assert street, "seed 11 starts with cars on the streets"
+    lane, p, _, colour = street[0]
+    x = accent.positions()[lane[int(p)]][0]
+    col = min(accent.FOOT_COLS - 1, int(x * accent.FOOT_COLS))
+    city.cars = []
+    bare = city.frame(1.0, 0.0)[accent.foot_index(0, col)]
+    assert sum(frame[accent.foot_index(0, col)]) > sum(bare)    # the car lit its spot

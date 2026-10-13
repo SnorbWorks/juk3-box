@@ -4,7 +4,8 @@
 One AudioFeed is shared by the accent chain and the level bar (each runs in
 its own thread), so both always agree on the look:
 
-  idle    nothing playing for a few seconds -> the idle looks (city, white bar)
+  idle    nothing playing for a few seconds -> the idle looks (city, white bar);
+          every few minutes the whole cabinet washes into the ribbon for a minute
   eq      livelier music (mood arousal high) -> graphic EQ / classic analyzer
   ribbon  calmer music (arousal low) -> the flowing ribbon, breathing with it
 
@@ -33,6 +34,9 @@ START_SPLIT = 0.48        # first pick of a song: eq at or above this
 MIN_DWELL_S = 30.0        # a look stays at least this long before the mood may change it
 SETTLE_S = 12.0           # early in a song the mood is still settling (its window holds the last song):
                           # follow it directly until then
+INTERLUDE_EVERY_S = 240.0  # idle: after this long on the idle looks...
+INTERLUDE_S = 60.0         # ...the whole cabinet washes into the ribbon for this long, then back
+INTERLUDE_LOOK = "ribbon"
 
 
 class LookPicker:
@@ -44,17 +48,25 @@ class LookPicker:
         self.since = 0.0
         self.last_sound = -1e9
         self.play_start = 0.0
+        self.playing = False
+        self.quiet_since = None
 
     def update(self, now: float, sounding: bool, arousal: float | None) -> str:
         if sounding:
             self.last_sound = now
         playing = now - self.last_sound < IDLE_AFTER_S
+        started, self.playing = playing and not self.playing, playing
+        if playing:
+            self.quiet_since = None
+        elif self.quiet_since is None:
+            self.quiet_since = now
         if not playing:
-            want = "idle"
+            phase = (now - self.quiet_since) % (INTERLUDE_EVERY_S + INTERLUDE_S)
+            want = INTERLUDE_LOOK if phase >= INTERLUDE_EVERY_S else "idle"
         elif self.mode in ("eq", "ribbon"):
             want = self.mode
-        elif self.look == "idle" or now - self.play_start < SETTLE_S:
-            if self.look == "idle":
+        elif started or now - self.play_start < SETTLE_S:
+            if started:
                 self.play_start = now
             want = "eq" if arousal is None or arousal >= START_SPLIT else "ribbon"
         elif now - self.since < MIN_DWELL_S or arousal is None:
