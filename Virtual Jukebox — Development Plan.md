@@ -11,9 +11,9 @@ The core jukebox works end to end on the bench: an iPhone streams over Bluetooth
 | 0 Foundation, 1 Audio | Done |
 | 2a Pico input | Done except encoder detent tuning and the coin-return retrofit |
 | 2b jb-input | Service done; gestures beyond click built but off, mapping not wired |
-| 2c LED board | Rev E built; buttons and level bar working. Accent strip not built yet, so the all-chains + music tests wait |
-| 3 Phone link test | Answered except Q4's change counter and Q10 (see the table) |
-| 4 Phone source | Playback, picks, sync and reconnect work; the sync is hardened (waits out BlueZ, retries, resets itself when lost) and shares browsing through a lease. Pairing, multi-phone and switching not started |
+| 2c LED board | Rev E built; all three chains working (buttons via software inversion, bar via the U2 jumper fix, accent chain = upper panel 189 + footlights 160). Still to do: the all-chains + music tests and get_throttled under load |
+| 3 Phone link test | Answered (Q10: the Pi reconnects the phone itself by connecting the A2DP profile); only Q4's change counter untested |
+| 4 Phone source | Playback, picks, sync and reconnect work; the sync is hardened (waits out BlueZ, retries, resets itself when lost) and shares browsing through a lease. Reconnects by itself at boot and after a mid-song drop. Pairing, multi-phone and switching not started |
 | 5 Library | Done, plus the phone's playlists and its full album list (jb-crawl). An album's songs are fetched when someone first opens it (~50 s, then saved); albums sharing a name are kept apart. Real artists for every song and play counts are still open |
 | 6 Core | Queue, shuffle, picks, album picks (queue the whole album in order), Reset hold (cancel the song; reboot / shut-down menu) done. Up Next removal open |
 | 6b Lights | All three chains run in jb-lights: buttons theme 1 (with Reset feedback), the bar's idle white + volume fill, and the camera-mapped upper panel + footlights as a city at night. EQ and ribbon looks built; real audio levels and the playing look next |
