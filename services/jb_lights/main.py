@@ -54,7 +54,7 @@ def main():
     for w in workers:
         w.start()
     try:
-        buttons_theme1.main()
+        buttons_theme1.main(feed=feed)
     finally:
         stop.set()
         for w in workers:

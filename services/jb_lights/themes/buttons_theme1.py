@@ -34,6 +34,7 @@ import paho.mqtt.client as mqtt
 from rpi_ws281x import Color
 
 from services.jb_lights import buttons
+from services.jb_lights.themes.buttons_music import ButtonsMusic
 
 TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected",
           "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw")
@@ -54,6 +55,7 @@ CANCEL_BLINKS = 3         # RESET acknowledges the cancel
 RESET_BLINKS = 2          # holding Reset: the song cancelled, and again when the power menu opens
 RESET_ON_S, RESET_OFF_S = 0.18, 0.14
 CANCEL_ON_S, CANCEL_OFF_S = 0.15, 0.12
+MUSIC_FPS = 30            # the keypad's part of the music show
 
 
 class Theme1:
@@ -61,11 +63,12 @@ class Theme1:
         self.strip = strip
         self.reset_held = False
 
-    def paint(self, colors=None):
+    def paint(self, colors=None, show=True):
         colors = colors or {}
         for i in range(buttons.NUM_PIXELS):
             self.strip.setPixelColor(i, colors.get(i, WHITE))
-        self.strip.show()
+        if show:
+            self.strip.show()
 
     def show_entry(self, letter):
         """Resting look for jb-core's entry state: a waiting letter, or idle;
@@ -118,7 +121,9 @@ class Theme1:
             time.sleep(CHASE_STEP_S)
 
 
-def main():
+def main(feed=None):
+    """Runs until Ctrl-C. With a feed (AudioFeed), the keypad joins the music
+    show (buttons_music) whenever nothing is waiting on it."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="localhost")
     args = ap.parse_args()
@@ -135,6 +140,33 @@ def main():
     theme.paint()
     letter = None   # jb-core's waiting letter, from the retained entry topic
     menu = False    # the power menu is open (jukebox/jb-core/power)
+    music = ButtonsMusic() if feed else None
+    showing_music = False
+    last = time.monotonic()
+
+    def music_frame():
+        """Between events: the keypad's part of the light show, when it's
+        resting. The accent chain renders the shared controller ~40 times a
+        second, so this only sets the pixels (no show of its own)."""
+        nonlocal showing_music, last
+        now = time.monotonic()
+        dt, last = min(0.1, now - last), now
+        if not music or letter or theme.reset_held or menu:
+            return
+        colours = music.frame(dt, feed.snapshot(now))
+        if colours is None:
+            if showing_music:
+                theme.paint()                           # the show is over: plain white
+                showing_music = False
+            return
+        showing_music = True
+        theme.paint({i: Color(*c) for i, c in colours.items()}, show=False)
+
+    def interacted():
+        nonlocal showing_music
+        if showing_music and music:
+            music.resume()                              # fade back in afterwards
+        showing_music = False
 
     def follow_state(topic, p):
         """State-only updates (no animation): returns True if handled."""
@@ -150,7 +182,14 @@ def main():
 
     try:
         while True:
-            topic, p = events.get()
+            try:
+                topic, p = events.get(timeout=1 / MUSIC_FPS if music else None)
+            except queue.Empty:
+                music_frame()
+                continue
+            if topic.endswith("/raw") and p.get("control") != "reset":
+                continue                                # only Reset's raw state matters here
+            interacted()
             if topic.endswith("/entry"):
                 was = letter
                 follow_state(topic, p)
