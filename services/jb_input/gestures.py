@@ -8,6 +8,8 @@ clock. Timings come from config.
   click   the default and, for now, the only gesture: fires on release
   hold    (opt-in) down for hold_ms; fires once while still held, and the
           later release produces nothing
+  long_hold (opt-in) still down at long_hold_ms: fires once more, after
+          hold (Reset: hold = skip the song, long_hold = the power menu)
   double  (opt-in) a second press within double_window_ms of the first
           release; fires on that second press (whose own release and hold
           then produce nothing). Enabling it makes click wait out the window.
@@ -24,7 +26,8 @@ IDLE, DOWN, WAIT_SECOND = "idle", "down", "wait_second"
 
 class ButtonGestures:
     def __init__(self, control: str, fault: str, double_window_ms: int, hold_ms: int,
-                 stuck_ms: int, double_enabled: bool = False, hold_enabled: bool = False):
+                 stuck_ms: int, double_enabled: bool = False, hold_enabled: bool = False,
+                 long_hold_ms: int = 0, long_hold_enabled: bool = False):
         self.control = control
         self.fault = fault
         self.double_window = double_window_ms / 1000
@@ -32,6 +35,8 @@ class ButtonGestures:
         self.stuck_after = stuck_ms / 1000
         self.double_enabled = double_enabled
         self.hold_enabled = hold_enabled
+        self.long_hold = long_hold_ms / 1000
+        self.long_hold_enabled = long_hold_enabled and long_hold_ms > 0
         self.reset_state()
 
     def reset_state(self):
@@ -42,6 +47,7 @@ class ButtonGestures:
         self.release_t = 0.0
         self.consumed = False    # this press already used (double / push_turn)
         self.hold_fired = False
+        self.long_fired = False
         self.stuck = False
 
     @property
@@ -69,6 +75,7 @@ class ButtonGestures:
             return out
         out += self._flush_pending(t)
         self.state, self.down_t, self.consumed, self.hold_fired = DOWN, t, False, False
+        self.long_fired = False
         return out
 
     def up(self, t) -> list:
@@ -79,7 +86,7 @@ class ButtonGestures:
             self.stuck = False
             self.state = IDLE
             return [FaultChange(self.fault, False, t)]
-        if self.consumed or self.hold_fired:
+        if self.consumed or self.hold_fired or self.long_fired:
             self.state = IDLE
         elif self.double_enabled:
             self.state, self.release_t = WAIT_SECOND, t
@@ -95,6 +102,10 @@ class ButtonGestures:
             if self.hold_enabled and not self.consumed and not self.hold_fired and held >= self.hold:
                 self.hold_fired = True
                 out.append(Gesture(self.control, "hold", t))
+            if (self.long_hold_enabled and not self.consumed and not self.long_fired
+                    and held >= self.long_hold):
+                self.long_fired = True
+                out.append(Gesture(self.control, "long_hold", t))
             if held >= self.stuck_after:
                 self.stuck = True
                 out.append(FaultChange(self.fault, True, t))

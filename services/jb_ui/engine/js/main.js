@@ -170,6 +170,50 @@ function openNowPlaying() {
   refocus();
 }
 
+// The power menu (holding Reset; jb-core's power.py decides when). The
+// knob turns between Reboot, Shut down and Cancel and starts on Cancel, so
+// a stray click never takes the jukebox down; jb-core closes it on a choice,
+// a Reset click or its timeout, and this follows jukebox/jb-core/power.
+function openPower() {
+  const returnTo = currentStopKey();
+  const choose = choice => publish('jukebox/jb-core/cmd', { action: 'power', choice });
+  const render = () => {
+    const p = store.get('power');
+    const left = p?.until ? Math.max(0, Math.ceil(p.until - Date.now() / 1000)) : null;
+    updatePopup('power', {
+      title: 'Power',
+      message: 'Reboot or shut down the jukebox?',
+      countdown: left === null ? '' : `Cancels in ${left} s`,
+    });
+  };
+  const timer = setInterval(() => popupOpen() === 'power' && render(), 1000);
+  openPopup('power', { title: 'Power' }, {
+    stops: { reboot: () => choose('reboot'), shutdown: () => choose('shutdown'), cancel: () => choose('cancel') },
+    onClose: () => {
+      clearInterval(timer);
+      focusKey(returnTo);
+    },
+  });
+  render();
+  focusKey('popup:power:cancel');
+}
+
+function watchPower() {
+  store.watch(html, 'power', p => {
+    if (p?.state === 'menu') {
+      if (popupOpen() !== 'power') openPower();
+    } else {
+      closePopup('power');
+      if (p?.state === 'rebooting' || p?.state === 'shutting_down') {
+        openPopup('notice', {
+          title: p.state === 'rebooting' ? 'Rebooting' : 'Shutting down',
+          message: p.state === 'rebooting' ? 'Back in a minute.' : 'Goodbye!',
+        });
+      }
+    }
+  });
+}
+
 // The phone badge. Managing phones (connect, switch, forget) comes with
 // the phone connection manager; for now it shows who's connected.
 function phones() {
@@ -259,6 +303,7 @@ async function start() {
   store.set('settings', theme.settings);
   initPopups(theme.blocks);
   watchSystem();
+  watchPower();
   watchIdle();
   startFeatured();
   document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context()));

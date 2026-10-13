@@ -27,7 +27,7 @@ DEFAULT_KEYMAP = {
 }
 
 BUTTON_CONTROLS = ("reset", "knob")
-BUTTON_GESTURES = ("click", "double", "hold")       # click is always on
+BUTTON_GESTURES = ("click", "double", "hold", "long_hold")   # click is always on
 GESTURES = BUTTON_GESTURES + ("turn", "push_turn")
 VALID_CONTROL_NAMES = {f"key.{c}" for c in LETTERS + DIGITS} | {"reset", "knob.push", "knob.cw", "knob.ccw"}
 
@@ -38,11 +38,14 @@ class Settings:
     device_path: str = "/dev/input/jb-keypad"
     reconnect_s: float = 2.0
     grab: bool = True
-    # Extra button gestures beyond click, per control: any of "double", "hold".
-    gestures: dict = field(default_factory=lambda: {"reset": [], "knob": []})
+    # Extra button gestures beyond click, per control: any of "double",
+    # "hold", "long_hold". Reset: hold (1 s) cancels the playing song, long_hold
+    # (4 s) opens the reboot/shut-down menu (the user's design, 2026-10-12).
+    gestures: dict = field(default_factory=lambda: {"reset": ["hold", "long_hold"], "knob": []})
     push_turn: bool = False      # turning while the knob is pushed -> push_turn (else plain turn)
     double_window_ms: int = 300
-    hold_ms: int = 700
+    hold_ms: int = 1000
+    long_hold_ms: int = 4000
     stuck_ms: int = 30000
     coalesce_ms: int = 20
     publish_raw: bool = False
@@ -75,9 +78,9 @@ def _parse_gestures(table: dict) -> dict:
     for control, names in table.items():
         if control not in BUTTON_CONTROLS:
             raise ConfigError(f"gestures: unknown control {control!r}")
-        bad = [n for n in names if n not in ("double", "hold")]
+        bad = [n for n in names if n not in ("double", "hold", "long_hold")]
         if bad:
-            raise ConfigError(f"gestures.{control}: only 'double' and 'hold' can be enabled, got {bad}")
+            raise ConfigError(f"gestures.{control}: only 'double', 'hold' and 'long_hold' can be enabled, got {bad}")
         gestures[control] = list(names)
     return gestures
 
@@ -111,7 +114,9 @@ def load(path: Path | str | None = None) -> Settings:
         settings.actions = _parse_actions(actions)
     if gestures is not None:
         settings.gestures = _parse_gestures(gestures)
-    for name in ("double_window_ms", "hold_ms", "stuck_ms", "coalesce_ms"):
+    for name in ("double_window_ms", "hold_ms", "long_hold_ms", "stuck_ms", "coalesce_ms"):
         if getattr(settings, name) <= 0:
             raise ConfigError(f"{name!r} must be positive")
+    if settings.long_hold_ms <= settings.hold_ms:
+        raise ConfigError("'long_hold_ms' must be longer than 'hold_ms'")
     return settings

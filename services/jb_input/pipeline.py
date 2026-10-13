@@ -23,7 +23,9 @@ class Pipeline:
             enabled = settings.gestures.get(control, [])
             return ButtonGestures(control, fault, settings.double_window_ms, settings.hold_ms,
                                   settings.stuck_ms, double_enabled="double" in enabled,
-                                  hold_enabled="hold" in enabled)
+                                  hold_enabled="hold" in enabled,
+                                  long_hold_ms=settings.long_hold_ms,
+                                  long_hold_enabled="long_hold" in enabled)
 
         # control name in the keymap -> its gesture machine
         self.buttons = {

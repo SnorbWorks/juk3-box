@@ -113,3 +113,31 @@ def test_consumed_press_produces_nothing():
     b.consume()
     out = run_until(b, 1.0, 0.0) + b.up(1.0) + run_until(b, 2.0, 1.0)
     assert gestures(out) == []
+
+
+# --- Opt-in long hold (Reset: hold = skip, long_hold = power menu) ---
+
+def long_button():
+    return ButtonGestures("reset", "reset_stuck", double_window_ms=300, hold_ms=1000, stuck_ms=30000,
+                          hold_enabled=True, long_hold_ms=4000, long_hold_enabled=True)
+
+
+def test_long_hold_fires_after_hold_while_still_held():
+    b = long_button()
+    out = b.down(0.0) + run_until(b, 3.9, 0.0)
+    assert gestures(out) == ["hold"]
+    out = run_until(b, 5.0, 3.9)
+    assert gestures(out) == ["long_hold"]
+    assert gestures(b.up(5.0) + run_until(b, 6.0, 5.0)) == []    # release adds nothing
+
+
+def test_releasing_between_hold_and_long_hold_gives_just_hold():
+    b = long_button()
+    out = b.down(0.0) + run_until(b, 2.0, 0.0) + b.up(2.0) + run_until(b, 6.0, 2.0)
+    assert gestures(out) == ["hold"]
+
+
+def test_long_hold_off_by_default():
+    b = button(hold=True)
+    out = b.down(0.0) + run_until(b, 6.0, 0.0)
+    assert gestures(out) == ["hold"]

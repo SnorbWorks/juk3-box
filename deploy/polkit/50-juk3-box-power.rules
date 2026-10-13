@@ -1,0 +1,15 @@
+// JUKE.BOX: lets the jukebox's own user (admin, which runs jb-core) reboot
+// and power off through logind without a password -- nothing else. Used by
+// the Reset-hold power menu (services/jb_core/power.py). Install to
+// /etc/polkit-1/rules.d/ (root, 0644).
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions"
+    ];
+    if (subject.user == "admin" && allowed.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+});

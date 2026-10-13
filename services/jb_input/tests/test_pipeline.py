@@ -52,8 +52,8 @@ def test_defaults_long_knob_press_is_just_a_click():
 def test_configured_actions_and_gestures_are_honoured():
     s = Settings(gestures={"knob": ["hold"], "reset": []}, actions={("knob", "hold"): "menu.open"})
     p = Pipeline(s)
-    out = p.feed(RawEvent("KEY_ENTER", 1, 0.0)) + p.tick(0.8)
-    assert of(out, Action) == [Action("menu.open", None, "knob", "hold", 0.8)]
+    out = p.feed(RawEvent("KEY_ENTER", 1, 0.0)) + p.tick(1.1)
+    assert of(out, Action) == [Action("menu.open", None, "knob", "hold", 1.1)]
 
 
 def test_stuck_reset_at_startup_raises_fault_and_reconnect_clears_it():

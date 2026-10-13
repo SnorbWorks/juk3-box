@@ -5,6 +5,7 @@ import time
 from shared import config, logging as jb_logging
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
+from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
 
 SERVICE_NAME = "jb-core"
 ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
@@ -42,6 +43,9 @@ class Queue:
         # own equivalent ("are there any songs loaded locally?", etc.)
         # when they exist.
         self.phone_connected = False
+        # The power menu (holding Reset) holds the queue: nothing starts on
+        # its own until a choice is made.
+        self.held = False
 
     def refill_shuffle(self) -> None:
         if not self.shuffle_active or not self.library_tracks:
@@ -72,6 +76,8 @@ RECONNECT_AUTOPLAY_DELAY_S = 1.5
 async def try_autoplay(bus: Bus, q: Queue, log, delay: float = 0.0) -> None:
     if delay:
         await asyncio.sleep(delay)
+    if q.held:
+        return
     next_track = q.pop_next()
     if next_track:
         log.info("autoplay: %s", next_track["title"])
@@ -122,6 +128,65 @@ async def publish_entry_events(bus: Bus, events, log) -> None:
             await bus.publish("jukebox/jb-core/rejected", e.payload())
 
 
+POWER_COMMANDS = {"reboot": ["systemctl", "--no-ask-password", "reboot"],
+                  "shutdown": ["systemctl", "--no-ask-password", "poweroff"]}
+
+
+async def publish_power(bus: Bus, state: str, **extra) -> None:
+    """jukebox/jb-core/power (retained): the UI shows the menu while
+    state == "menu"; "rebooting" / "shutting_down" while going down."""
+    await bus.publish("jukebox/jb-core/power", {"state": state, **extra}, retain=True)
+
+
+async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
+    """Carries out what PowerMenu decided (see power.py for the meanings)."""
+    for act in actions:
+        if act == "skip":
+            q.expected_title = None
+            next_track = q.pop_next()
+            if next_track:
+                log.info("Reset held: cancelling the song; next: %s", next_track["title"])
+                await bus.publish("jukebox/jb-source-phone/cmd",
+                                  {"action": "play_item", "item_path": next_track["item_path"],
+                                   "title": next_track["title"]})
+                q.expected_title, q.playing = next_track["title"], True
+            else:
+                log.info("Reset held: cancelling the song; nothing queued, stopping")
+                await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+                q.playing = False
+            await publish_queue(bus, q)
+        elif act == "pause":
+            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+        elif act == "open":
+            q.held = True
+            await publish_power(bus, "menu", until=time.time() + MENU_TIMEOUT_S)
+        elif act == "close":
+            q.held = False
+            await publish_power(bus, "idle")
+        elif act == "resume":
+            log.info("power menu cancelled: resuming")
+            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "play"})
+        elif act == "clear":
+            q.manual, q.shuffle_buffer, q.shuffle_active = [], [], False
+            await publish_queue(bus, q)
+        elif act in POWER_COMMANDS:
+            log.warning("power menu: %s", act)
+            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+            await publish_power(bus, "rebooting" if act == "reboot" else "shutting_down")
+            await asyncio.sleep(1.5)  # let the screen say so
+            proc = await asyncio.create_subprocess_exec(*POWER_COMMANDS[act], stderr=asyncio.subprocess.PIPE)
+            _, err = await proc.communicate()
+            if proc.returncode:
+                log.error("%s failed: %s", act, err.decode().strip())
+                await publish_power(bus, "idle", error=f"couldn't {act}")
+
+
+async def power_ticks(bus: Bus, q: Queue, menu: PowerMenu, log) -> None:
+    while True:
+        await apply_power(bus, q, menu.tick(time.monotonic()), log)
+        await asyncio.sleep(0.5)
+
+
 async def entry_timeouts(bus: Bus, entry: Entry, log) -> None:
     while True:
         await publish_entry_events(bus, entry.tick(time.monotonic()), log)
@@ -141,6 +206,9 @@ async def main() -> None:
         entry = Entry(ENTRY_TIMEOUT_MS)
         await bus.publish("jukebox/jb-core/entry", {"state": "idle", "letter": None, "reason": None}, retain=True)
         asyncio.create_task(entry_timeouts(bus, entry, log))
+        menu = PowerMenu()
+        await publish_power(bus, "idle")
+        asyncio.create_task(power_ticks(bus, q, menu, log))
 
         async for topic, payload in messages:
             if topic == "jukebox/jb-input/key":
@@ -148,10 +216,18 @@ async def main() -> None:
                 await publish_entry_events(bus, entry.key(payload["key"], time.monotonic()), log)
 
             elif topic == "jukebox/jb-input/gesture":
-                # Reset click cancels a waiting letter (the board mark and the
-                # button lights both follow jukebox/jb-core/entry).
-                if payload.get("control") == "reset" and payload.get("gesture") == "click":
-                    await publish_entry_events(bus, entry.cancel(time.monotonic()), log)
+                # Reset: a click cancels a waiting letter (the board mark and the
+                # button lights both follow jukebox/jb-core/entry) or the power
+                # menu; holding it cancels the song or opens the menu (power.py).
+                if payload.get("control") == "reset":
+                    gesture, now = payload.get("gesture"), time.monotonic()
+                    if gesture == "click":
+                        await apply_power(bus, q, menu.reset_click(), log)
+                        await publish_entry_events(bus, entry.cancel(now), log)
+                    elif gesture == "hold":
+                        await apply_power(bus, q, menu.hold(now, q.playing), log)
+                    elif gesture == "long_hold":
+                        await apply_power(bus, q, menu.long_hold(now, q.playing), log)
 
             elif topic == "jukebox/jb-library/tracks":
                 q.library_tracks = payload.get("tracks", [])
@@ -201,7 +277,8 @@ async def main() -> None:
                     continue  # our own commanded change taking effect
                 # The track changed without our say-so (iOS auto-advanced
                 # on its own) -- take over if we have anything queued.
-                next_track = q.pop_next()
+                # While the power menu is open nothing new should play.
+                next_track = None if q.held else q.pop_next()
                 if next_track:
                     log.info("overriding auto-advance with queued track: %s", next_track["title"])
                     await bus.publish(
@@ -248,6 +325,8 @@ async def main() -> None:
                     q.shuffle_active = False
                     q.shuffle_buffer = []
                     await publish_queue(bus, q)
+                elif action == "power":
+                    await apply_power(bus, q, menu.choose(payload.get("choice", "")), log)
                 else:
                     log.warning("unknown jb-core command: %r", action)
 

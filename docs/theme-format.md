@@ -259,6 +259,7 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | `popup-notice.html` | The content of short notices, such as "Connect your phone" |
 | `popup-now-playing.html` | The Now Playing overlay: `song`, `artist`, `album`, `year`, `cover`, `elapsed`, `length`, `favorite`, `favoriteLabel`, and stops `favorite` and `close` |
 | `popup-phones.html` | The phone badge's popup: `name`, `status` |
+| `popup-power.html` | The power menu (hold Reset 4 s, or 1 s with nothing playing): `message`, `countdown`, and stops `reboot`, `shutdown` and `cancel`. The knob starts on `cancel` |
 | `header.html` | The screen header: `title`, `subtitle`, `canGoBack`, and the stop `back` |
 | `connection.html` | The phone badge: `status`, `name`, `icon`, `moreIcon` |
 | `page-info.html` | The board's page info: `sort`, `filter`, `page`, `pages` |
