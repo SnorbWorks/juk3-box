@@ -23,6 +23,7 @@ def config(tmp_path):
             "settings_path": str(tmp_path / "settings.json"),
             "owner_layouts_dir": str(tmp_path / "layouts"),
             "drafts_dir": str(tmp_path / "drafts"),
+            "revisions_dir": str(tmp_path / "revisions"),
             "media_dir": str(tmp_path / "media"),
             "media_cache_dir": str(tmp_path / "cache"),
             "admin_dir": str(tmp_path / "admin"),
@@ -288,3 +289,30 @@ def test_registry_views_manifests_and_liveness(tmp_path):
     assert view["jb-admin"]["roles"] == ["service"]
     t[0] += 30
     assert {m["id"]: m for m in reg.view()}["jb-core"]["up"] is False
+
+
+def test_every_publish_keeps_a_revision(tmp_path):
+    async def check(c, admin):
+        for text in ("one", "two", "three"):
+            tree = {"children": [{"block": "heading", "text": text}]}
+            await c.put("/api/layouts/bare/home/draft", json={"tree": tree}, headers=H)
+            assert (await c.post("/api/layouts/bare/home/publish", headers=H)).status == 200
+        revs = (await (await c.get("/api/layouts/bare/home/revisions")).json())["revisions"]
+        assert len(revs) == 3
+        newest = await (await c.get(f"/api/layouts/bare/home/revisions/{revs[0]['id']}")).json()
+        oldest = await (await c.get(f"/api/layouts/bare/home/revisions/{revs[-1]['id']}")).json()
+        assert newest["tree"]["children"][0]["text"] == "three"
+        assert oldest["tree"]["children"][0]["text"] == "one"
+        assert (await c.get("/api/layouts/bare/home/revisions/..%2F..%2Fsettings")).status == 404
+    run(tmp_path, check)
+
+
+def test_only_the_newest_revisions_are_kept(tmp_path):
+    from services.jb_admin.files import Layouts
+    layouts = Layouts(tmp_path / "pub", tmp_path / "drafts", tmp_path / "revs")
+    for i in range(Layouts.REVISIONS + 5):
+        layouts.save_draft("bare", "home", {"children": [], "n": i})
+        layouts.publish("bare", "home")
+    revs = layouts.list_revisions("bare", "home")
+    assert len(revs) == Layouts.REVISIONS
+    assert layouts.get_revision("bare", "home", revs[0]["id"])["n"] == Layouts.REVISIONS + 4

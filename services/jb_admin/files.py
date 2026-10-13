@@ -7,11 +7,14 @@ over the old one, so jb-ui never reads half a file.
 
 import json
 import os
+import shutil
 import re
 import tempfile
+import time
 from pathlib import Path
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+REVISION_RE = re.compile(r"^\d{8}-\d{6}-\d+$")
 
 
 def write_bytes(path: Path, data: bytes, private: bool = False) -> None:
@@ -44,12 +47,16 @@ def read_json(path: Path, default=None):
 
 
 class Layouts:
-    """Owner layouts per theme: published (the cabinet shows these) and
-    drafts (only the preview shows these)."""
+    """Owner layouts per theme: published (the cabinet shows these),
+    drafts (only the preview shows these) and revisions (every version
+    published, newest REVISIONS kept, so any can be brought back)."""
 
-    def __init__(self, published: Path, drafts: Path):
+    REVISIONS = 20
+
+    def __init__(self, published: Path, drafts: Path, revisions: Path | None = None):
         self.published = published
         self.drafts = drafts
+        self.revisions = revisions
 
     def _path(self, root: Path, theme: str, name: str) -> Path:
         if not ID_RE.match(theme) or not ID_RE.match(name):
@@ -95,7 +102,43 @@ class Layouts:
         target = self.published_path(theme, name)
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(draft, target)
+        self._keep_revision(theme, name, target)
         return True
+
+    def _revision_dir(self, theme: str, name: str) -> Path | None:
+        if self.revisions is None or not ID_RE.match(theme) or not ID_RE.match(name):
+            return None
+        return self.revisions / theme / name
+
+    def _keep_revision(self, theme: str, name: str, source: Path) -> None:
+        folder = self._revision_dir(theme, name)
+        if folder is None:
+            return
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        # Several in one second: number them on from the highest used, even
+        # after pruning has removed lower numbers.
+        used = [int(p.stem.rsplit("-", 1)[1]) for p in folder.glob(f"{stamp}-*.json") if REVISION_RE.match(p.stem)]
+        n = max(used) + 1 if used else 0
+        write_bytes(folder / f"{stamp}-{n:03d}.json", source.read_bytes())
+        for old in sorted(folder.glob("*.json"))[:-self.REVISIONS]:
+            old.unlink()
+
+    def list_revisions(self, theme: str, name: str) -> list[dict]:
+        """Published versions, newest first: {id, at (unix seconds)}."""
+        folder = self._revision_dir(theme, name)
+        if folder is None or not folder.is_dir():
+            return []
+        out = []
+        for p in sorted(folder.glob("*.json"), reverse=True):
+            if REVISION_RE.match(p.stem):
+                out.append({"id": p.stem, "at": p.stat().st_mtime})
+        return out
+
+    def get_revision(self, theme: str, name: str, rev: str):
+        folder = self._revision_dir(theme, name)
+        if folder is None or not REVISION_RE.match(rev):
+            return None
+        return read_json(folder / f"{rev}.json")
 
     def reset(self, theme: str, name: str) -> None:
         """Back to the theme's own layout: the owner's version and draft go."""
@@ -107,12 +150,8 @@ class Layouts:
 
     def forget_theme(self, theme: str) -> None:
         """Everything the owner saved for a theme that's being deleted."""
-        for root in (self.published, self.drafts):
-            folder = root / theme
-            if ID_RE.match(theme) and folder.is_dir():
-                for p in folder.glob("*.json"):
-                    p.unlink()
-                try:
-                    folder.rmdir()
-                except OSError:
-                    pass
+        if not ID_RE.match(theme):
+            return
+        for root in (self.published, self.drafts, self.revisions):
+            if root is not None and (root / theme).is_dir():
+                shutil.rmtree(root / theme)

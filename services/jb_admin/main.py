@@ -46,6 +46,7 @@ DEFAULTS = {
     "settings_path": str(DATA / "settings.json"),
     "owner_layouts_dir": str(DATA / "layouts"),
     "drafts_dir": str(DATA / "drafts"),
+    "revisions_dir": str(DATA / "revisions"),
     "media_dir": str(DATA / "media"),
     "media_cache_dir": str(DATA / "cache" / "video"),
     "admin_dir": str(DATA / "admin"),
@@ -100,7 +101,7 @@ class Admin:
         self.theme_dirs = [Path(d) for d in cfg["theme_dirs"]]
         self.added_dir = self.theme_dirs[-1]
         self.settings_path = Path(cfg["settings_path"])
-        self.layouts = Layouts(Path(cfg["owner_layouts_dir"]), Path(cfg["drafts_dir"]))
+        self.layouts = Layouts(Path(cfg["owner_layouts_dir"]), Path(cfg["drafts_dir"]), Path(cfg["revisions_dir"]))
         self.media_dir = Path(cfg["media_dir"])
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
@@ -427,6 +428,17 @@ class Admin:
         response = web.json_response(out)
         return response
 
+    async def revisions(self, request):
+        theme_id, name = request.match_info["theme"], request.match_info["name"]
+        return web.json_response({"revisions": self.layouts.list_revisions(theme_id, name)})
+
+    async def revision(self, request):
+        theme_id, name = request.match_info["theme"], request.match_info["name"]
+        tree = self.layouts.get_revision(theme_id, name, request.match_info["rev"])
+        if tree is None:
+            raise web.HTTPNotFound()
+        return web.json_response({"tree": tree})
+
     # Media library -----------------------------------------------------------------
 
     async def list_media(self, request):
@@ -607,6 +619,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_delete("/api/layouts/{theme}/{name}/draft", admin.discard_draft)
     r.add_post("/api/layouts/{theme}/{name}/publish", admin.publish_layout)
     r.add_delete("/api/layouts/{theme}/{name}", admin.reset_layout)
+    r.add_get("/api/layouts/{theme}/{name}/revisions", admin.revisions)
+    r.add_get("/api/layouts/{theme}/{name}/revisions/{rev}", admin.revision)
     r.add_get("/api/media", admin.list_media)
     r.add_post("/api/media", admin.upload_media)
     r.add_delete("/api/media/{name}", admin.delete_media)

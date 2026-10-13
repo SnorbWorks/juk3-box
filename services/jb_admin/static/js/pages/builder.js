@@ -5,7 +5,7 @@
 // #/builder/<layout>/<theme>  (theme defaults to the active one)
 
 import { ApiError, del, get, post, put } from '../api.js';
-import { button, clear, confirmDialog, debounce, h, icon, iconButton, showError, toast } from '../ui.js';
+import { button, clear, confirmDialog, debounce, h, icon, iconButton, modal, showError, toast } from '../ui.js';
 import { createInspector } from '../builder/inspector.js';
 import * as M from '../builder/model.js';
 import { createPalette } from '../builder/palette.js';
@@ -81,7 +81,7 @@ function build(main) {
       toast(selecting ? 'Click the preview to select blocks.' : 'The preview works like the cabinet now; click to use it.');
     },
   });
-  const device = h('select.bld-device', { 'aria-label': 'Screen shape', onchange: () => S.preview.setDevice(device.value) },
+  const device = h('select.bld-device', { 'aria-label': 'Screen shape', title: 'Preview a screen of this shape', onchange: () => S.preview.setDevice(device.value) },
     Object.entries(DEVICES).map(([k, d]) => h('option', { value: k }, d.label)));
   const themeSel = h('select.bld-theme', { 'aria-label': 'Theme', onchange: () => { location.hash = `#/builder/${S.layout}/${themeSel.value}`; } },
     S.themes.map(t => h('option', { value: t.id, selected: t.id === S.theme }, t.id === S.active ? `${t.name} (active)` : t.name)));
@@ -147,7 +147,8 @@ function moreMenu(anchor) {
   const item = (label, ic, fn, opts = {}) => h('button.menu-item', { type: 'button', disabled: opts.disabled, class: opts.danger ? 'danger' : undefined,
     onclick: () => { close(); fn(); } }, icon(ic), h('span', label));
   const menu = h('div.menu', { role: 'menu' },
-    item('Discard draft', 'rotate-ccw', discardDraft, { disabled: !S.hasDraft }),
+    item('Discard draft', 'x', discardDraft, { disabled: !S.hasDraft }),
+    item('Revisions…', 'rotate-ccw', showRevisions),
     item('Start from a blank page', 'file-plus', startBlank),
     item('Reset to the theme\'s layout', 'archive', resetLayout, { danger: true, disabled: !S.published && !S.hasDraft }),
     h('div.menu-sep'),
@@ -283,8 +284,15 @@ function defaultSpot(node) {
     if (M.isContainer(target) && ok(sel)) return [sel, target.children.length];
     if (sel.length && ok(sel.slice(0, -1))) return [sel.slice(0, -1), sel[sel.length - 1] + 1];
   }
-  // The frame: next to the screen block's container is rarely right; the
-  // root's end is a safe default everywhere.
+  // Nothing selected: the container holding the most blocks (Home's rows,
+  // the sidebar), not the outermost one, whose look the theme has fixed.
+  let best = null;
+  M.walk(S.tree, (n, p) => {
+    if (!M.isContainer(n) || !ok(p)) return;
+    const blocks = n.children.filter(c => c.block && c.block !== 'screen').length;
+    if (blocks && (!best || blocks > best.blocks)) best = { path: p, blocks, size: n.children.length };
+  });
+  if (best) return [best.path, best.size];
   return ok([]) ? [[], S.tree.children.length] : [null, 0];
 }
 
@@ -402,6 +410,34 @@ async function resetLayout() {
     await del(`/api/layouts/${encodeURIComponent(S.theme)}/${encodeURIComponent(S.layout)}`);
     await reloadLayout('Back to the theme\'s layout.');
   } catch (e) { showError(e); }
+}
+
+// Every published version, newest first. Restoring loads it into the editor
+// as a draft (undo still works), so nothing changes on the cabinet until
+// Publish.
+async function showRevisions() {
+  let list;
+  try {
+    list = (await get(`/api/layouts/${encodeURIComponent(S.theme)}/${encodeURIComponent(S.layout)}/revisions`)).revisions;
+  } catch (e) { showError(e); return; }
+  const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const restore = async rev => {
+    try {
+      const { tree } = await get(`/api/layouts/${encodeURIComponent(S.theme)}/${encodeURIComponent(S.layout)}/revisions/${rev.id}`);
+      m.close();
+      change(() => { S.tree = tree; });
+      S.selected = null;
+      renderAll();
+      toast(`Restored the version from ${fmt.format(rev.at * 1000)} as a draft. Publish to put it on the cabinet.`, 'success', 6000);
+    } catch (e) { showError(e); }
+  };
+  const body = list.length
+    ? h('ul.list.revisions', list.map((rev, i) => h('li',
+      icon(i === 0 ? 'circle-check' : 'circle-dot'),
+      h('span', { style: { flex: 1 } }, fmt.format(rev.at * 1000), i === 0 ? h('span.badge.ok', { style: { marginLeft: '8px' } }, 'Latest') : null),
+      button('Restore', { variant: 'small', onclick: () => restore(rev) }, 'rotate-ccw'))))
+    : h('p.muted', 'Nothing published yet. Each time you publish, the version is kept here (the last 20).');
+  const m = modal({ title: `Revisions: ${layoutLabel(S.layout)}`, body, actions: [{ label: 'Close' }] });
 }
 
 function startBlank() {

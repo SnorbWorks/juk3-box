@@ -68,9 +68,12 @@ export function createInspector(b) {
     const exclusive = (label, g, noneLabel) => {
       const opts = group(g);
       const now = opts.find(o => classes().includes(o.value))?.value || '';
-      return field(label, segmented([{ value: '', label: noneLabel }, ...opts.map(o => ({ value: o.value, label: shortLabel(o.label) }))], now, v => {
-        setClasses([...classes().filter(c => !opts.some(o => o.value === c)), ...(v ? [v] : [])]);
-      }));
+      const choices = [{ value: '', label: noneLabel }, ...opts.map(o => ({ value: o.value, label: shortLabel(o.label) }))];
+      const pick = v => setClasses([...classes().filter(c => !opts.some(o => o.value === c)), ...(v ? [v] : [])]);
+      if (choices.length <= 4) return field(label, segmented(choices, now, pick));
+      const sel = h('select', { onchange: () => pick(choices[sel.selectedIndex].value) },
+        choices.map(c => h('option', { selected: c.value === now }, c.value ? c.label : `${c.label} (as the theme styles it)`)));
+      return field(label, sel);
     };
     const toggles = h('div.chips', helpers.filter(x => x.group === 'size' || x.group === 'align').map(o => h('button.chip', {
       type: 'button', 'aria-pressed': String(classes().includes(o.value)),

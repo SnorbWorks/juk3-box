@@ -82,6 +82,9 @@ html, body {
 .jb-u-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .jb-u-grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .jb-u-row > *, .jb-u-column > * { min-width: 0; }
+/* Inside a theme's own flex container, an owner's row, column or grid
+   takes a full line (a Row helper parent overrides this further down). */
+.jb-u-row, .jb-u-column, .jb-u-grid-2, .jb-u-grid-3, .jb-u-grid-4 { flex: 1 1 100%; }
 .jb-u-grow { flex: 1 1 0; min-height: 0; min-width: 0; }
 .jb-u-scroll { overflow-y: auto; min-height: 0; }
 .jb-u-center { align-items: center; justify-content: center; text-align: center; }
@@ -105,6 +108,12 @@ jb-heading[align="center"], jb-text[align="center"] { text-align: center; }
 jb-heading[align="end"], jb-text[align="end"] { text-align: end; }
 jb-image > img { display: block; width: 100%; height: auto; border-radius: 1vmin; }
 jb-image[fit="cover"] > img { height: 100%; object-fit: cover; }
+jb-image[width="small"] > img { width: 25%; }
+jb-image[width="medium"] > img { width: 50%; }
+jb-image[width="large"] > img { width: 75%; }
+jb-image > img { margin-inline: auto; }
+jb-image[align="start"] > img { margin-inline: 0 auto; }
+jb-image[align="end"] > img { margin-inline: auto 0; }
 jb-spacer { height: 3vmin; }
 jb-spacer[size="small"] { height: 1.5vmin; }
 jb-spacer[size="large"] { height: 6vmin; }

@@ -131,8 +131,16 @@ export function confirmDialog(title, message, { confirm = 'OK', danger = false }
   });
 }
 
+let fieldIds = 0;
+
+// A labelled control. Only a single input, select or textarea is tied to
+// the label: wrapping a list of checkboxes in a <label> would make a click
+// anywhere in it toggle the first one.
 export function field(label, control, help) {
-  return h('label.field', h('span.field-label', label), control, help ? h('span.field-help', help) : null);
+  const single = control instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName);
+  if (single && !control.id) control.id = `f${++fieldIds}`;
+  const name = single ? h('label.field-label', { for: control.id }, label) : h('span.field-label', label);
+  return h('div.field', name, control, help ? h('span.field-help', help) : null);
 }
 
 export function switchControl(checked, onchange, label) {

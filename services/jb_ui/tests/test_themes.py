@@ -180,3 +180,13 @@ def test_block_schema_matches_the_engine():
         assert block["group"] in groups, name
         for key in block["settings"]:
             assert themes.SETTING_RE.match(key), (name, key)
+
+
+def test_block_patterns_are_valid_layouts():
+    here = Path(__file__).resolve().parents[1]
+    schema = json.loads((here / "block_schema.json").read_text())
+    assert schema["patterns"]
+    for p in schema["patterns"]:
+        problems, warnings = themes.check_layout("home", p["tree"])
+        assert problems == [] and warnings == [], (p["label"], problems, warnings)
+        assert "children" in p["tree"]

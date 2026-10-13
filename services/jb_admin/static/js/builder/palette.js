@@ -4,7 +4,7 @@
 
 import { clear, h, icon } from '../ui.js';
 import { dragFrom } from './dnd.js';
-import { canHave, ICONS, newBlock } from './model.js';
+import { canHave, clone, ICONS, newBlock } from './model.js';
 
 const CONTAINERS = [
   { label: 'Column', detail: 'Blocks stacked', icon: 'rows-2', make: () => ({ class: 'jb-u-column', children: [] }) },
@@ -30,6 +30,9 @@ export function createPalette(b) {
       } else {
         out.push({ ...base, label: def.label, make: () => newBlock(s, name) });
       }
+    }
+    for (const p of s.patterns || []) {
+      out.push({ group: 'patterns', label: p.label, detail: p.detail, description: p.detail, icon: p.icon || 'sparkles', make: () => clone(p.tree) });
     }
     for (const c of CONTAINERS) out.push({ ...c, group: 'structure', description: c.detail });
     return out;

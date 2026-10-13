@@ -8,9 +8,9 @@ import { h, icon, iconButton } from '../ui.js';
 import { at, canDrop, canDelete, canDuplicate, describe, isContainer } from './model.js';
 
 export const DEVICES = {
-  '16:9': { w: 1920, h: 1080, label: 'Cabinet, 16:9' },
-  '16:10': { w: 1920, h: 1200, label: 'Wide, 16:10' },
-  '4:3': { w: 1600, h: 1200, label: 'Square, 4:3' },
+  '16:9': { w: 1920, h: 1080, label: '16:9' },
+  '16:10': { w: 1920, h: 1200, label: '16:10' },
+  '4:3': { w: 1600, h: 1200, label: '4:3' },
 };
 
 export function createPreview(b) {
@@ -72,6 +72,9 @@ export function createPreview(b) {
         f.classList.remove('loading');
         status.hidden = true;
         wire(f);
+        // Keep the selected block in view (a new one may be below the fold).
+        const sel = b.selected();
+        if (sel?.length) elementFor(sel)?.scrollIntoView({ block: 'nearest' });
         refresh();
       };
       waitForEngine(f).then(ready);
