@@ -470,6 +470,14 @@ async def main() -> None:
                 log.info("pick while %s holds the browse lease; revoking", lease["holder"])
                 await publish_lease(bus)
             return
+        if action == "stop":
+            # "Done with this song": pause the phone, then report it as
+            # stopped (see cleared_view).
+            nonlocal cleared_title
+            np = await phone.now_playing()
+            await phone.transport("pause")
+            cleared_title = np.get("title")
+            return
         if action in ("play", "pause", "next", "previous"):
             await phone.transport(action)
         elif action == "play_item":
@@ -590,6 +598,21 @@ async def main() -> None:
                 log.exception("connection watch failed")
             await asyncio.sleep(3)
 
+    # A song cancelled with nothing after it (holding Reset): the phone can't
+    # be told to forget it -- iOS ignores AVRCP Stop and just stays paused on
+    # it -- so it's reported as stopped, nothing playing, until it plays
+    # again or another song comes up.
+    cleared_title = None
+
+    def cleared_view(np: dict) -> dict:
+        nonlocal cleared_title
+        if cleared_title is None:
+            return np
+        if np.get("title") != cleared_title or np.get("status") == "playing":
+            cleared_title = None
+            return np
+        return {**{k: None for k in np}, "status": "stopped"}
+
     async def poll_now_playing(bus: Bus):
         # Publish only on change. While playing, position_ms moves every
         # poll so the progress bar still updates; paused/idle goes quiet.
@@ -601,7 +624,7 @@ async def main() -> None:
                 playing = False
             else:
                 try:
-                    np = await phone.now_playing()
+                    np = cleared_view(await phone.now_playing())
                     playing = np.get("status") == "playing"
                     if np != last_np:
                         last_np = np

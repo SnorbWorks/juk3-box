@@ -154,7 +154,9 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
                 q.expected_title, q.playing = next_track["title"], True
             else:
                 log.info("Reset held: cancelling the song; nothing queued, stopping")
-                await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+                # "stop", not "pause": the song is done with, and shows as
+                # nothing playing (jb-source-phone keeps the phone paused).
+                await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
                 q.playing = False
             await publish_queue(bus, q)
         elif act == "pause":
