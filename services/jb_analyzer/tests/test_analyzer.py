@@ -101,8 +101,10 @@ def test_breakdown_then_drop():
     states = []
     for _ in range(int(8 * FPS)):
         states.append(tr.step(0.6, -20.0, True))       # steady groove
-    for _ in range(int(2 * FPS)):
-        states.append(tr.step(0.4, -38.0, True))       # bass falls away
+    for i in range(int(5 * FPS)):
+        # bass falls away -- with the odd stray bass note poking up
+        states.append(tr.step(0.4, -24.0 if i % 40 == 0 else -38.0, True))
+        assert not tr.dropped
     drops = 0
     for _ in range(int(1 * FPS)):
         states.append(tr.step(0.8, -12.0, True))       # bass slams back
