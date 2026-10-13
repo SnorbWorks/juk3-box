@@ -64,3 +64,13 @@ These are the interfaces to pin down and document, in priority order. Each is pr
 5. **Second-case validation.** Add a genuinely different module to test each contract against reality — a second source, a non-keyboard input, a second output. This is where the flagged content model gets resolved, and the real test of whether the contracts generalize.
 
 This is a separate, large effort from the reference build, most of it the unglamorous generalization and documentation work. It should not be underestimated — and it does not block the reference implementation, which ships as the platform's first proof regardless. Build it as the lens, architect it like the goal: the clean boundaries already being drawn do most of the work.
+
+## Progress
+
+Oct 13, 2026
+
+1. **Contracts on paper: done (draft v1).** [Bus](contracts/bus.md), [modules, registry and lifecycle](contracts/modules.md), [configuration](contracts/configuration.md), alongside the existing [audio analysis](contracts/audio-analysis.md) contract. Written from what the reference build does, each with proving notes and what's held open for a second case.
+2. **Proving against the reference build: first pass done.** Every module fits a role and declares itself (`services/*/module.json`). Gaps found and noted in the contracts: only the analyzer stamps `v`; the source contract is phone-specific in name (held for a second source); jb-lights doesn't heartbeat yet.
+3. **Extension points: partly real.** Discovery is real: the registry is built from installed manifests plus bus heartbeats, and a module appears by being installed. Owner layouts and settings are data with a single writer and a change event. Not yet: contract versioning checks, a plugin folder in use, per-module owner-settings schemas (waiting for a second module that needs one).
+4. **Backend configuration tool: first version built** as a view onto those contracts: jb-admin (Dashboard, Page Builder, Themes, Media, Settings, Modules, Account). It composes from data: the block schema (`services/jb_ui/block_schema.json`), the settings schema, the module manifests. It knows no specific module beyond the jukebox's own settings.
+5. **Second-case validation: not started.**

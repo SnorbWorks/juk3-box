@@ -46,15 +46,24 @@ def describe(theme_id: str, dirs: list[Path], active: str) -> dict:
         info.update({k: m.get(k) for k in ("name", "version", "author", "description", "license")})
         info["warnings"] = t.warnings
         info["layouts"] = sorted(t.layouts)
+        info["_manifest"] = m
     except themes.ThemeError as e:
         info["name"] = theme_id
         info["problems"] = e.problems
         info["layouts"] = []
     if root:
-        for name in ("preview.png", "preview.jpg", "preview.webp"):
-            if (root / name).is_file():
+        # The theme's own picture of itself, else its background picture.
+        candidates = ["preview.png", "preview.jpg", "preview.webp"]
+        bg = (info.get("_manifest") or {}).get("background") or {}
+        if bg.get("type") == "image" and isinstance(bg.get("src"), str):
+            candidates.append(bg["src"])
+        candidates += ["assets/background.jpg", "assets/background.png", "assets/background.webp"]
+        for name in candidates:
+            path = themes.safe_path(root, name)
+            if path and path.is_file():
                 info["preview"] = f"/themes/{theme_id}/{name}"
                 break
+    info.pop("_manifest", None)
     return info
 
 

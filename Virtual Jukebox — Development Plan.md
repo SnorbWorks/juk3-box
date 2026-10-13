@@ -412,13 +412,15 @@ Done when: the default theme matches the mockups on the real monitor, and a seco
 
 Setup and management from a phone or laptop browser, like Sidecar's admin page. A separate service from jb-ui: the kiosk server only listens on the Pi itself, while jb-admin is reachable on the network behind a login. If jb-admin crashes, the jukebox keeps playing.
 
-- [ ] Login; the service listens on the network, the kiosk server doesn't
+- [x] Login; the service listens on the network, the kiosk server doesn't (jb-admin on :8080, one owner password set on first visit, Oct 13 2026)
 - [ ] First-time setup wizard over a Wi-Fi hotspot: name the jukebox, join Wi-Fi, pair the first phone. Reuse Sidecar's lessons (WMM off for this Wi-Fi chip in AP mode; phones reset captive-portal pages, so progress is kept on the Pi)
-- [ ] Themes: upload as a zip, check the format, strip scripts, preview, activate, delete
+- [x] Themes: upload as a zip, check the format, strip scripts, preview, activate, delete
 - [ ] Settings: everything on the cabinet's Settings screen, plus sources, Browse card sorts, idle timeout, volume limits, New ordering, the pick-interrupts setting, API keys
 - [ ] Phones: pair, forget, switch, re-sync the library
 - [ ] Maintenance: software updates, logs, restart, reboot
 - [ ] Later: an installer, so anyone can set up JUKE.BOX on their own Pi
+
+Built so far (Oct 13 2026): Dashboard (now playing, phone, volume, theme, module health), Themes, Media library, Settings (nav buttons with drag to reorder, songs per page, idle time), Modules (the platform registry), Account. Settings has only the owner settings that exist so far; the rest of the list above comes as each setting is built.
 
 Done when: a fresh Pi can be set up, themed and configured from a phone without SSH.
 
@@ -426,9 +428,11 @@ Done when: a fresh Pi can be set up, themed and configured from a phone without 
 
 Drag-and-drop layout editing in jb-admin, like WordPress's page builder: start from a blank page or the theme's layout, add, remove and reorder blocks, preview live with the real engine, save. Possible because layouts are JSON (Phase 7). Start simple (rows of blocks, reorder, add/remove) and grow.
 
-- [ ] Edit Home first, then any screen and the frame
-- [ ] Live preview using the kiosk engine
-- [ ] Owner layouts saved apart from the theme; reset to the theme default
+- [x] Edit Home first, then any screen and the frame
+- [x] Live preview using the kiosk engine
+- [x] Owner layouts saved apart from the theme; reset to the theme default
+- [x] Drag and drop from the palette or the structure tree, onto the tree or straight onto the preview; click the preview to select; undo/redo; drafts autosave, Publish reloads the cabinet; revisions (last 20); patterns; heading, text, image and spacer blocks; media library; layout helpers (row, column, grid). Works on a phone (Oct 13 2026)
+- [ ] Pages of the owner's own, reachable from the nav
 
 Done when: an owner can rebuild the Home screen on a phone and see it on the cabinet without editing a file.
 

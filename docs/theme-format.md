@@ -142,6 +142,10 @@ The frame is everything that stays put while screens change, such as a sidebar. 
 
 The theme's layouts are its defaults. When the owner changes a layout, through Settings or the page builder, the engine saves the owner's version separately and uses it instead. The theme's files are never edited. "Reset to theme default" deletes the owner's version.
 
+The page builder (jb-admin, from a phone or computer) edits a draft, which only its preview shows; Publish puts it on the cabinet, which reloads. Owner versions are kept per theme, in `/var/lib/juk3-box/layouts/<theme>/`, and every published version is kept as a revision (the last 20). An owner layout is checked exactly like a theme's; one that fails is ignored and your layout is shown instead. See [docs/contracts/configuration.md](contracts/configuration.md).
+
+The builder's preview runs the real engine with `?preview`: it publishes nothing to the jukebox, and it tags every element with `data-jb-path` (its place in the layout) so a click can select it. Neither happens on the cabinet; don't style `data-jb-path`.
+
 Blocks are modules, the way a page builder's are: each carries its own settings in the layout (a Home row's categories, card count, See All). The owner's Settings toggles and the page builder both edit those same settings in the owner's copy of the layout. There is no separate list of what's switched on.
 
 Text and images that are part of the look (headings, decorations) go in block markup and CSS, not in layouts. Block markup is HTML; `<script>` tags, inline event handlers (`onclick=` and friends) and links to outside websites are removed when the theme loads.
@@ -164,6 +168,33 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `header` | The screen's title and subtitle ("Browse by Genre" / "Classic Rock", or "All Songs" / "Page 1 of 10") and a Back button. Back leaves an artist (album, genre) for the list of them, else returns to the previous screen | |
 | `connection` | The phone badge: connected or not, and the phone's name. A knob stop; clicking it will manage phones once the phone connection manager exists (for now it shows who's connected) | |
 | `collection` | A section's See All view: all its cards in a grid (every Browse option, the last 100 played, every new song) | |
+| `heading` | A title the owner writes | `text`, `size` (`small`, `medium`, `large`), `align` (`start`, `center`, `end`) |
+| `text` | A paragraph the owner writes (line breaks kept) | `text`, `align` |
+| `image` | A picture from the owner's media library or the theme | `src`, `alt`, `width` (`small`, `medium`, `large`, `full`), `align`, `fit` (`contain`, `cover`) |
+| `spacer` | Empty space | `size` (`small`, `medium`, `large`) |
+
+The last four are owner content: what the page builder offers for words and pictures of the owner's own. The engine gives them a plain look (`jb-heading > h2`, `jb-text > p`, `jb-image > img`) that suits a dark theme; style them in your CSS like any block. Each takes a full line inside a flex container, like a paragraph.
+
+A picture setting (`image` and `logo` `src`) is either a file in the theme (`assets/logo.png`) or one the owner uploaded to the media library, written with a leading slash: `/media/photo.jpg`.
+
+Every block, its settings and their allowed values are also published as data, for tools: `services/jb_ui/block_schema.json`.
+
+### Layout helpers
+
+Containers the owner adds in the page builder can't count on your CSS knowing them, so the engine has a few classes that work under any theme. Use them in your own layouts too, or restyle them.
+
+| Class | Does |
+| --- | --- |
+| `jb-u-row` | Children side by side, sharing the width, wrapping when needed |
+| `jb-u-column` | Children stacked |
+| `jb-u-grid-2`, `jb-u-grid-3`, `jb-u-grid-4` | A grid, that many across |
+| `jb-u-gap-none`, `jb-u-gap-small`, `jb-u-gap-large` | Space between children (`--jb-u-gap`) |
+| `jb-u-pad-small`, `jb-u-pad-medium`, `jb-u-pad-large` | Space inside |
+| `jb-u-grow` | Fill the leftover space |
+| `jb-u-scroll` | Scroll when the content is taller than the space |
+| `jb-u-center` | Center the content |
+
+Inside one of your own flex containers, a row, column or grid takes a full line.
 
 ### Nav buttons
 
@@ -435,4 +466,4 @@ JUKE.BOX runs on a Raspberry Pi with a video playing behind your theme. Measured
 
 - Favorites: a list the owner builds (e.g. a "favorite" option when clicking Now Playing), possibly seeded from the phone's own playlists. Becomes a section and a sort once it exists.
 - Which settings appear on the cabinet's Settings screen and which only on the phone/laptop admin page (jb-admin).
-- The page builder's own design (jb-admin, a later phase). Layouts are JSON now so it can be added without changing this format.
+- Pages of the owner's own (beyond the engine's screens), reachable from the nav. The page builder edits the engine's screens and the frame for now.

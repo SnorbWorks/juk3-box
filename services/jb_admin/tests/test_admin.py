@@ -316,3 +316,20 @@ def test_only_the_newest_revisions_are_kept(tmp_path):
     revs = layouts.list_revisions("bare", "home")
     assert len(revs) == Layouts.REVISIONS
     assert layouts.get_revision("bare", "home", revs[0]["id"])["n"] == Layouts.REVISIONS + 4
+
+
+def test_theme_cards_use_a_preview_else_the_background_picture(tmp_path):
+    from services.jb_admin import theme_store
+    added = tmp_path / "added"
+    shutil.copytree(SHIPPED / "bare", added / "pic")
+    m = json.loads((added / "pic" / "theme.json").read_text())
+    m["id"] = "pic"
+    (added / "pic" / "theme.json").write_text(json.dumps(m))
+    dirs = [SHIPPED, added]
+    assert "preview" not in theme_store.describe("pic", dirs, "")
+    (added / "pic" / "assets").mkdir()
+    (added / "pic" / "assets" / "background.jpg").write_bytes(b"jpg")
+    assert theme_store.describe("pic", dirs, "")["preview"] == "/themes/pic/assets/background.jpg"
+    (added / "pic" / "preview.png").write_bytes(b"png")
+    info = theme_store.describe("pic", dirs, "")
+    assert info["preview"] == "/themes/pic/preview.png" and "_manifest" not in info
