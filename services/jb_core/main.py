@@ -5,6 +5,7 @@ import time
 from shared import config, logging as jb_logging
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
+from services.jb_core.end_guard import EndGuard
 from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
 
 SERVICE_NAME = "jb-core"
@@ -197,6 +198,19 @@ async def entry_timeouts(bus: Bus, entry: Entry, log) -> None:
         await asyncio.sleep(ENTRY_TICK_S)
 
 
+async def stop_after_last_song(bus: Bus, q: Queue, guard: EndGuard, log) -> None:
+    """With nothing queued, stop the playing song just before it ends, so
+    iOS never moves on to a song nobody chose (end_guard.py)."""
+    while True:
+        await asyncio.sleep(0.1)
+        title = guard.due(time.monotonic(), queue_empty=not q.upcoming() and not q.shuffle_active)
+        if title:
+            log.info("last song ending, stopping: %s", title)
+            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
+            q.playing = False
+            q.expected_title = None
+
+
 async def main() -> None:
     log = jb_logging.setup(SERVICE_NAME)
     cfg = config.load(SERVICE_NAME)
@@ -213,6 +227,8 @@ async def main() -> None:
         menu = PowerMenu()
         await publish_power(bus, "idle")
         asyncio.create_task(power_ticks(bus, q, menu, log))
+        guard = EndGuard()
+        asyncio.create_task(stop_after_last_song(bus, q, guard, log))
 
         async for topic, payload in messages:
             if topic == "jukebox/jb-input/key":
@@ -264,6 +280,7 @@ async def main() -> None:
                 await try_autoplay(bus, q, log)
 
             elif topic == "jukebox/jb-source-phone/now-playing":
+                guard.update(payload, time.monotonic())
                 q.playing = payload.get("status") == "playing"
                 title = payload.get("title")
                 if not title:
