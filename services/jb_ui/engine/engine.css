@@ -93,7 +93,10 @@ html, body {
 .jb-u-pad-large { padding: 5vmin; }
 
 /* Owner content blocks: plain defaults that sit well on a dark theme. */
-jb-heading, jb-text, jb-image, jb-spacer { display: block; }
+/* A full line each, like paragraphs, inside any flex container (a theme's
+   wrapping row included); a Row helper shares its width out equally. */
+jb-heading, jb-text, jb-image, jb-spacer { display: block; flex: 1 1 100%; min-width: 0; }
+.jb-u-row > * { flex: 1 1 0; }
 jb-heading > h2 { margin: 0; font-size: 3.2vmin; font-weight: 700; line-height: 1.15; }
 jb-heading[size="small"] > h2 { font-size: 2.2vmin; }
 jb-heading[size="large"] > h2 { font-size: 5vmin; }

@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "id": "jb-admin",
+  "name": "Admin",
+  "description": "The owner's admin from a phone or laptop: settings, themes, the page builder, the media library.",
+  "version": "1.0.0",
+  "roles": ["service"],
+  "publishes": ["jukebox/jb-admin/changed"],
+  "subscribes": ["jukebox/+/heartbeat", "jukebox/+/status", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-phone/connected", "jukebox/jb-audio/state", "jukebox/jb-core/queue"],
+  "settings": "jb-admin"
+}
