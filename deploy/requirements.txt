@@ -4,3 +4,4 @@ aiohttp
 evdev
 paho-mqtt
 rpi_ws281x
+numpy
