@@ -22,7 +22,64 @@ export function makeStop(el, key, onClick) {
 
 // Stops in knob order, clockwise, and the resting stop. While an overlay
 // that holds stops is open (e.g. Now Playing), the knob stays inside it.
+//
+// Working the order out measures every stop, which forces the browser to
+// recalculate styles and layout right then: ~60 ms a knob step on the Pi
+// (traced 2026-10-14). So it's worked out once and kept until the page
+// changes in a way that could change it -- stops added or removed, shown
+// or hidden, or the window resized -- not on every step. (Scrolling never
+// changes the order: everything in a scrolling area moves together.)
+let cachedRing = null;
+let watching = false;
+
+function watchForChanges() {
+  if (watching) return;
+  watching = true;
+  const drop = () => { cachedRing = null; };
+  // Text changing (the song's elapsed time, twice a second) moves no stop:
+  // only elements coming or going, or the attributes above, count.
+  const elementsOnly = records => {
+    for (const r of records) {
+      if (r.type === 'attributes') return drop();
+      for (const n of [...r.addedNodes, ...r.removedNodes]) if (n.nodeType === 1) return drop();
+    }
+  };
+  new MutationObserver(elementsOnly).observe(document.body, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ['hidden', 'data-empty', 'data-shape', 'data-focus-stop', 'data-modal', 'data-cards'],
+  });
+  addEventListener('resize', drop);
+}
+
 export function ring() {
+  watchForChanges();
+  if (cachedRing && (!cachedRing.stops.length || cachedRing.stops[0].isConnected)) return cachedRing;
+  cachedRing = workOutRing();
+  return cachedRing;
+}
+
+// The ring, with where each stop sits in the area that scrolls it (for
+// reveal), measured now in one go.
+function workOutRing() {
+  const ring = workOutOrder();
+  ring.geo = new Map();
+  const boxes = new Map();
+  for (const el of ring.stops) {
+    const scroller = scrollerOf(el);
+    if (!scroller) continue;
+    if (!boxes.has(scroller)) {
+      const b = scroller.getBoundingClientRect();
+      boxes.set(scroller, { box: b, scroll: scroller.scrollTop, max: scroller.scrollHeight - scroller.clientHeight });
+      scrolledTo.set(scroller, scroller.scrollTop);
+    }
+    const { box, scroll, max } = boxes.get(scroller);
+    const r = el.getBoundingClientRect();
+    ring.geo.set(el, { scroller, top: r.top - box.top + scroll, bottom: r.bottom - box.top + scroll, view: box.height, max });
+  }
+  return ring;
+}
+
+function workOutOrder() {
   const modal = document.querySelector('[data-modal]');
   if (modal) {
     const stops = stopsIn(modal);
@@ -68,16 +125,26 @@ function setCurrent(el) {
 
 // Bring a stop below (or above) the fold into view by smoothly scrolling
 // the area it sits in, with room around it for the theme's focus effect.
+// From the positions measured when the ring was worked out and the scroll
+// positions the knob set (only the knob scrolls these screens): asking the
+// browser where things are would force a style and layout pass, ~50 ms a
+// step on the Pi.
+const scrolledTo = new Map();   // scroller -> the scrollTop the knob last set
+
 function reveal(el) {
-  const scroller = scrollerOf(el);
-  if (!scroller) return;
-  const box = scroller.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  const margin = Math.min(box.height * 0.12, 120);
-  let top = scroller.scrollTop;
-  if (r.bottom + margin > box.bottom) top += r.bottom + margin - box.bottom;
-  else if (r.top - margin < box.top) top -= box.top - (r.top - margin);
-  if (top !== scroller.scrollTop) scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  const g = cachedRing?.geo.get(el);
+  if (!g?.scroller) return;
+  const { scroller, top: elTop, bottom: elBottom, view, max } = g;
+  const now = scrolledTo.get(scroller) ?? 0;
+  const margin = Math.min(view * 0.12, 120);
+  let top = now;
+  if (elBottom + margin > now + view) top = elBottom + margin - view;
+  else if (elTop - margin < now) top = elTop - margin;
+  top = Math.max(0, Math.min(max, top));
+  if (Math.abs(top - now) > 1) {
+    scrolledTo.set(scroller, top);
+    scroller.scrollTo({ top, behavior: 'smooth' });
+  }
 }
 
 // Which ancestor scrolls never changes for a stop, so it's looked up once:
@@ -120,8 +187,12 @@ export function currentStopKey() {
 export function goToRest() {
   setCurrent(ring().rest);
   // Back at rest, the screen's content scrolls back to its top.
-  for (const s of document.querySelectorAll('jb-screen *')) {
-    if (s.scrollTop) s.scrollTo({ top: 0, behavior: 'smooth' });
+  for (const [s, top] of scrolledTo) {
+    if (!s.isConnected) { scrolledTo.delete(s); continue; }
+    if (top > 0) {
+      scrolledTo.set(s, 0);
+      s.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
 }
 

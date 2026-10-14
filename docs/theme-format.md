@@ -435,10 +435,12 @@ The engine also sets CSS variables you can use:
 | Variable | Where | Value |
 | --- | --- | --- |
 | `--jb-progress` | Now playing | 0 to 1, song progress |
-| `--jb-volume` | `<html>` | 0 to 1 |
+| `--jb-volume` | Volume popup | 0 to 1 |
 | `--jb-digits` | Song board | Slots per letter, 1 to 10 |
 
-A progress bar is then just CSS: `width: calc(var(--jb-progress) * 100%)`.
+A progress bar is then just CSS: `transform: scaleX(var(--jb-progress))` (with `transform-origin: left`; a transform is cheaper to animate than a width on the Pi).
+
+The engine sets these on the smallest element that needs them: a variable changed on `<html>` restyles the whole page (about 225 ms on a Pi 4), so a theme shouldn't rely on reading them elsewhere.
 
 ### The song board
 

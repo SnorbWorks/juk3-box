@@ -229,7 +229,7 @@ jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-progress {
 }
 jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-progress-fill {
   height: 100%;
-  width: calc(var(--jb-progress) * 100%);
+  width: 100%; transform: scaleX(var(--jb-progress)); transform-origin: left center; will-change: transform;
   border-radius: inherit;
 }
 jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-times {

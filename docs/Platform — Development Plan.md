@@ -108,3 +108,10 @@ Deliberately left for its own session: putting the **core** services on bus logi
 2. Modules page: Manage (overview, settings, log, restart, turn off/on, remove) for every module; privileged steps through `jb-modctl`, a root helper systemd runs on request (no sudo rule).
 3. **Weather** (`modules/jb-weather/`) installed from a zip through the admin: reviewed permissions, sandboxed (`jbmod-jb-weather.service`: its own throwaway user, read-only system, internet but not the local network, 10% CPU, 96 MB), its own bus login on a private socket that refuses anonymous clients, health-checked; its settings change apply live; its Weather block in the page builder fits itself (compact, card, banner). Its style sheet is served inside `@scope`, so it can't touch the rest of the screen.
 4. Next, in order: the core onto bus logins and closing anonymous access (Phase 8); a second real module to test the contract (a phone companion would exercise a module serving its own page); then per-module Python packages and module screens when a module needs them.
+
+### Lessons from the Pi 4 (Oct 14, 2026)
+
+Measured on the reference Pi 4 (1 GB). The platform targets the smallest machine it runs on; a bigger one (the Pi 5 coming) only runs better.
+
+- **Each module is its own process, and a Python one costs 20–40 MB** before it does anything. Fine for a handful of modules; not for many on a 1 GB Pi. Before modules multiply: a lighter way to run small ones (several declarative or data-only modules sharing one host process, each still behind its own bus login), and the admin showing memory in use against the Pi's total before an install.
+- **The kiosk is the tightest budget.** The screen restyling or repainting is what makes the knob feel slow, not the knob code. The rules (now in docs/theme-format.md and the Neon theme's notes): animate only `transform` and `opacity`; never change a variable or attribute on `<html>` per frame or per step (it restyles every element: ~225 ms on the Pi 4); no `backdrop-filter` (it ran the kiosk out of memory); write to the page only when a value actually changes.

@@ -71,7 +71,7 @@ jb-now-playing {
 .jb-np-artist, .jb-np-album, .jb-np-idle { font-size: 1.7vmin; opacity: 0.7; }
 .jb-np-title, .jb-np-artist, .jb-np-album { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .jb-np-progress { height: 0.5vmin; background: rgba(255, 255, 255, 0.15); }
-.jb-np-progress-fill { height: 100%; width: calc(var(--jb-progress) * 100%); background: #fff; }
+.jb-np-progress-fill { height: 100%; width: 100%; transform: scaleX(var(--jb-progress)); transform-origin: left center; will-change: transform; background: #fff; }
 .jb-np-times { display: flex; justify-content: space-between; font: 1.4vmin monospace; opacity: 0.7; }
 jb-now-playing[data-state="stopped"] .jb-np-progress,
 jb-now-playing[data-state="stopped"] .jb-np-times { visibility: hidden; }

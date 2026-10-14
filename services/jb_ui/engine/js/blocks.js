@@ -122,7 +122,9 @@ export function stopsFrom(root, keyPrefix, handlers) {
   }
 }
 
-const TICK_MS = 500;
+// The elapsed time changes once a second; updating more often only costs
+// the Pi (each update restyles and repaints part of the screen).
+const TICK_MS = 1000;
 
 function fillNowPlaying(el, node, ctx) {
   el.append(fromTemplate(ctx.blocks['now-playing']));

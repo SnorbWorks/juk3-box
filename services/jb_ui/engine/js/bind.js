@@ -33,8 +33,14 @@ export function bind(root, data) {
     }
   }
   for (const el of own(root, '[data-icon]')) setIcon(el, data[el.dataset.icon]);
-  for (const el of own(root, '[data-if]')) el.hidden = !data[el.dataset.if];
-  for (const el of own(root, '[data-if-not]')) el.hidden = !!data[el.dataset.ifNot];
+  // Only when it changes: writing the same value still makes the browser
+  // redo styles, and Now Playing re-binds twice a second.
+  for (const el of own(root, '[data-if]')) setHidden(el, !data[el.dataset.if]);
+  for (const el of own(root, '[data-if-not]')) setHidden(el, !!data[el.dataset.ifNot]);
+}
+
+function setHidden(el, hidden) {
+  if (el.hidden !== hidden) el.hidden = hidden;
 }
 
 // An icon from the engine's icon list: library SVG (already cleaned by

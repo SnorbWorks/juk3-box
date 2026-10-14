@@ -17,7 +17,7 @@ import { sized } from './tracks.js';
 const VOLUME_STEP = 0.05;   // per knob detent
 const NOTICE_MS = 4000;
 const IDLE_CHECK_MS = 10000;
-const OVERLAY_TICK_MS = 500;
+const OVERLAY_TICK_MS = 1000;
 
 // Used when a theme has no layout for the See All view.
 const DEFAULT_COLLECTION_LAYOUT = {
@@ -111,17 +111,15 @@ function showScreen(name, { remember = true } = {}) {
   refocus();
 }
 
-function setVolumeVar(level) {
-  html.style.setProperty('--jb-volume', level.toFixed(3));
-}
-
 // Turning the knob changes the volume until a click or a few idle seconds.
 function volumeMode() {
+  // The knob's own running total is what's shown: a confirmation for an
+  // older step can arrive after newer steps and would snap it backwards.
   let level = store.get('volume')?.volume ?? 0;
-  const show = () => {
-    setVolumeVar(level);
-    updatePopup('volume', { title: 'Volume', percent: Math.round(level * 100) });
-  };
+  // --jb-volume goes on the popup, not the page: a variable changed on
+  // <html> restyles every element (~225 ms a knob step on the Pi 4).
+  const show = () => updatePopup('volume', { title: 'Volume', percent: Math.round(level * 100) },
+    { '--jb-volume': level.toFixed(3) });
   openPopup('volume', {});
   show();
   enterMode('volume', {
@@ -260,15 +258,15 @@ function phones() {
 }
 
 function watchSystem() {
-  store.watch(html, 'phone', p => { html.dataset.phone = p?.connected ? 'connected' : 'disconnected'; });
+  // Only on a change: anything written to <html> can restyle the page.
+  store.watch(html, 'phone', p => {
+    const phone = p?.connected ? 'connected' : 'disconnected';
+    if (html.dataset.phone !== phone) html.dataset.phone = phone;
+  });
   // Lets themes animate things (the EQ icon) while a song plays.
-  store.watch(html, 'nowPlaying', np => html.toggleAttribute('data-playing', np?.status === 'playing'));
-
-  // While the knob is setting the volume, its own running total is what's
-  // shown: a confirmation for an older step can arrive after newer steps
-  // and would snap the display backwards.
-  store.watch(html, 'volume', v => {
-    if (typeof v?.volume === 'number' && currentMode() !== 'volume') setVolumeVar(v.volume);
+  store.watch(html, 'nowPlaying', np => {
+    const playing = np?.status === 'playing';
+    if (html.hasAttribute('data-playing') !== playing) html.toggleAttribute('data-playing', playing);
   });
 
   // A notice from jb-core shows briefly, unless the knob is busy.

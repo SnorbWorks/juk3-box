@@ -1,5 +1,6 @@
 /* Performance on the Pi (measured 2026-10-10): only transform and opacity
-   may animate. Animating box-shadow, background or filter repaints every
+   may animate. Progress bars grow by scaleX, not width (a width change
+   relayouts and repaints; measured 2026-10-14). No backdrop-filter. Animating box-shadow, background or filter repaints every
    frame and kept the page busy ~70% of the time while the knob turned.
    Focus looks are pre-drawn layers that fade in by opacity. */
 
@@ -163,18 +164,23 @@ jb-nav::after {
 
 /* The Now Playing icon: EQ bars that move while a song plays. */
 .jb-eq { display: flex; align-items: flex-end; gap: 12%; width: 100%; height: 100%; padding: 8% 6%; box-sizing: border-box; }
-.jb-eq i { flex: 1; height: 35%; border-radius: calc(0.2vh * var(--opt-roundness)); background: currentColor; }
-.jb-eq i:nth-child(2) { height: 70%; }
-.jb-eq i:nth-child(3) { height: 100%; }
-.jb-eq i:nth-child(4) { height: 55%; }
+/* Full-height bars scaled from the bottom: they move by transform (on the
+   GPU), not height, which relaid out and repainted the sidebar every frame
+   for as long as music played (measured 2026-10-14). */
+.jb-eq i { flex: 1; height: 100%; border-radius: calc(0.2vh * var(--opt-roundness)); background: currentColor;
+  transform: scaleY(0.35); transform-origin: 50% 100%; will-change: transform; }
+.jb-eq i:nth-child(2) { transform: scaleY(0.7); }
+.jb-eq i:nth-child(3) { transform: scaleY(1); }
+.jb-eq i:nth-child(4) { transform: scaleY(0.55); }
 html[data-playing] .jb-eq i { animation: eq 900ms ease-in-out infinite alternate; }
 html[data-playing] .jb-eq i:nth-child(2) { animation-duration: 620ms; animation-delay: -200ms; }
 html[data-playing] .jb-eq i:nth-child(3) { animation-duration: 780ms; animation-delay: -450ms; }
 html[data-playing] .jb-eq i:nth-child(4) { animation-duration: 540ms; animation-delay: -120ms; }
 @keyframes eq {
-  0% { height: 18%; }
-  50% { height: 95%; }
-  100% { height: 40%; }
+  0% { transform: scaleY(0.18); }
+  50% { transform: scaleY(0.95); }
+  100% { transform: scaleY(0.4); }
+}
 }
 
 /* Now Playing: a header (a nav-style stop that opens the overlay) over its
@@ -217,7 +223,7 @@ jb-now-playing { display: block; --np-glow: var(--jb-art-1, hsl(from var(--opt-a
 .jb-np-progress { height: 0.45vh; margin-top: 1.6vh; border-radius: calc(0.3vh * var(--opt-roundness)); background: hsl(from var(--opt-button) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
 .jb-np-progress-fill {
   height: 100%;
-  width: calc(var(--jb-progress) * 100%);
+  width: 100%; transform: scaleX(var(--jb-progress)); transform-origin: left center; will-change: transform;
   border-radius: inherit;
   background: linear-gradient(90deg, hsl(from var(--opt-accent) h s l), hsl(from var(--opt-accent2) h s l));
   box-shadow: 0 0 1vh hsl(from var(--opt-accent) h s l / 0.6);
@@ -452,7 +458,13 @@ html[data-opt-cover-colors="off"] :is(.jb-card, .jb-np-overlay, jb-now-playing) 
 /* The big feature cards only need a touch. */
 jb-section[type="new"] .jb-card,
 jb-section[type="featured-artist"] .jb-card { --lift: 1.03; }
-.jb-card[data-focused] { z-index: 2; transform: scale(var(--lift)) translateY(-0.5vh); animation: pick-up 900ms var(--ease); }
+/* Picked up: a transition with a touch of overshoot (rises a little past
+   its rest and settles). A keyframe animation using --lift ran on the
+   page's main thread, restyling every frame (~8 passes a knob step on the
+   Pi, measured 2026-10-14); a transition of the resolved value runs on the
+   GPU. */
+.jb-card[data-focused] { z-index: 2; transform: scale(var(--lift)) translateY(-0.5vh);
+  transition: transform 520ms cubic-bezier(0.3, 1.45, 0.55, 1); }
 /* Focus layers on the card itself: a deeper shadow below, a brighter rim
    on top. Both pre-drawn; only their opacity changes. */
 .jb-card::before,
@@ -494,12 +506,6 @@ jb-section[type="featured-artist"] .jb-card { --lift: 1.03; }
 jb-section[type="new"] .jb-card-song::before,
 jb-section[type="new"] .jb-card-song::after { bottom: 0; border-radius: var(--radius-lg); }
 .jb-card[data-pressed] { transform: scale(1.02) translateY(-0.2vh); }
-/* Picked up: rises a touch past its rest, drifts, and settles. */
-@keyframes pick-up {
-  0%   { transform: scale(1) translate(0, 0); }
-  45%  { transform: scale(calc(var(--lift) + 0.018)) translate(0.12vw, -0.85vh); }
-  100% { transform: scale(var(--lift)) translate(0, -0.5vh); }
-}
 
 /* Feature cards (New, Featured Artist): the art on the right, a blurred
    copy of it behind the text on the left, over the art's own dominant
@@ -820,7 +826,7 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
 .jb-npo-album { margin-top: 0.6vh; font-size: 2vh; font-style: italic; color: var(--ink-soft); }
 .jb-npo-idle { font-size: 3vh; color: var(--ink-soft); }
 .jb-npo-progress { height: 0.7vh; margin-top: 4vh; border-radius: calc(0.4vh * var(--opt-roundness)); background: hsl(from var(--opt-button) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
-.jb-npo-progress-fill { height: 100%; width: calc(var(--jb-progress) * 100%); border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent) h s l), hsl(from var(--opt-accent2) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent) h s l / 0.6); }
+.jb-npo-progress-fill { height: 100%; width: 100%; transform: scaleX(var(--jb-progress)); transform-origin: left center; will-change: transform; border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent) h s l), hsl(from var(--opt-accent2) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent) h s l / 0.6); }
 .jb-npo-times { display: flex; justify-content: space-between; margin-top: 1vh; font-size: 1.6vh; color: var(--ink-soft); }
 .jb-npo-actions { display: flex; gap: 1vw; margin-top: 4.5vh; }
 .jb-npo-button {
