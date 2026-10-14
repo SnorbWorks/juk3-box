@@ -351,9 +351,14 @@ function watchKeyboard() {
 }
 
 async function start() {
-  // Tell the kiosk launcher the splash is on screen: it can now show this
-  // window over sway's identical one (deploy/kiosk/kiosk-chromium.sh).
-  if (!PREVIEW) requestAnimationFrame(() => setTimeout(() => fetch('/api/kiosk-painted', { method: 'POST' }).catch(() => {}), 0));
+  // Tell the kiosk launcher the splash is on screen, picture and all: it
+  // can now show this window over sway's identical one
+  // (deploy/kiosk/kiosk-chromium.sh).
+  const splashPicture = document.querySelector('#jb-splash img');
+  if (!PREVIEW && splashPicture) {
+    splashPicture.decode().catch(() => {}).then(() =>
+      requestAnimationFrame(() => setTimeout(() => fetch('/api/kiosk-painted', { method: 'POST' }).catch(() => {}), 0)));
+  }
   theme = await fetchTheme();
   await applyTheme(theme);
   store.set('settings', theme.settings);

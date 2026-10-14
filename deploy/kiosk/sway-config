@@ -4,7 +4,7 @@ seat * hide_cursor 1
 
 # The JUKE.BOX splash while Chromium starts (it takes ~10 s on a Pi 4); the
 # page shows the same picture until its screen is ready.
-output * bg /opt/juk3-box/services/jb_ui/engine/splash.png fill #0b0b0f
+output * bg /opt/juk3-box/services/jb_ui/engine/splash.png fill #7a3db0
 
 # In --app mode Chromium's Wayland app_id is "chrome-<url>-Default", not
 # "chromium" -- match both.
