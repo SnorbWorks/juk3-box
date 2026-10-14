@@ -199,3 +199,29 @@ def test_old_name_keyed_album_index_is_rebuilt(tmp_path, monkeypatch):
     conn = lib.get_db()
     pk = {r[1]: r[5] for r in conn.execute("PRAGMA table_info(album_index)")}
     assert pk["position"] and not pk["name"]
+
+
+OTHER = "AA:BB:CC:DD:EE:FF"
+
+
+def test_each_phone_sees_only_its_own_playlists_and_forgetting_removes_everything(db):
+    lib.upsert_tracks(db, MAC, crawl("Mine"))
+    lib.upsert_tracks(db, OTHER, crawl("Theirs"))
+    lib.store_deep(db, MAC, "playlists", {"playlists": {"Road Trip": ["Mine"]}})
+    lib.store_deep(db, OTHER, "playlists", {"playlists": {"Gym": ["Theirs"]}})
+    assert [p["name"] for p in lib.read_playlists(db, MAC)] == ["Road Trip"]
+    assert [p["name"] for p in lib.read_playlists(db, OTHER)] == ["Gym"]
+    assert lib.forget_phone(db, OTHER) >= 2
+    assert db.execute("SELECT COUNT(*) FROM tracks WHERE phone_mac = ?", (OTHER,)).fetchone()[0] == 0
+    assert lib.read_playlists(db, OTHER) == []
+    assert [t for (t, _, _) in rows(db)] == ["Mine"]
+
+
+def test_the_board_falls_back_to_the_phone_last_played(db):
+    lib.upsert_tracks(db, MAC, crawl("Mine"))
+    lib.upsert_tracks(db, OTHER, crawl("Theirs"))
+    db.execute("UPDATE tracks SET last_played_at = 100 WHERE phone_mac = ?", (MAC,))
+    db.execute("UPDATE tracks SET last_played_at = 50 WHERE phone_mac = ?", (OTHER,))
+    assert lib.latest_phone(db) == MAC
+    lib.forget_phone(db, MAC)
+    assert lib.latest_phone(db) == OTHER

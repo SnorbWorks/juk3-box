@@ -247,7 +247,7 @@ def album_key(title: str, nth: int) -> str:
     return title if nth == 0 else f"{title} ({nth + 1})"
 
 
-def read_albums(conn: sqlite3.Connection) -> dict:
+def read_albums(conn: sqlite3.Connection, mac: str | None = None) -> dict:
     """{albums: [{name (the key), title, nth, rank}] in the phone's order,
     contents: {key: [{title, uid}] in album order}} -- contents only for
     albums opened so far. nth = which album of that title it is (0 = first),
@@ -255,24 +255,48 @@ def read_albums(conn: sqlite3.Connection) -> dict:
     albums, seen = [], {}
     for title, rank in conn.execute(
             "SELECT i.name, r.rank FROM album_index i LEFT JOIN album_recent r"
-            " ON r.phone_mac = i.phone_mac AND r.album = i.name ORDER BY i.phone_mac, i.position"):
+            " ON r.phone_mac = i.phone_mac AND r.album = i.name"
+            " WHERE ? IS NULL OR i.phone_mac = ? ORDER BY i.phone_mac, i.position", (mac, mac)):
         nth = seen.get(title, 0)
         seen[title] = nth + 1
         albums.append({"name": album_key(title, nth), "title": title, "nth": nth, "rank": rank})
     contents = {}
     for album, title, uid in conn.execute(
-            "SELECT album, title, uid FROM album_tracks ORDER BY phone_mac, album, position"):
+            "SELECT album, title, uid FROM album_tracks WHERE ? IS NULL OR phone_mac = ?"
+            " ORDER BY phone_mac, album, position", (mac, mac)):
         contents.setdefault(album, []).append({"title": title, "uid": uid})
     return {"albums": albums, "contents": contents}
 
 
-def read_playlists(conn: sqlite3.Connection) -> list:
-    """[{name, titles}] for every phone, in the phone's playlist order."""
+def read_playlists(conn: sqlite3.Connection, mac: str | None = None) -> list:
+    """[{name, titles}] for one phone (or every phone), in the phone's playlist order."""
     out = {}
     for name, title in conn.execute(
-            "SELECT name, title FROM playlists ORDER BY phone_mac, rowid"):
+            "SELECT name, title FROM playlists WHERE ? IS NULL OR phone_mac = ? ORDER BY phone_mac, rowid",
+            (mac, mac)):
         out.setdefault(name, []).append(title)
     return [{"name": n, "titles": t} for n, t in out.items()]
+
+
+def forget_phone(conn: sqlite3.Connection, mac: str) -> int:
+    """Removes everything stored about one phone (it was forgotten): its
+    songs, playlists and albums, with their counts and favorites."""
+    removed = 0
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        columns = [c[1] for c in conn.execute(f"PRAGMA table_info({table})")]
+        if "phone_mac" in columns:
+            removed += conn.execute(f"DELETE FROM {table} WHERE phone_mac = ?", (mac,)).rowcount
+    conn.commit()
+    return removed
+
+
+def latest_phone(conn: sqlite3.Connection) -> str | None:
+    """The phone whose music was in use most recently: what the board shows
+    when no phone is connected (at boot, before it reconnects)."""
+    row = conn.execute(
+        "SELECT phone_mac FROM tracks GROUP BY phone_mac"
+        " ORDER BY MAX(COALESCE(last_played_at, 0)) DESC, MAX(COALESCE(added_at, 0)) DESC LIMIT 1").fetchone()
+    return row[0] if row else None
 
 
 def number_duplicates(tracks: list) -> list:
@@ -401,6 +425,10 @@ class Snapshots:
         self._last_payload: str | None = None
         self._last_playlists: str | None = None
         self._last_albums: str | None = None
+        # Whose music: the connected phone's, else the last one in use.
+        # Only one phone's library at a time -- another phone's songs
+        # can't be played on this one.
+        self.mac: str | None = latest_phone(conn)
 
     async def publish(self) -> None:
         """Whole library sorted by title -- the UI slices/sorts client-side.
@@ -419,8 +447,9 @@ class Snapshots:
             -- lookup's (they're the same for most albums): the phone's Recently
             -- Added order reaches far more songs than the crawled ones.
             LEFT JOIN album_recent r ON r.phone_mac = t.phone_mac AND r.album = COALESCE(t.phone_album, t.album)
+            WHERE ? IS NULL OR t.phone_mac = ?
             ORDER BY t.title COLLATE NOCASE
-            """
+            """, (self.mac, self.mac)
         ).fetchall()
         tracks = [
             {
@@ -438,13 +467,13 @@ class Snapshots:
             await self.bus.publish("jukebox/jb-library/tracks", payload, retain=True)
             self._last_payload = serialized
             self.log.info("published snapshot: %d tracks", len(tracks))
-        playlists = {"playlists": read_playlists(self.conn)}
+        playlists = {"playlists": read_playlists(self.conn, self.mac)}
         serialized = json.dumps(playlists)
         if serialized != self._last_playlists:
             await self.bus.publish("jukebox/jb-library/playlists", playlists, retain=True)
             self._last_playlists = serialized
             self.log.info("published %d playlists", len(playlists["playlists"]))
-        albums = read_albums(self.conn)
+        albums = read_albums(self.conn, self.mac)
         serialized = json.dumps(albums)
         if serialized != self._last_albums:
             await self.bus.publish("jukebox/jb-library/albums", albums, retain=True)
@@ -640,6 +669,7 @@ async def main() -> None:
         # we get it now. (All subscriptions share one message stream.)
         messages = await bus.subscribe("jukebox/jb-source-phone/crawl-result")
         await bus.subscribe("jukebox/jb-source-phone/connected")
+        await bus.subscribe("jukebox/jb-source-phone/forgotten")
         await bus.subscribe("jukebox/jb-source-phone/now-playing")
         await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
         await bus.subscribe("jukebox/jb-crawl/result")
@@ -665,6 +695,19 @@ async def main() -> None:
                 continue
             if topic.endswith("/connected"):
                 plays.on_connected(payload)
+                if payload.get("connected") and payload.get("mac") and payload["mac"] != snapshots.mac:
+                    snapshots.mac = payload["mac"]
+                    log.info("showing the library of %s", payload.get("name") or snapshots.mac)
+                    await snapshots.publish()
+                continue
+            if topic.endswith("/forgotten"):
+                mac = payload.get("mac")
+                if mac:
+                    n = forget_phone(conn, mac)
+                    log.info("forgot phone %s: removed %d stored rows", mac, n)
+                    if snapshots.mac == mac:
+                        snapshots.mac = latest_phone(conn)
+                    await snapshots.publish()
                 continue
             if topic.endswith("/now-playing"):
                 if plays.on_now_playing(payload):

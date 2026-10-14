@@ -7,7 +7,9 @@ from dbus_next.errors import DBusError, InterfaceNotFoundError
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
+from services.jb_source_phone import phones as ph
 from services.jb_source_phone import reconnect as rc
+from services.jb_source_phone.pairing import Pairing
 
 SERVICE_NAME = "jb-source-phone"
 BLUEZ = "org.bluez"
@@ -211,16 +213,25 @@ class Phone:
         await method()
 
 
-async def find_connected_player(system_bus) -> tuple[str, str] | None:
+async def find_connected_player(system_bus, prefer_mac: str | None = None) -> tuple[str, str] | None:
+    """The connected phone's (device path, player path). For a moment two
+    phones can be connected (one about to be turned away, see phones.py):
+    the one with the jukebox wins."""
     intro = await system_bus.introspect(BLUEZ, "/")
     obj = system_bus.get_proxy_object(BLUEZ, "/", intro)
     om = obj.get_interface("org.freedesktop.DBus.ObjectManager")
     objects = await om.call_get_managed_objects()
+    found = []
     for path, interfaces in objects.items():
         if "org.bluez.MediaPlayer1" in interfaces:
             device_path = str(path).rsplit("/player", 1)[0]
-            return device_path, str(path)
-    return None
+            found.append((device_path, str(path)))
+    if prefer_mac:
+        wanted = "dev_" + prefer_mac.replace(":", "_")
+        for device_path, player_path in found:
+            if device_path.endswith(wanted):
+                return device_path, player_path
+    return found[0] if found else None
 
 
 async def main() -> None:
@@ -341,7 +352,7 @@ async def main() -> None:
 
     async def connect_current_phone(bus: Bus, retries: int = 5, retry_delay: float = 0.8):
         nonlocal phone, synced_player_path
-        found = await find_connected_player(system_bus)
+        found = await find_connected_player(system_bus, lock.owner)
         if not found:
             phone = None
             synced_player_path = None
@@ -457,6 +468,25 @@ async def main() -> None:
             if lease and cmd.get("holder") == lease["holder"]:
                 asyncio.create_task(end_lease(bus, "released"))
             return
+        # Managing phones (the jukebox's Phones menu and the admin).
+        if action == "pair_start":
+            await pairing.start()
+            return
+        if action == "pair_stop":
+            await pairing.stop("cancelled at the jukebox")
+            return
+        if action == "pair_confirm":
+            pairing.answered(bool(cmd.get("ok")))
+            return
+        if action == "switch" and cmd.get("mac"):
+            asyncio.create_task(switch_to(bus, cmd["mac"]))
+            return
+        if action == "disconnect" and cmd.get("mac"):
+            await disconnect_phone(bus, cmd["mac"])
+            return
+        if action == "forget" and cmd.get("mac"):
+            await forget_phone(bus, cmd["mac"])
+            return
         if phone is None:
             log.warning("command %r received with no phone connected", action)
             return
@@ -533,8 +563,111 @@ async def main() -> None:
         log.info("played %r after re-sync", title)
         return True
 
+    # -- which phone has the jukebox (phones.py has the policy) -------------
+    lock = ph.Lock()
+    # Phones disconnected on purpose (switched away from, disconnected or
+    # forgotten from the menu): their going isn't a drop to reconnect after.
+    leaving: dict[str, float] = {}
+    turned_away_at: dict[str, float] = {}
+    last_phone_list = None
+
+    async def drop_link(mac: str, path: str):
+        leaving[mac] = now() + 30
+        intro = await system_bus.introspect(BLUEZ, path)
+        dev = system_bus.get_proxy_object(BLUEZ, path, intro).get_interface("org.bluez.Device1")
+        await asyncio.wait_for(dev.call_disconnect(), 10)
+
+    async def pause_if_playing(mac: str):
+        if phone is not None and phone.mac == mac and playing:
+            try:
+                await phone.transport("pause")
+            except Exception:
+                log.warning("couldn't pause %s before letting it go", phone.name)
+
+    async def publish_switch(bus: Bus, state: str, **extra):
+        await bus.publish(f"jukebox/{SERVICE_NAME}/switch", {"state": state, **extra}, retain=True)
+
+    async def switch_to(bus: Bus, mac: str):
+        """Hand the jukebox to another paired phone: pause and let go of the
+        one it's with, then connect the new one."""
+        paired = await rc.phones(system_bus)
+        target = next((d for d in paired if d[0] == mac), None)
+        if target is None:
+            await publish_switch(bus, "failed", mac=mac, reason="not paired")
+            return
+        _, path, name, connected = target
+        lock.switch_to(mac, now())
+        await publish_switch(bus, "connecting", mac=mac, name=name)
+        for other, other_path, other_name, other_connected in paired:
+            if other_connected and other != mac:
+                await pause_if_playing(other)
+                try:
+                    await drop_link(other, other_path)
+                    log.info("switching: let go of %s", other_name)
+                except Exception:
+                    log.exception("switching: couldn't disconnect %s", other_name)
+        if not connected:
+            try:
+                await rc.connect(system_bus, path)
+            except Exception as e:
+                log.info("switching to %s failed: %s", name, type(e).__name__)
+                await publish_switch(bus, "failed", mac=mac, name=name,
+                                     reason="Couldn't reach it. Is its Bluetooth on and nearby?")
+                return
+        log.info("switched to %s (%s)", name, mac)
+        await publish_switch(bus, "done", mac=mac, name=name)
+
+    async def disconnect_phone(bus: Bus, mac: str):
+        paired = await rc.phones(system_bus)
+        target = next((d for d in paired if d[0] == mac), None)
+        if target is None or not target[3]:
+            return
+        await pause_if_playing(mac)
+        if lock.owner == mac:
+            lock.release()
+        try:
+            await drop_link(mac, target[1])
+            log.info("disconnected %s on request", target[2])
+        except Exception:
+            log.exception("couldn't disconnect %s", target[2])
+
+    async def forget_phone(bus: Bus, mac: str):
+        """Unpair a phone and remove what the jukebox stored about it (the
+        user's choice, 2026-10-14): jb-library deletes its music on
+        jukebox/jb-source-phone/forgotten."""
+        paired = await rc.phones(system_bus)
+        target = next((d for d in paired if d[0] == mac), None)
+        if target and target[3]:
+            await pause_if_playing(mac)
+        leaving[mac] = now() + 30
+        lock.forget(mac)
+        path = target[1] if target else f"{rc.ADAPTER}/dev_{mac.replace(':', '_')}"
+        try:
+            intro = await system_bus.introspect(BLUEZ, rc.ADAPTER)
+            adapter = system_bus.get_proxy_object(BLUEZ, rc.ADAPTER, intro).get_interface("org.bluez.Adapter1")
+            await asyncio.wait_for(adapter.call_remove_device(path), 15)
+        except Exception:
+            log.exception("couldn't remove %s from Bluetooth", mac)
+        book.forget(mac)
+        if phone is not None and phone.mac == mac:
+            await bus.clear_retained(f"jukebox/{SERVICE_NAME}/crawl-result")
+        await bus.publish(f"jukebox/{SERVICE_NAME}/forgotten", {"mac": mac, "name": target[2] if target else None})
+        log.info("forgot %s (%s)", target[2] if target else "phone", mac)
+
+    async def on_paired(mac: str, name: str):
+        """A new phone was paired at the jukebox: it gets the jukebox, once
+        BlueZ lists it as a phone that can send audio."""
+        book.touch(mac, name, time.time())
+        for _ in range(15):
+            if any(d[0] == mac for d in await rc.phones(system_bus)):
+                break
+            await asyncio.sleep(1)
+        await switch_to(bus_ref["bus"], mac)
+
     # -- reconnecting on our own (reconnect.py has the policy) --------------
     book = rc.PhoneBook()
+    bus_ref: dict = {}
+    pairing = Pairing(system_bus, None, log)
     reconnect_task = None
     reconnect_until = 0.0
 
@@ -566,7 +699,10 @@ async def main() -> None:
                         log.info("a phone is connected; reconnect done")
                         return
                     by_mac = {d[0]: d for d in devs}
-                    for mac in book.order(list(by_mac)):
+                    order = book.order(list(by_mac))
+                    if event == "drop" and lock.owner in by_mac:
+                        order = [lock.owner]   # its place is held; no one else
+                    for mac in order:
                         _, path, name, _ = by_mac[mac]
                         await publish_reconnect(bus, "trying", name=name, mac=mac)
                         try:
@@ -581,19 +717,46 @@ async def main() -> None:
             await publish_reconnect(bus, "idle")
 
     async def watch_connection(bus: Bus):
-        """Starts reconnecting at boot and after a drop mid-song (option C)."""
-        was_connected = None
+        """Starts reconnecting at boot and after a drop mid-song (option C),
+        turns away phones that arrive while another has the jukebox
+        (phones.py), and keeps the phone list up to date."""
+        nonlocal last_phone_list
+        was = None   # the phones connected at the last look
         last_playing_at = -1e9
         while True:
             try:
                 if playing:
                     last_playing_at = now()
-                connected = any(d[3] for d in await rc.phones(system_bus))
-                if was_connected is None and not connected:
+                paired = await rc.phones(system_bus)
+                connected = [d[0] for d in paired if d[3]]
+                info = {d[0]: d for d in paired}
+                if was is None and not connected:
                     start_reconnect(bus, "boot")
-                elif was_connected and not connected:
-                    start_reconnect(bus, "drop", was_playing=now() - last_playing_at < 10)
-                was_connected = connected
+                elif was is not None and lock.owner in was and lock.owner not in connected:
+                    mac = lock.owner
+                    if leaving.get(mac, 0) < now():
+                        mid_song = now() - last_playing_at < 10
+                        lock.dropped(mac, now(), rc.DROP_WINDOW_S if mid_song else None)
+                        start_reconnect(bus, "drop", was_playing=mid_song)
+                for mac in lock.update(connected, now(), book.order(connected)):
+                    if leaving.get(mac, 0) >= now():
+                        continue   # already on its way out
+                    name = info[mac][2]
+                    log.info("turning away %s: %s has the jukebox", name, lock.owner)
+                    try:
+                        await drop_link(mac, info[mac][1])
+                    except Exception:
+                        log.exception("couldn't turn away %s", name)
+                    if now() - turned_away_at.get(mac, -1e9) > 60:
+                        turned_away_at[mac] = now()
+                        owner = info.get(lock.owner)
+                        await bus.publish("jukebox/jb-core/notice", {
+                            "type": "phone_turned_away", "name": name, "owner": owner[2] if owner else None})
+                was = set(connected)
+                listing = ph.phone_list(paired, book.phones, lock.owner)
+                if listing != last_phone_list:
+                    last_phone_list = listing
+                    await bus.publish(f"jukebox/{SERVICE_NAME}/phones", {"phones": listing}, retain=True)
             except Exception:
                 log.exception("connection watch failed")
             await asyncio.sleep(3)
@@ -677,6 +840,18 @@ async def main() -> None:
 
         # No lease survives a restart: whoever held one must ask again.
         await publish_lease(bus)
+
+        bus_ref["bus"] = bus
+        async def publish_pairing(state: dict):
+            await bus.publish(f"jukebox/{SERVICE_NAME}/pairing", state, retain=True)
+        pairing.publish = publish_pairing
+        pairing.on_paired = on_paired
+        pairing.claim = lambda mac: lock.switch_to(mac, now())
+        try:
+            await pairing.register()
+        except Exception:
+            log.exception("couldn't register the pairing agent; pairing from the jukebox won't work")
+        await publish_switch(bus, "idle")
 
         asyncio.create_task(bus.run_heartbeat())
         asyncio.create_task(poll_now_playing(bus))

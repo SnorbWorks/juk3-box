@@ -55,6 +55,12 @@ class PhoneBook:
         tmp.write_text(json.dumps(self.phones, indent=1))
         os.replace(tmp, self.path)
 
+    def forget(self, mac: str):
+        if self.phones.pop(mac, None) is not None:
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.phones, indent=1))
+            os.replace(tmp, self.path)
+
     def order(self, macs: list) -> list:
         """Most recently connected first; phones never seen last."""
         return sorted(macs, key=lambda m: -(self.phones.get(m, {}).get("last_connected") or 0))
