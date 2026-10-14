@@ -1,0 +1,20 @@
+[Unit]
+Description=juk3-box jb_netwatch (keeps the jukebox online)
+After=NetworkManager.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/juk3-box
+# Keep root from leaving root-owned __pycache__ in admin's deploy tree.
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/juk3-box/venv/bin/python -m services.jb_netwatch.main
+Restart=always
+RestartSec=10
+# Reconnecting the Wi-Fi and restarting the jukebox need root.
+User=root
+# It only watches and acts; it needs nothing in anyone's home.
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

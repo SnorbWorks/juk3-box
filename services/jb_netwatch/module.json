@@ -1,0 +1,9 @@
+{
+  "contract": 1,
+  "id": "jb-netwatch",
+  "name": "Network watch",
+  "description": "Keeps the jukebox online: notices when the Wi-Fi drops, reconnects it, and as a last resort restarts the jukebox (between songs, never in a loop).",
+  "version": "1.0.0",
+  "roles": ["service"],
+  "subscribes": ["jukebox/jb-source-phone/now-playing"]
+}
