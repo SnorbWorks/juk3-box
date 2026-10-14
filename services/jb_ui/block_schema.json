@@ -836,21 +836,22 @@
             },
             {
               "value": "picture",
-              "label": "Picture"
+              "label": "Picture / video"
             },
             {
               "value": "none",
               "label": "None"
             }
           ],
-          "help": "Behind the card and banner layouts. Cover art is the song's cover, softly blurred."
+          "help": "Behind the card and banner layouts. Cover art is the song's cover, softly blurred; or a picture or video of yours."
         },
         "picture": {
           "type": "picture",
-          "label": "Picture",
+          "label": "Picture or video",
           "only_when": {
             "background": "picture"
-          }
+          },
+          "video": true
         },
         "tagline": {
           "type": "text",

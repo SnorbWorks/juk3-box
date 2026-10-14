@@ -203,11 +203,12 @@ export function createInspector(b) {
       case 'picture': {
         const src = value ? String(value) : '';
         const url = !src ? null : src.startsWith('/media/') ? src : `/themes/${b.theme()}/${src}`;
+        const isVideo = /\.(mp4|m4v|mov|webm|mkv)$/i.test(src);
         return field(spec.label, h('div.picture-field',
-          h('div.picture-thumb', url ? h('img', { src: url, alt: '' }) : icon('image')),
+          h('div.picture-thumb', !url ? icon('image') : isVideo ? h('video', { src: `${url}#t=1`, muted: true, preload: 'metadata' }) : h('img', { src: url, alt: '' })),
           h('div.picture-buttons',
             button(src ? 'Change' : 'Choose', { variant: 'small', onclick: async () => {
-              const got = await pickPicture(b.theme(), src);
+              const got = await pickPicture(b.theme(), src, { video: !!spec.video });
               if (got) set(got);
             } }, 'image'),
             src ? button('Remove', { variant: 'small ghost', onclick: () => set(undefined) }) : null)), help);

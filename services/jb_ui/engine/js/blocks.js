@@ -137,10 +137,13 @@ function fillNowPlaying(el, node, ctx) {
   const showBackdrop = url => {
     if (!backdrop || (backdrop.firstChild?.getAttribute('src') ?? '') === url) return;
     if (!url) return backdrop.replaceChildren();
-    const img = document.createElement('img');
-    img.alt = '';
-    img.src = url;
-    backdrop.replaceChildren(img);
+    // The owner's picture may be a video: it plays, silent, on a loop.
+    const video = /\.(mp4|m4v|mov|webm|mkv)$/i.test(url);
+    const el = document.createElement(video ? 'video' : 'img');
+    if (video) Object.assign(el, { autoplay: true, loop: true, muted: true, playsInline: true });
+    else el.alt = '';
+    el.src = url;
+    backdrop.replaceChildren(el);
   };
   const render = () => {
     const d = nowPlayingData();

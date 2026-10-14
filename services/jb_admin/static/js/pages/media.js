@@ -16,7 +16,7 @@ export async function show(main) {
   const zone = dropzone(true, files => uploadAll(files, () => refresh()), input);
   clear(main,
     pageHeader('Media', 'Pictures and videos for the cabinet\'s screen. They\'re made right for the jukebox as they upload: big pictures are scaled down, videos are converted so the Pi plays them smoothly.',
-      button('Upload', { variant: 'primary', onclick: () => input.click() }, 'upload'), input),
+      button('Upload media', { variant: 'primary', onclick: () => input.click() }, 'upload'), input),
     h('div.stack', zone, grid));
   const refresh = async () => {
     const { media } = await get('/api/media');
@@ -117,7 +117,7 @@ export function pickPicture(themeId, current, { video = false } = {}) {
       items.push(el);
       return el;
     };
-    const input = fileInput(video, files => uploadAll(files, loadLib));
+    const input = fileInput(true, files => uploadAll(files, loadLib));
     let timer = null;
     async function loadLib() {
       const { media } = await get('/api/media');
@@ -126,7 +126,7 @@ export function pickPicture(themeId, current, { video = false } = {}) {
       const waiting = usable.filter(m => m.state === 'optimizing');
       if (waiting.length) timer = setTimeout(() => loadLib().catch(() => {}), POLL_MS);
       clear(lib, h('div.stack',
-        button(video ? 'Upload a picture or video' : 'Upload pictures', { variant: 'small', onclick: () => input.click() }, 'upload'), input,
+        button('Upload media', { variant: 'small', onclick: () => input.click() }, 'upload'), input,
         waiting.length ? h('p.muted', `Converting ${waiting.map(m => m.name).join(', ')}… it can be chosen when it's done.`) : null,
         usable.some(m => !m.state) ? h('div.media-grid', usable.filter(m => !m.state).map(item))
           : emptyState('image', 'Nothing here yet', 'Upload one to use it here.')));
