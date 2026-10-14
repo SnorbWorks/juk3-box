@@ -40,6 +40,7 @@ export function createInspector(b) {
       h('div.inspector-head', h('span.inspector-icon', icon(d.icon)),
         h('div', h('h2', d.label), def?.description ? h('p.muted', def.description) : isContainer(node) ? h('p.muted', b.schema.container.description) : null)),
       isRoot ? null : h('div.inspector-actions',
+        iconButton('arrow-up-left', 'Select the container it\'s in', { onclick: () => b.select(path.slice(0, -1)) }),
         iconButton('chevron-up', 'Move up', { disabled: index === 0, onclick: () => b.moveBy(path, -1) }),
         iconButton('chevron-down', 'Move down', { disabled: index >= parent.children.length - 1, onclick: () => b.moveBy(path, 1) }),
         iconButton('copy', 'Duplicate', { disabled: !canDuplicate(tree, b.schema, b.layout(), path), onclick: () => b.duplicate(path) }),

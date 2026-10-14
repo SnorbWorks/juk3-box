@@ -100,9 +100,21 @@ export function createPreview(b) {
   function wire(f) {
     const doc = f.contentDocument;
     if (!doc) return;
-    // The kiosk hides the mouse pointer; the preview needs it.
+    // The kiosk hides the mouse pointer; the preview needs it. An empty
+    // row or column has no size of its own, so here (never on the cabinet)
+    // it gets a box to drop blocks into until something is in it.
     const style = doc.createElement('style');
-    style.textContent = 'html, body, * { cursor: default !important; }';
+    style.textContent = `html, body, * { cursor: default !important; }
+      .jb-container:empty {
+        display: flex !important; align-items: center; justify-content: center;
+        min-height: 9vh; min-width: 12vh; box-sizing: border-box; border-radius: 1vh;
+        outline: 2px dashed rgba(140, 170, 255, 0.7); outline-offset: -2px;
+        background: rgba(120, 150, 255, 0.1);
+      }
+      .jb-container:empty::after {
+        content: "Drop blocks here"; font: 600 1.7vh system-ui, sans-serif;
+        color: rgba(205, 218, 255, 0.9);
+      }`;
     doc.head.append(style);
     doc.addEventListener('pointermove', e => {
       if (interact) return;
@@ -181,6 +193,7 @@ export function createPreview(b) {
     tools.replaceChildren(
       h('span.pv-name', label),
       ...(path.length ? [
+        iconButton('arrow-up-left', 'Select the container it\'s in', { onclick: () => b.select(path.slice(0, -1)) }),
         iconButton('chevron-up', 'Move up', { disabled: i === 0, onclick: () => b.moveBy(path, -1) }),
         iconButton('chevron-down', 'Move down', { disabled: i >= parent.children.length - 1, onclick: () => b.moveBy(path, 1) }),
         iconButton('copy', 'Duplicate', { disabled: !canDuplicate(tree, b.schema, b.layout(), path), onclick: () => b.duplicate(path) }),
