@@ -359,6 +359,16 @@ async function start() {
     splashPicture.decode().catch(() => {}).then(() =>
       requestAnimationFrame(() => setTimeout(() => fetch('/api/kiosk-painted', { method: 'POST' }).catch(() => {}), 0)));
   }
+  // Then the live splash (index.html) fades in over the still one, which it
+  // matches, and its bars start once it's fully in.
+  const splash = document.getElementById('jb-splash');
+  const liveLogo = document.querySelector('#jb-splash .logo img');
+  if (!PREVIEW && splash && liveLogo) {
+    liveLogo.decode().then(() => {
+      splash.classList.add('live-on');
+      setTimeout(() => splash.classList.add('playing'), 900);
+    }).catch(() => {});
+  }
   theme = await fetchTheme();
   await applyTheme(theme);
   store.set('settings', theme.settings);
