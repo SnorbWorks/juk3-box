@@ -1,0 +1,34 @@
+{
+  "contract": 1,
+  "id": "jb-weathermix",
+  "name": "Weather Mix",
+  "description": "A mood playlist for the weather, from the songs on the connected phone: Rainy Day Records, Sunny Tunes, Night Drive... It changes with the weather, the time of day and the season.",
+  "version": "1.0.1",
+  "roles": ["source"],
+  "run": "main.py",
+  "publishes": ["jukebox/jb-weathermix/mix", "jukebox/jb-weathermix/heartbeat"],
+  "subscribes": ["jukebox/jb-weather/current", "jukebox/jb-library/tracks"],
+  "permissions": { "network": "internet" },
+  "resources": { "cpu": 25, "memory_mb": 160 },
+  "owner_settings": {
+    "size": { "type": "number", "label": "Songs in the mix", "default": 25, "min": 10, "max": 50 },
+    "autoplay": { "type": "enum", "label": "Play it when the jukebox has been quiet for", "default": "0",
+                  "help": "Only when a phone is connected and nothing is queued; once, until music has played again.",
+                  "options": [{ "value": "0", "label": "Off" }, { "value": "15", "label": "15 minutes" },
+                              { "value": "30", "label": "30 minutes" }, { "value": "60", "label": "1 hour" }] },
+    "lastfm-key": { "type": "secret", "label": "Last.fm API key",
+                    "help": "Finds the songs that fit the mood. Without one, the mix goes by your songs' genres. Get one at last.fm/api." }
+  },
+  "blocks": [{
+    "id": "weathermix",
+    "kind": "playlist",
+    "label": "Weather Mix",
+    "description": "A playlist for today's weather. A bar across a row, a card in a narrow space; it can also be one of a Browse row's cards.",
+    "group": "music",
+    "topic": "jukebox/jb-weathermix/mix",
+    "template": "blocks/mix.html",
+    "style": "blocks/mix.css",
+    "icons": ["sun", "moon", "cloud-sun", "cloud", "cloud-fog", "cloud-drizzle", "cloud-rain", "cloud-snow", "cloud-lightning"],
+    "shapes": [["card", 0], ["bar", 0.9]]
+  }]
+}

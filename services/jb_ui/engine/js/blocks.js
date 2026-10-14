@@ -4,6 +4,7 @@
 
 import { bind, fromTemplate, slot } from './bind.js';
 import { watchTopic } from './bus.js';
+import { listData, listSongs, registerList } from './lists.js';
 import { SORTS, turnPage, view } from './board.js';
 import { makeStop } from './focus.js';
 import { nowPlayingData } from './np.js';
@@ -368,6 +369,12 @@ function fillHeader(el, node, ctx) {
       const sort = SORTS[v.sort];
       title = sort?.category ? `Browse by ${sort.singular}` : v.sort === 'title' ? 'All Songs' : v.sortLabel;
       subtitle = v.filter ? v.filter.value : v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : '';
+      if (v.filter?.field === 'list') {
+        // A module's playlist: its own name ("Rainy Day Records").
+        const d = listData(v.filter.value);
+        title = d?.hook || 'Mix';
+        subtitle = [d?.subtitle, v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : ''].filter(Boolean).join(' · ');
+      }
       if (v.album?.loading) subtitle += ' · Loading album…';
       if (v.album?.failed) subtitle += ` · ${v.album.failed}`;
     } else if (screen === 'collection') {
@@ -410,11 +417,31 @@ export function fillModuleBlock(el, node, ctx, def) {
   el.dataset.module = def.module;
   el.toggleAttribute('data-empty', true);
   watchTopic(def.topic);
-  store.watch(el, `topic:${def.topic}`, data => {
+  // A playlist block (lists.js): its template's data-stop="open" opens it
+  // on the board, data-stop="play" plays it all; it gets count, cover1-4
+  // (from its songs in the library), playIcon and openIcon too.
+  const list = def.kind === 'playlist';
+  if (list) {
+    registerList(node.block, def);
+    stopsFrom(el, `list:${node.block}`, { open: () => ctx.actions.openList(node.block), play: () => ctx.actions.playList(node.block) });
+  }
+  const render = () => {
+    const data = store.get(`topic:${def.topic}`);
+    let extra = {};
+    if (list) {
+      const songs = listSongs(node.block);
+      const covers = [...new Set(songs.map(t => t.artwork_url).filter(Boolean))].slice(0, 4);
+      extra = { count: songs.length, countLabel: `${songs.length} song${songs.length === 1 ? '' : 's'}`,
+        playIcon: ctx.icons.play, openIcon: ctx.icons['card-open'] };
+      covers.forEach((c, i) => { extra[`cover${i + 1}`] = sized(c, 200); });
+      if (data && !songs.length) return el.toggleAttribute('data-empty', true);
+    }
     el.toggleAttribute('data-empty', !data);
     if (!data || typeof data !== 'object') return;
     const icons = {};
     for (const [k, v] of Object.entries(data)) if (typeof v === 'string' && def.icons[v]) icons[k] = def.icons[v];
-    bind(el, { ...data, ...icons });
-  });
+    bind(el, { ...data, ...icons, ...extra });
+  };
+  store.watch(el, `topic:${def.topic}`, render);
+  if (list) store.watch(el, 'tracks', render);
 }

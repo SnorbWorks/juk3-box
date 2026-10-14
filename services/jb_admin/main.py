@@ -388,7 +388,12 @@ class Admin:
             schema["blocks"][name] = {"label": b["label"], "group": b["group"] if b["group"] in
                                       {g["id"] for g in schema["groups"]} else "content",
                                       "icon": "module", "description": b["description"] or f"From the {b['module']} module.",
-                                      "module": b["module"], "settings": settings}
+                                      "module": b["module"], "kind": b["kind"], "settings": settings}
+            # A playlist block can also be one of a Browse row's cards.
+            if b["kind"] == "playlist":
+                sorts = schema["blocks"]["section"]["settings"].get("sorts")
+                if sorts:
+                    sorts["options"].append({"value": name, "label": b["label"]})
         return web.json_response(schema)
 
     async def theme_layouts(self, request):
@@ -504,6 +509,10 @@ class Admin:
         body = await json_body(request)
         try:
             saved = self.modules.save_settings(m["id"], m, body.get("values"))
+            # An installed module gets its secrets when it starts (systemd
+            # credentials): a changed secret needs a restart to reach it.
+            if self.modules.secrets_changed and m.get("installed"):
+                await self.modules.ctl("unit", "restart", unit_of(m))
         except ModuleError as e:
             raise error(400, str(e))
         await self.announce(f"module:{m['id']}")

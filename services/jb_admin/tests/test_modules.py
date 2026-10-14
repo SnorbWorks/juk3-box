@@ -166,3 +166,64 @@ def test_typed_places_are_read_sensibly():
     assert places.parse("Paris, France") == ({"name": "Paris"}, "France")
     assert places.parse("lake  oswego") == ({"name": "lake oswego"}, None)
     assert places.label({"name": "Portland", "admin1": "Oregon", "country": "United States", "country_code": "US"}) == "Portland, Oregon, US"
+
+
+MIX = REPO / "modules" / "jb-weathermix"
+
+
+def mix_modules():
+    import importlib
+    import sys
+    sys.path.insert(0, str(MIX))
+    try:
+        return importlib.import_module("moods"), importlib.import_module("main")
+    finally:
+        sys.path.remove(str(MIX))
+
+
+def test_weather_mix_is_a_valid_installable_playlist_module():
+    m = json.loads((MIX / "module.json").read_text())
+    assert module_mgr.check_manifest(m, MIX, set()) == []
+    blocks, problems = module_blocks.module_blocks([MIX.parent])
+    assert problems == [] and blocks["weathermix"]["kind"] == "playlist"
+
+
+def test_weather_reads_as_a_mood():
+    moods, _ = mix_modules()
+    assert moods.mood_of({"code": 63, "is_day": True, "temp_c": 9}) == "rain"
+    assert moods.mood_of({"code": 0, "is_day": True, "temp_c": 31}) == "hot"
+    assert moods.mood_of({"code": 0, "is_day": True, "temp_c": 8}) == "crisp"
+    assert moods.mood_of({"code": 0, "is_day": False, "temp_c": 20}) == "night"
+    assert moods.mood_of({"code": 95, "is_day": False}) == "storm"
+    assert moods.mood_of({"code": 3, "is_day": True}) == "cloudy"
+    for mood, m in moods.MOODS.items():
+        assert m["tags"] and m["genres"] and len(m["names"]) >= 6, mood
+        assert mood in moods.ICONS
+    assert moods.recipe("rain", "night", "autumn")["late night"] == 0.4
+
+
+def test_mix_names_vary_and_fit_the_moment():
+    import random
+    moods, _ = mix_modules()
+    rng = random.Random(1)
+    recent = []
+    for _ in range(6):
+        n = moods.name_for("rain", "afternoon", "spring", recent, rng)
+        assert n not in recent
+        recent = [n] + recent
+    evening = {moods.name_for("sunny", "evening", "summer", [], random.Random(i)) for i in range(40)}
+    assert "Golden Hour" in evening
+
+
+def test_mix_matching_and_variety():
+    import random
+    _, main_ = mix_modules()
+    assert main_.norm("Don't Stop Me Now - Remastered 2011") == main_.norm("Don't Stop Me Now")
+    assert main_.norm("Señorita (feat. Someone)") == main_.norm("Señorita")
+    library = [{"title": f"s{i}", "artist": f"a{i % 3}"} for i in range(30)]
+    picked = main_.choose({i: 1.0 for i in range(30)}, library, 10, random.Random(2))
+    assert len(picked) <= 10
+    by_artist = {}
+    for t in picked:
+        by_artist[t["artist"]] = by_artist.get(t["artist"], 0) + 1
+    assert max(by_artist.values()) <= 2

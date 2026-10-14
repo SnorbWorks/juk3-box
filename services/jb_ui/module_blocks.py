@@ -47,6 +47,8 @@ def check_block(module_id: str, root: Path, b) -> list[str]:
         problems.append(f"block id {name!r} must be {short!r} or start with {short + '-'!r}")
     elif name in themes.KNOWN_BLOCKS:
         problems.append(f"block id {name!r} is one of the engine's")
+    if b.get("kind", "display") not in ("display", "playlist"):
+        problems.append(f"block {name!r}: kind must be display or playlist")
     if not isinstance(b.get("label"), str) or not b["label"].strip():
         problems.append(f"block {name!r} needs a label")
     if not isinstance(b.get("topic"), str) or not TOPIC_RE.match(b["topic"]):
@@ -85,6 +87,7 @@ def module_blocks(folders: list[Path]) -> tuple[dict[str, dict], list[str]]:
             base = f"/modules/{mid}/"
             out[b["id"]] = {
                 "module": mid,
+                "kind": b.get("kind", "display"),
                 "label": b["label"],
                 "description": b.get("description", ""),
                 "group": b.get("group", "content"),

@@ -85,6 +85,10 @@ async def fetch(session: aiohttp.ClientSession, p: dict, units: str) -> dict:
         "high": f"{round(day['temperature_2m_max'][0])}{deg}",
         "low": f"{round(day['temperature_2m_min'][0])}{deg}",
         "units": units,
+        # For other modules (Weather Mix): the raw reading.
+        "code": int(now["weather_code"]),
+        "is_day": bool(now.get("is_day", 1)),
+        "temp_c": round(now["temperature_2m"] if units != "fahrenheit" else (now["temperature_2m"] - 32) * 5 / 9, 1),
         "updated": time.time(),
     }
 
@@ -114,7 +118,7 @@ async def run():
                             log.warning("weather: %s", e)
                         changed.clear()
                         try:
-                            await asyncio.wait_for(changed.wait(), timeout=max(5, float(s.get("refresh") or 15)) * 60)
+                            await asyncio.wait_for(changed.wait(), timeout=max(5, float(s.get("refresh") or 60)) * 60)
                         except asyncio.TimeoutError:
                             pass
                 finally:

@@ -1,0 +1,33 @@
+/* Served inside @scope (jb-weathermix). Themes may restyle it
+   (jb-weathermix .jbm-...). */
+:scope { display: block; min-width: 0; color: #fff; }
+:scope[data-empty] { display: none; }
+.jbm { position: relative; display: flex; align-items: stretch; gap: 1vh; }
+.jbm-open, .jbm-play {
+  position: relative;
+  border-radius: 1.6vh;
+  background: linear-gradient(100deg, rgba(40, 60, 120, 0.7), rgba(20, 28, 60, 0.75));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0.8vh 2vh rgba(0, 0, 0, 0.35);
+  transition: transform 180ms ease;
+}
+.jbm-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1.6vh; padding: 1.2vh 1.6vh; }
+.jbm-icon { display: flex; flex: none; font-size: 4vh; color: #ffd36b; }
+.jbm-icon svg, .jbm-play svg, .jbm-go svg { width: 1em; height: 1em; }
+.jbm-text { min-width: 0; flex: 1; }
+.jbm-kicker { font-size: 1.15vh; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.7; }
+.jbm-hook { margin-top: 0.3vh; font-size: 2.6vh; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jbm-sub { margin-top: 0.3vh; font-size: 1.4vh; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jbm-covers { display: flex; flex: none; }
+.jbm-covers img { width: 5.6vh; height: 5.6vh; object-fit: cover; border-radius: 0.6vh; margin-left: -1.6vh; box-shadow: 0 0.4vh 1vh rgba(0, 0, 0, 0.5); }
+.jbm-covers img:first-child { margin-left: 0; }
+.jbm-go { display: flex; flex: none; font-size: 2.2vh; opacity: 0.7; }
+.jbm-play { display: flex; flex: none; align-items: center; justify-content: center; width: 8vh; font-size: 3vh; color: #fff; background: linear-gradient(135deg, #f5a742, #e8556b); }
+.jbm-open[data-focused], .jbm-play[data-focused] { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 2.4vh rgba(255, 210, 120, 0.45); transform: scale(1.02); }
+.jbm-open[data-pressed], .jbm-play[data-pressed] { transform: scale(0.97); }
+
+/* Card (a narrow space): stacked, the covers as a strip. */
+:scope[data-shape="card"] .jbm { flex-direction: column; }
+:scope[data-shape="card"] .jbm-open { flex-direction: column; align-items: flex-start; padding: 1.6vh; }
+:scope[data-shape="card"] .jbm-covers { order: -1; }
+:scope[data-shape="card"] .jbm-go { display: none; }
+:scope[data-shape="card"] .jbm-play { width: auto; height: 6vh; }

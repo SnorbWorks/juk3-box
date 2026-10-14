@@ -7,6 +7,7 @@
 import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, coversFor, playlistSongs } from './board.js';
 import { featuredFor, headingOf, KINDS } from './featured.js';
+import { isList, listData, listSongs, registerList } from './lists.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
@@ -44,6 +45,19 @@ function randomCover(sort) {
 }
 
 function browseCard(sort, ctx) {
+  // A module's playlist among the Browse cards (lists.js): its own name,
+  // its first song's cover; opens it on the board.
+  if (isList(sort, ctx)) {
+    registerList(sort, ctx.moduleBlocks[sort]);
+    const d = listData(sort);
+    const cover = listSongs(sort).find(t => t.artwork_url)?.artwork_url;
+    return {
+      label: d?.hook || ctx.moduleBlocks[sort].label,
+      description: d?.subtitle || '',
+      image: sized(cover, 600),
+      open: () => ctx.actions.openList(sort),
+    };
+  }
   return {
     label: SORTS[sort]?.label || sort,
     description: BROWSE_DESCRIPTIONS[sort] || '',
@@ -125,7 +139,7 @@ const SECTIONS = {
     title: 'Browse',
     kind: 'link',
     limit: Infinity,
-    items: (tracks, ctx, node) => sortsSetting(node).map(sort => browseCard(sort, ctx)),
+    items: (tracks, ctx, node) => sortsSetting(node, ctx).map(sort => browseCard(sort, ctx)),
     // See All: every way to browse, not just the owner's chosen four.
     all: {
       limit: Infinity,
@@ -135,9 +149,10 @@ const SECTIONS = {
   },
 };
 
-// The "sorts" setting: a comma-separated list, e.g. "artist,genre,top-100".
-function sortsSetting(node) {
-  const list = String(node?.sorts || '').split(',').map(s => s.trim()).filter(s => SORTS[s]);
+// The "sorts" setting: a comma-separated list, e.g. "artist,genre,top-100";
+// a module's playlist block name ("weather-mix") may be one of them.
+function sortsSetting(node, ctx) {
+  const list = String(node?.sorts || '').split(',').map(s => s.trim()).filter(s => SORTS[s] || (ctx && isList(s, ctx)));
   return list.length ? list : DEFAULT_SORTS;
 }
 
@@ -211,6 +226,13 @@ export function fillSection(el, node, ctx) {
   store.watch(el, 'tracks', render);
   store.watch(el, 'featured', render);
   store.watch(el, 'playlists', render);
+  // Module playlists among Browse's cards change on their own topics.
+  if (node.type === 'browse') {
+    for (const s of sortsSetting(node, ctx).filter(s => isList(s, ctx))) {
+      registerList(s, ctx.moduleBlocks[s]);
+      store.watch(el, `topic:${ctx.moduleBlocks[s].topic}`, render);
+    }
+  }
 }
 
 // A section's See All view: all its cards, in a grid the knob scrolls.

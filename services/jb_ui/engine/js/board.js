@@ -3,6 +3,7 @@
 // block draws this; the keypad and the pager change it.
 
 import { publish } from './bus.js';
+import { listSongs } from './lists.js';
 import { store } from './store.js';
 
 export const LETTERS = 'ABCDEFGHJK';   // no I
@@ -65,6 +66,7 @@ function requestAlbum(name) {
 }
 
 function songsFor(tracks, sort, filter) {
+  if (filter?.field === 'list') return listSongs(filter.value, tracks);
   if (filter?.field === 'playlist') return playlistSongs(tracks, filter.value);
   if (filter?.field === 'album' && phoneAlbums().length) return albumSongs(tracks, filter.value) || [];
   if (filter?.field === 'album') {
@@ -218,6 +220,13 @@ export function openFilter(field, value) {
   if (!SORTS[field]?.category) return;
   state = { sort: field, filter: { field, value }, page: 0, categoryPage: 0 };
   if (field === 'album') requestAlbum(value);
+  changed();
+}
+
+// A playlist a module provides (lists.js): its songs on the board. Backing
+// up lands on All Songs.
+export function openList(name) {
+  state = { sort: 'title', filter: { field: 'list', value: name }, page: 0, categoryPage: 0 };
   changed();
 }
 

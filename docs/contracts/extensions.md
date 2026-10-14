@@ -82,7 +82,18 @@ Each installed module runs as its own systemd unit, `jbmod-<id>.service`:
 - network as its permission says; CPU and memory capped by `resources`
 - secrets and its bus login handed over as systemd credentials (`$CREDENTIALS_DIRECTORY`), readable by it alone
 
-The owner's settings for it are passed as `$JB_SETTINGS` (a file, non-secret values) and the `secrets` credential.
+The owner's settings for it are passed as `$JB_SETTINGS` (a file, non-secret values) and the `secrets` credential. Settings are read when the module wants (it re-reads after `jukebox/jb-admin/changed` names it); secrets are handed over when it starts, so the admin restarts an installed module when one of its secrets changes.
+
+## Playlist blocks
+
+A block with `"kind": "playlist"` is something the owner can play, not just look at. Its topic carries `{hook, subtitle, icon, songs: [{title, artist}], autoplay_after}`:
+
+- The engine matches `songs` to the library, so only songs the jukebox can play count (`count`, `countLabel`, `cover1`-`cover4` are added for the template).
+- Its template's `data-stop="open"` opens the list on the song board, titled by `hook`; `data-stop="play"` queues it all, shuffled.
+- It can also be one of a Browse row's cards (its block name in Browse's shortcuts).
+- `autoplay_after` (minutes, 0 = never) asks the cabinet to play it once the jukebox has been quiet that long: nothing playing or queued, nobody at the keypad, a phone connected; once per quiet spell.
+
+Proven with **Weather Mix** (`modules/jb-weathermix/`): it also proves modules using each other's data (it subscribes to Weather's topic, with permission).
 
 ## Installing
 

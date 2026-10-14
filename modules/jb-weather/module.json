@@ -3,7 +3,7 @@
   "id": "jb-weather",
   "name": "Weather",
   "description": "The weather where the jukebox is, for a Weather block on the screen. From Open-Meteo (no account needed).",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "roles": [
     "source"
   ],
@@ -44,7 +44,7 @@
     "refresh": {
       "type": "number",
       "label": "Check every (minutes)",
-      "default": 15,
+      "default": 60,
       "min": 5,
       "max": 180
     }

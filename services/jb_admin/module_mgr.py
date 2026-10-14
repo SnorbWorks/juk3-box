@@ -144,6 +144,7 @@ class Manager:
         self.log = log
         self.staged: dict[str, dict] = {}     # token -> {"id", "path", "manifest", "at"}
         self.health_s = HEALTH_S
+        self.secrets_changed = False
 
     # The privileged helper
     async def ctl(self, verb: str, *args: str, timeout: float = 90) -> None:
@@ -346,7 +347,8 @@ class Manager:
             else:
                 raise ModuleError(f"{spec.get('label', k)}: {v!r} isn't usable")
         write_json(self.settings_dir / f"{mid}.json", values)
-        if kept != kept_before:
+        self.secrets_changed = kept != kept_before
+        if self.secrets_changed:
             write_json(self.secrets_dir / f"{mid}.json", kept, private=True)
         return self.get_settings(mid, m)
 

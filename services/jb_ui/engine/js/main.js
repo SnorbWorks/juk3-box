@@ -1,7 +1,8 @@
 // JUKE.BOX UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { albumSongs, openFilter, pick, setSort, upLevel } from './board.js';
+import { albumSongs, openFilter, openList, pick, setSort, upLevel } from './board.js';
+import { playList, startAutoplay } from './lists.js';
 import { connectBus, PREVIEW, publish } from './bus.js';
 import { startFeatured } from './featured.js';
 import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, rotate } from './focus.js';
@@ -52,6 +53,14 @@ const actions = {
   openFilter(field, value) {
     openFilter(field, value);
     showScreen('all-songs');
+  },
+  // A module's playlist (lists.js): open it on the board, or play it all.
+  openList(name) {
+    openList(name);
+    showScreen('all-songs');
+  },
+  playList(name) {
+    playList(name);
   },
   openCollection(type) {
     const view = sectionView(type, context());
@@ -332,6 +341,7 @@ async function start() {
   watchAlbumPlay();
   watchIdle();
   startFeatured();
+  startAutoplay(context());
   document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context(), PREVIEW ? 'frame' : undefined));
   // The admin preview can open on any screen (?screen=all-songs).
   const first = PREVIEW && new URLSearchParams(location.search).get('screen');
