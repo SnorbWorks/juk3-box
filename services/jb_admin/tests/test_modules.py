@@ -227,3 +227,19 @@ def test_mix_matching_and_variety():
     for t in picked:
         by_artist[t["artist"]] = by_artist.get(t["artist"], 0) + 1
     assert max(by_artist.values()) <= 2
+
+
+def test_module_blocks_can_have_page_builder_settings(tmp_path):
+    blocks, problems = module_blocks.module_blocks([MIX.parent])
+    assert problems == [] and blocks["weathermix"]["settings"]["show-weather"]["type"] == "bool"
+    shutil.copytree(MIX, tmp_path / "jb-weathermix")
+    m = json.loads((tmp_path / "jb-weathermix" / "module.json").read_text())
+    m["blocks"][0]["settings"] = {"span": {"type": "bool", "label": "x"}, "ok": {"type": "script", "label": "y"}}
+    (tmp_path / "jb-weathermix" / "module.json").write_text(json.dumps(m))
+    _, problems = module_blocks.module_blocks([tmp_path])
+    assert any("'span' can't be" in p for p in problems) and any("needs a label and a type" in p for p in problems)
+
+    async def check(c, admin, calls):
+        schema = await (await c.get("/api/blocks")).json()
+        assert "show-weather" not in schema["blocks"].get("weathermix", {}).get("settings", {})   # not installed here
+    run(tmp_path, check)

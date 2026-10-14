@@ -158,6 +158,8 @@ class Mixer:
         await bus.publish(TOPIC, {
             "v": 1,
             "hook": name,
+            "headline": moods.headline(mood, part, when, rng),
+            "plainIcon": "audio-lines",
             "subtitle": " and ".join(x for x in (str(w.get("temp") or ""), str(w.get("condition") or "").lower()) if x),
             "icon": moods.ICONS[mood],
             "mood": mood,

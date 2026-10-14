@@ -158,3 +158,26 @@ def name_for(mood: str, part: str, when: str, recent: list[str], rng: random.Ran
     pool = special * 2 + MOODS[mood]["names"]      # fitting names twice as likely
     fresh = [n for n in pool if n not in recent] or pool
     return rng.choice(fresh)
+
+
+# A sentence that says what the mix is: "Mellow, moody songs from your
+# library for a rainy autumn night." Each mood has several leads, so the
+# words change along with the name.
+HEADLINES = {
+    "hot": (["Feel-good, turn-it-up songs", "Bright, beachy anthems", "Sunny, high-energy favorites"], "hot"),
+    "sunny": (["Upbeat, feel-good songs", "Bright, happy favorites", "Sing-along sunshine songs"], "sunny"),
+    "crisp": (["Fresh, easygoing songs", "Bright acoustic and indie picks", "Clear-headed easy listening"], "crisp, clear"),
+    "night": (["Smooth, after-dark songs", "Chilled late-night favorites", "Easy, low-lit grooves"], "clear"),
+    "partly": (["Easygoing, half-sunny songs", "Laid-back feel-good picks", "Breezy indie and pop"], "partly cloudy"),
+    "cloudy": (["Mellow, dreamy songs", "Soft indie and easy rock", "Laid-back gray-day favorites"], "cloudy"),
+    "fog": (["Dreamy, atmospheric songs", "Hazy, floating sounds", "Soft-focus ambient picks"], "foggy"),
+    "drizzle": (["Soft, acoustic songs", "Gentle, mellow favorites", "Cozy, low-key picks"], "drizzly"),
+    "rain": (["Mellow, moody songs", "Rain-on-the-window songs", "Slow, cozy favorites"], "rainy"),
+    "storm": (["Big, dramatic songs", "Loud, thunderous rock", "Epic, electric anthems"], "stormy"),
+    "snow": (["Cozy, warm-blanket songs", "Soft, wintry favorites", "Fireside acoustic picks"], "snowy"),
+}
+
+
+def headline(mood: str, part: str, when: str, rng: random.Random) -> str:
+    leads, weather = HEADLINES[mood]
+    return f"{rng.choice(leads)} from your library for a {weather} {when} {part}."

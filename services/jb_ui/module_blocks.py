@@ -14,6 +14,9 @@ from services.jb_ui import icons, markup, themes
 ICON_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 TOPIC_RE = re.compile(r"^jukebox/[A-Za-z0-9_./-]+$")
 ASSET_TYPES = {".css", ".png", ".jpg", ".jpeg", ".webp", ".gif"}
+# Settings a module's block may have in the page builder (the engine sets
+# each as an attribute on the block's element, for its style to use).
+BLOCK_SETTING_TYPES = {"bool", "enum", "text", "int"}
 
 
 def manifests(folders: list[Path]) -> dict[str, tuple[dict, Path]]:
@@ -62,6 +65,15 @@ def check_block(module_id: str, root: Path, b) -> list[str]:
             problems.append(f"block {name!r}: {key} must be a {suffix} file in the module")
     if not isinstance(b.get("icons", []), list) or not all(isinstance(i, str) and ICON_RE.match(i) for i in b.get("icons", [])):
         problems.append(f"block {name!r}: icons must be icon names")
+    settings = b.get("settings", {})
+    if not isinstance(settings, dict):
+        problems.append(f"block {name!r}: settings must be an object")
+    else:
+        for key, spec in settings.items():
+            if not themes.SETTING_RE.match(str(key)) or key in ("block", "class", "span", "shape"):
+                problems.append(f"block {name!r}: {key!r} can't be a setting's name")
+            elif not isinstance(spec, dict) or spec.get("type") not in BLOCK_SETTING_TYPES or not isinstance(spec.get("label"), str):
+                problems.append(f"block {name!r}: setting {key!r} needs a label and a type ({', '.join(sorted(BLOCK_SETTING_TYPES))})")
     shapes = b.get("shapes", [])
     if not isinstance(shapes, list) or not all(
             isinstance(s, list) and len(s) == 2 and isinstance(s[0], str) and themes.ID_RE.match(s[0])
@@ -97,6 +109,7 @@ def module_blocks(folders: list[Path]) -> tuple[dict[str, dict], list[str]]:
                 "style": base + b["style"] if b.get("style") else None,
                 "icons": {n: {"svg": s} for n in b.get("icons", []) if (s := icons.svg(f"lucide:{n}"))},
                 "shapes": b.get("shapes", []),
+                "settings": b.get("settings") or {},
             }
     return out, problems
 

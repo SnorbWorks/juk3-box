@@ -63,8 +63,9 @@ A module's block is **declarative**: markup and style files plus data off the bu
 - **Data.** The engine subscribes to `topic` and binds the latest message's fields into the template, as theme block markup does ([theme-format.md](../theme-format.md), Block markup): `data-text`, `data-src`, `data-if`, `data-if-not`, `data-icon` (an icon name the payload gives, from the block's `icons`, drawn from the bundled Lucide set). Make the topic retained so a new screen shows data at once.
 - **Markup** is sanitized like a theme's (no scripts, no event handlers, no outside URLs). **Style** is served inside `@scope (jb-<name>)`, so it can't reach anything else on the screen (a style sheet whose braces don't balance, or that uses `@import`, is refused). It's loaded before the theme's styles, so a theme can restyle a module's block (`jb-<name> ...`).
 - **Shapes.** `shapes` works as for the engine's own blocks (`data-shape`, a Layout setting in the page builder).
+- **Settings.** `settings` gives the block its own settings in the page builder: `{"show-weather": {"type": "bool", "label": "Show the weather", "default": true}}` (types `bool`, `enum`, `text`, `int`, as the engine's block schema). The engine sets each on the block's element as an attribute (`show-weather="false"`), for the block's style to use.
 - Until data arrives the block shows nothing (`data-empty` on its element).
-- **Not yet:** block settings beyond Layout and Width (a module's own settings cover it for now), cabinet screens from modules, knob stops inside module blocks.
+- **Not yet:** cabinet screens from modules; knob stops in display blocks (playlist blocks have theirs).
 
 ## Bus access (installed modules)
 

@@ -380,7 +380,7 @@ class Admin:
         schema = json.loads(json.dumps(self.schema_blocks))
         found, _ = module_blocks.module_blocks([Path(d) for d in self.cfg["module_dirs"]])
         for name, b in found.items():
-            settings = {}
+            settings = dict(b["settings"])
             if b["shapes"]:
                 settings["shape"] = {"type": "enum", "label": "Layout", "default": "", "options":
                                      [{"value": "", "label": "Auto: fits its space"}]
