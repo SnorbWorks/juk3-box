@@ -152,7 +152,8 @@ export function field(label, control, help) {
 
 export function switchControl(checked, onchange, label) {
   const input = h('input', { type: 'checkbox', checked, role: 'switch', onchange: () => onchange(input.checked) });
-  return h('span.switch', input, h('span.switch-track', h('span.switch-thumb')), label ? h('span', label) : null);
+  // A label, so a click on the track or the words flips the (hidden) box.
+  return h('label.switch', input, h('span.switch-track', h('span.switch-thumb')), label ? h('span', label) : null);
 }
 
 export function pageHeader(title, subtitle, ...actions) {
