@@ -61,9 +61,15 @@ const SECTIONS = {
     title: 'New',
     kind: 'song',
     limit: 2,
-    // Newest to the jukebox first (jb-library's added_at); same-time
-    // arrivals alphabetically.
-    items: tracks => tracks.filter(t => t.added_at).sort((a, b) => b.added_at - a.added_at || byTitle(a, b)),
+    // Newest to the jukebox first (jb-library's added_at), then the
+    // phone's Albums > Recently Added order (album_rank, 0 = newest) for
+    // songs from before the jukebox stamped arrivals; within an album, its
+    // track order.
+    items: tracks => tracks.filter(t => t.added_at || Number.isFinite(t.album_rank)).sort((a, b) =>
+      (b.added_at || 0) - (a.added_at || 0)
+      || (a.album_rank ?? Infinity) - (b.album_rank ?? Infinity)
+      || (a.album_track ?? 1e9) - (b.album_track ?? 1e9)
+      || byTitle(a, b)),
     all: { limit: 100, subtitle: n => `${n} new song${n === 1 ? '' : 's'}` },
   },
   recents: {
