@@ -12,6 +12,12 @@ REMOTE_DIR="/opt/juk3-box"
 DATA_DIR="/var/lib/juk3-box"
 
 SERVICE_NAME="${1:?Usage: deploy.sh <service-name>}"
+# The Python package name (jb_ui); the unit name (jb-ui) works too.
+SERVICE_NAME="$(echo "$SERVICE_NAME" | tr "-" "_")"
+if [ ! -d "$(dirname "${BASH_SOURCE[0]}")/../services/$SERVICE_NAME" ]; then
+  echo "No service named $SERVICE_NAME in services/" >&2
+  exit 1
+fi
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ssh_pi() { ssh -i "$PI_KEY" "$PI_USER@$PI_HOST" "$@"; }
