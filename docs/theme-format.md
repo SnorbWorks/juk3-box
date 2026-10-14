@@ -117,7 +117,7 @@ The engine sets every option on the page as `--opt-<id>` before your CSS loads, 
 | `range` | a number from `min` to `max` | the number, e.g. `calc(1.7vh * var(--opt-roundness))` |
 | `toggle` | true / false | `1` / `0`; also `<html data-opt-<id>="on|off">` for selectors |
 | `font` | `theme` or a font from the engine's library (Inter, Oswald, Bebas Neue, Righteous, Nunito, Courier Prime, Playfair Display) | a `font-family` value; `theme` gives the option's `family` |
-| `picture` | `""` (your default), a file in your theme, or an owner upload (`/media/<file>`) | `url(...)`. With `"role": "background"` it replaces the theme's background |
+| `picture` | `""` (your default), a file in your theme, or an owner upload (`/media/<file>`) | `url(...)`. With `"role": "background"` it replaces the theme's background; add `"video": true` and it may be a video too (an owner upload, always converted to MP4 for the Pi, or one in your theme, which jb-ui converts) |
 
 Groups (`colors`, `fonts`, `shape`, `background`, `motion`) set where an option shows in the admin. The first style is the default, so make it your theme as designed with `"values": {}`. An owner's value that's no longer usable (an option you removed, a color in the wrong form) is ignored, with a warning in the log, and the style's value used.
 

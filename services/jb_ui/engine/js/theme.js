@@ -60,7 +60,11 @@ export async function applyOptions(theme, values) {
     } else if (o.type === 'picture') {
       const url = !v ? (o.default ? assetUrl(o.default, base) : '') : assetUrl(v, base);
       root.style.setProperty(name, url ? `url("${url}")` : 'none');
-      if (o.role === 'background') background = url ? { type: 'image', url } : manifest.background;
+      if (o.role === 'background') {
+        const video = /\.(mp4|m4v|mov|webm|mkv)$/i.test(String(v));
+        background = url ? { type: video ? 'video' : 'image', url } : manifest.background;
+        if (video) root.style.setProperty(name, 'none');
+      }
     }
   }
   setBackground(background, base);

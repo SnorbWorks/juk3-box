@@ -545,3 +545,11 @@ body.builder-open .content { min-height: 0; display: flex; }
 .icon-choice { display: flex; align-items: center; justify-content: center; height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-2); cursor: pointer; }
 .icon-choice svg { width: 20px; height: 20px; }
 .icon-choice[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--accent); }
+.media-thumb { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #111; color: var(--text-3); overflow: hidden; }
+.media-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.media-badge { position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 10px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; }
+.media-busy { flex-direction: column; gap: 10px; background: var(--surface-2); }
+.media-progress { width: 70%; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.media-progress > div { height: 100%; background: var(--accent); transition: width .4s; }
+.media-error { padding: 0 10px; font-size: 11.5px; text-align: center; color: var(--danger); }
+.picture-thumb video { width: 100%; height: 100%; object-fit: cover; }

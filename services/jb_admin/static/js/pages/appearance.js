@@ -167,10 +167,11 @@ function control(o) {
     }
     case 'picture': {
       const url = !value ? null : value.startsWith('/media/') ? value : `/themes/${S.theme}/${value}`;
+      const isVideo = /\.(mp4|m4v|mov|webm|mkv)$/i.test(String(value));
       input = h('div.picture-field',
-        h('div.picture-thumb', url ? h('img', { src: url, alt: '' }) : icon('image')),
+        h('div.picture-thumb', !url ? icon('image') : isVideo ? h('video', { src: `${url}#t=1`, muted: true, preload: 'metadata' }) : h('img', { src: url, alt: '' })),
         h('div.picture-buttons',
-          button(value ? 'Change' : 'Choose', { variant: 'small', onclick: async () => { const got = await pickPicture(S.theme, value); if (got) { set(got); render(); } } }, 'image'),
+          button(value ? 'Change' : 'Choose', { variant: 'small', onclick: async () => { const got = await pickPicture(S.theme, value, { video: !!o.video }); if (got) { set(got); render(); } } }, 'image'),
           value ? button('Use the theme\'s', { variant: 'small ghost', onclick: () => { set(''); render(); } }) : null));
       break;
     }

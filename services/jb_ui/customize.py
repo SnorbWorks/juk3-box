@@ -19,6 +19,10 @@ TYPES = {"color", "range", "toggle", "font", "picture"}
 GROUPS = ("colors", "fonts", "shape", "background", "motion")
 COLOR_RE = re.compile(r"^#[0-9a-f]{6}$")
 MEDIA_RE = re.compile(r"^/media/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg")
+# A picture option with "video": true also takes videos: the owner's (MP4,
+# made by jb-admin) or the theme's (any of these; jb-ui optimizes them).
+VIDEO_SUFFIXES = (".mp4", ".m4v", ".mov", ".webm", ".mkv")
 ROLES = {"background"}
 
 FONTS_DIR = Path(__file__).resolve().parent / "engine" / "fonts"
@@ -126,9 +130,16 @@ def valid(option: dict, value, root: Path | None, fonts: set[str] | None = None)
             fonts = {f["id"] for f in font_library()}
         return value == "theme" or value in fonts
     if t == "picture":
-        if value == "" or (isinstance(value, str) and MEDIA_RE.match(value) and ".." not in value):
+        if value == "":
             return True
-        if root is None or not isinstance(value, str):
+        if not isinstance(value, str):
+            return False
+        suffix = Path(value).suffix.lower()
+        if suffix not in IMAGE_SUFFIXES + (VIDEO_SUFFIXES if option.get("video") else ()):
+            return False
+        if value.startswith("/media/"):
+            return bool(MEDIA_RE.match(value)) and ".." not in value and suffix in IMAGE_SUFFIXES + (".mp4",)
+        if root is None:
             return False
         path = themes.safe_path(root, value)
         return path is not None and path.is_file()

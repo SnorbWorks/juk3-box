@@ -129,12 +129,13 @@
       },
       {
         "id": "background",
-        "label": "Background picture",
+        "label": "Background",
         "group": "background",
         "type": "picture",
         "role": "background",
         "default": "",
-        "help": "Leave empty for the theme's stage picture."
+        "help": "A picture or a video from Media, or the theme's own. Empty: the theme's stage picture.",
+        "video": true
       },
       {
         "id": "wash",

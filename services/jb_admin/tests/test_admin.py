@@ -244,20 +244,82 @@ def test_layout_names_cannot_escape(tmp_path):
 
 # Media
 
+def picture(fmt="PNG", size=(40, 30), exif_rotate=None):
+    from PIL import Image
+    buf = io.BytesIO()
+    im = Image.new("RGB", size, (200, 40, 40))
+    if exif_rotate:
+        exif = Image.Exif()
+        exif[0x0112] = exif_rotate
+        im.save(buf, fmt, exif=exif)
+    else:
+        im.save(buf, fmt)
+    return buf.getvalue()
+
+
 def test_media_upload_checks_the_bytes(tmp_path):
     async def check(c, admin):
-        r = await c.post("/api/media", data=upload(PNG, "My Photo!.png"), headers=H)
+        r = await c.post("/api/media", data=upload(picture(), "My Photo!.png"), headers=H)
         assert r.status == 200
         name = (await r.json())["name"]
         assert name == "My-Photo.png"
-        r = await c.post("/api/media", data=upload(PNG, "My Photo!.png"), headers=H)
+        r = await c.post("/api/media", data=upload(picture(), "My Photo!.png"), headers=H)
         assert (await r.json())["name"] == "My-Photo-2.png"
         r = await c.post("/api/media", data=upload(b"<svg onload=x>", "x.png"), headers=H)
         assert r.status == 400
+        r = await c.post("/api/media", data=upload(PNG, "broken.png"), headers=H)    # a PNG header, no picture
+        assert r.status == 400
         lst = await (await c.get("/api/media")).json()
-        assert len(lst["media"]) == 2
+        assert len(lst["media"]) == 2 and lst["media"][0]["kind"] == "image"
+        assert not [p for p in (tmp_path / "media").iterdir() if p.name.startswith(".upload")]
         assert (await c.get(f"/media/{name}")).status == 200
         assert (await c.delete(f"/api/media/{name}", headers=H)).status == 200
+    run(tmp_path, check)
+
+
+def test_big_or_turned_pictures_are_made_right(tmp_path):
+    from PIL import Image
+
+    async def check(c, admin):
+        r = await c.post("/api/media", data=upload(picture("JPEG", (4000, 3000)), "big.jpg"), headers=H)
+        with Image.open(tmp_path / "media" / (await r.json())["name"]) as im:
+            assert max(im.size) == 1920 and im.size == (1920, 1440)
+        # A phone photo stored sideways with an EXIF turn comes out upright.
+        r = await c.post("/api/media", data=upload(picture("JPEG", (300, 200), exif_rotate=6), "phone.jpg"), headers=H)
+        with Image.open(tmp_path / "media" / (await r.json())["name"]) as im:
+            assert im.size == (200, 300) and im.getexif().get(0x0112, 1) == 1
+        # Small ones that fit are kept byte for byte.
+        small = picture("PNG", (100, 100))
+        r = await c.post("/api/media", data=upload(small, "small.png"), headers=H)
+        assert (tmp_path / "media" / (await r.json())["name"]).read_bytes() == small
+    run(tmp_path, check)
+
+
+def test_videos_are_optimized_in_the_background(tmp_path):
+    import shutil as sh
+    import subprocess
+    if not sh.which("ffmpeg"):
+        return
+    clip = tmp_path / "clip.mov"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=60:duration=1",
+                    "-c:v", "mpeg4", str(clip)], check=True)
+
+    async def check(c, admin):
+        r = await c.post("/api/media", data=upload(clip.read_bytes(), "Stage Loop.mov"), headers=H)
+        item = await r.json()
+        assert r.status == 200 and item == {"name": "Stage-Loop.mp4", "kind": "video", "state": "optimizing"}
+        lst = (await (await c.get("/api/media")).json())["media"]
+        assert lst[0]["state"] in ("optimizing",) and lst[0]["url"] is None
+        await admin.media.wait()
+        lst = (await (await c.get("/api/media")).json())["media"]
+        assert lst == [{"name": "Stage-Loop.mp4", "url": "/media/Stage-Loop.mp4", "src": "/media/Stage-Loop.mp4",
+                        "size": lst[0]["size"], "kind": "video"}]
+        probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=codec_name,width,height,r_frame_rate", "-of", "csv=p=0",
+                                str(tmp_path / "media" / "Stage-Loop.mp4")], capture_output=True, text=True).stdout.strip()
+        assert probe == "h264,1280,720,30/1"
+        assert not list((tmp_path / "media" / ".incoming").iterdir())
+        assert (await c.get("/media/Stage-Loop.mp4")).status == 200
     run(tmp_path, check)
 
 

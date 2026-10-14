@@ -28,6 +28,7 @@ from shared import config, logging as jb_logging
 from services.jb_admin import schema, theme_store
 from services.jb_admin.auth import Auth
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
+from services.jb_admin.media_lib import MediaLibrary
 from services.jb_admin.registry import Registry
 from services.jb_ui import main as ui
 from services.jb_ui import customize, icons, media, themes
@@ -59,13 +60,6 @@ DEFAULTS = {
 }
 
 COOKIE = "jbadmin"
-MEDIA_MAX = 25 * 1024 * 1024
-MEDIA_MAGIC = {
-    b"\x89PNG\r\n\x1a\n": ".png",
-    b"\xff\xd8\xff": ".jpg",
-    b"GIF87a": ".gif",
-    b"GIF89a": ".gif",
-}
 
 # The admin app: its own scripts only. Frames only from itself (the preview).
 ADMIN_CSP = "; ".join([
@@ -109,6 +103,7 @@ class Admin:
         # same draft, publish and revisions as layouts.
         self.styles = Layouts(Path(cfg["owner_styles_dir"]), Path(cfg["style_drafts_dir"]), Path(cfg["style_revisions_dir"]))
         self.media_dir = Path(cfg["media_dir"])
+        self.media = MediaLibrary(self.media_dir, log)
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
         self.videos = media.VideoOptimizer(Path(cfg["media_cache_dir"]), log)
@@ -522,11 +517,13 @@ class Admin:
         if root is None:
             raise web.HTTPNotFound()
         found = []
+        kinds = customize.IMAGE_SUFFIXES + (customize.VIDEO_SUFFIXES if request.query.get("video") == "1" else ())
         for p in sorted(root.rglob("*")):
             rel = p.relative_to(root).as_posix()
-            if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg") \
+            if p.is_file() and p.suffix.lower() in kinds \
                     and not rel.startswith("assets/fonts/") and themes.safe_path(root, rel):
-                found.append({"name": rel, "src": rel, "url": f"/themes/{theme_id}/{rel}"})
+                kind = "video" if p.suffix.lower() in customize.VIDEO_SUFFIXES else "image"
+                found.append({"name": rel, "src": rel, "url": f"/themes/{theme_id}/{rel}", "kind": kind})
         return web.json_response({"pictures": found[:500]})
 
     async def icon_set(self, request):
@@ -553,43 +550,34 @@ class Admin:
     # Media library -----------------------------------------------------------------
 
     async def list_media(self, request):
-        items = []
-        if self.media_dir.is_dir():
-            for p in sorted(self.media_dir.iterdir(), key=lambda p: -p.stat().st_mtime):
-                if ui.media_path(self.media_dir, p.name):
-                    items.append({"name": p.name, "url": f"/media/{p.name}", "src": f"/media/{p.name}",
-                                  "size": p.stat().st_size})
-        return web.json_response({"media": items})
+        return web.json_response({"media": self.media.items()})
 
     async def upload_media(self, request):
         reader = await request.multipart()
         part = await reader.next()
         if part is None or part.name != "file":
-            raise error(400, "Choose a picture to upload.")
-        data = bytearray()
-        while chunk := await part.read_chunk(256 * 1024):
-            data += chunk
-            if len(data) > MEDIA_MAX:
-                raise error(400, f"Pictures can be up to {MEDIA_MAX // 1048576} MB.")
-        suffix = next((s for magic, s in MEDIA_MAGIC.items() if data.startswith(magic)), None)
-        if suffix is None and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-            suffix = ".webp"
-        if suffix is None:
-            raise error(400, "That isn't a JPEG, PNG, GIF or WebP picture.")
-        stem = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(unquote(part.filename or "picture")).stem).strip("-")[:60] or "picture"
-        name = f"{stem}{suffix}"
-        n = 2
-        while (self.media_dir / name).exists():
-            name = f"{stem}-{n}{suffix}"
-            n += 1
-        write_bytes(self.media_dir / name, bytes(data))
-        return web.json_response({"name": name, "url": f"/media/{name}", "src": f"/media/{name}"})
+            raise error(400, "Choose a picture or video to upload.")
+        self.media.folder.mkdir(parents=True, exist_ok=True)
+        tmp = self.media.folder / f".upload-{time.time_ns()}"
+        limit = self.cfg["max_upload_mb"] * 1024 * 1024
+        size = 0
+        try:
+            with open(tmp, "wb") as out:
+                while chunk := await part.read_chunk(1024 * 1024):
+                    size += len(chunk)
+                    if size > limit:
+                        raise error(400, f"Too big: the limit is {self.cfg['max_upload_mb']} MB.")
+                    out.write(chunk)
+            item = await self.media.add(tmp, unquote(part.filename or "file"))
+        except ValueError as e:
+            raise error(400, str(e))
+        finally:
+            tmp.unlink(missing_ok=True)
+        return web.json_response(item)
 
     async def delete_media(self, request):
-        path = ui.media_path(self.media_dir, request.match_info["name"])
-        if path is None or not path.is_file():
+        if not self.media.delete(request.match_info["name"]):
             raise web.HTTPNotFound()
-        path.unlink()
         return web.json_response({"ok": True})
 
     # Preview: the kiosk engine, served as jb-ui would ------------------------------
@@ -752,6 +740,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_static("/engine/", UI_DIR / "engine")
 
     async def start_bus(app):
+        admin.media.resume()
         if bus_enabled:
             admin._bus_task = asyncio.create_task(admin.run_bus())
 

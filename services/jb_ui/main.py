@@ -84,7 +84,9 @@ NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playin
 DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
 
 
-MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp", ".gif")   # no SVG: it can carry scripts
+# No SVG: it can carry scripts. Videos are MP4 only: jb-admin converts every
+# uploaded video to the Pi's profile (services/jb_admin/media_lib.py).
+MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4")
 MEDIA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
