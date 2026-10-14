@@ -301,6 +301,9 @@ jb-connection[data-pressed] { transform: scale(0.97); }
 }
 .home-sections::-webkit-scrollbar { display: none; }
 jb-section { flex: 1 1 100%; min-width: 0; }
+/* Anything else the owner places among the sections takes a full line too
+   (a block shrunk to its content would fit itself to the wrong width). */
+.home-sections > * { flex: 1 1 100%; min-width: 0; }
 jb-section[type="new"] { flex: 2 1 0; }
 jb-section[type="featured-artist"] { flex: 1 1 0; }
 jb-section[data-empty] { display: none; }

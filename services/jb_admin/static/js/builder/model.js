@@ -119,7 +119,7 @@ export function newBlock(schema, name, presetValues) {
   if (name === '$container') return { class: 'jb-u-column', children: [] };
   const node = { block: name };
   for (const [key, spec] of Object.entries(schema.blocks[name]?.settings || {})) {
-    if (spec.default !== undefined && spec.type !== 'bool') node[key] = spec.default;
+    if (spec.default !== undefined && spec.default !== '' && spec.type !== 'bool') node[key] = spec.default;
   }
   return Object.assign(node, presetValues || {});
 }
