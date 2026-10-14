@@ -444,6 +444,8 @@ It behaves like a machine, not a computer.
 - [ ] Phone leaves range mid-song; power cut during a sync
 - [ ] Log rotation; read-only or overlay root filesystem
 - [ ] Cold boot to a working jukebox in under a minute
+- [x] Stays online on its own: jb-netwatch (Oct 14) reconnects the Wi-Fi, turns it off and on, and as a last resort reboots (at once for the Pi 4's hung brcmfmac driver, seen Oct 8, 13/14 and 14). Spaced-out reboots, never in a loop, waits for the song
+- [ ] **Test to do: jb-netwatch live, end to end.** Turn the Pi's Wi-Fi off on purpose (`sudo nmcli radio wifi off`, from the Pi's own screen or a delayed command, since SSH goes with it) and watch it recover by itself in ~2 min: `offline`, `reconnect` at 1 min, `wifi-off-on` at 2 min, `back-online` in /var/lib/juk3-box/netwatch/events.jsonl. Then, ideally, a real driver hang should end in one `reboot` and a working jukebox
 - [x] Reset hold opens a Reboot / Shut down menu (4 s during music, 1 s when idle) -- the physical recovery path (Oct 12; jb-core power.py, polkit rule deploy/polkit/)
 
 Done when: 10 pull-the-plug tests pass in a row.
