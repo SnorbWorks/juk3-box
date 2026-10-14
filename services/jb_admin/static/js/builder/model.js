@@ -126,6 +126,13 @@ export function newBlock(schema, name, presetValues) {
 
 // How a node reads in the tree: "Card row · Recents", "Heading · Welcome".
 export function describe(schema, node) {
+  const d = describeNode(schema, node);
+  // Its width in a row, first: "1/3 · Featured artist".
+  const span = schema.common?.span?.options.find(o => o.value && o.value === node.span)?.label;
+  return span ? { ...d, detail: [span, d.detail].filter(Boolean).join(' · ') } : d;
+}
+
+function describeNode(schema, node) {
   if (isContainer(node)) {
     const helpers = Object.fromEntries((schema.container.helpers || []).map(x => [x.value, x.label]));
     const classes = (node.class || '').split(/\s+/).filter(Boolean);

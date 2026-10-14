@@ -32,6 +32,8 @@ export function createInspector(b) {
     }
     const parent = path.length ? at(tree, path.slice(0, -1)) : null;
     const index = path[path.length - 1];
+    // Width only means something inside a row or grid.
+    const inRow = /(^|\s)jb-u-(row|grid-[234])(\s|$)/.test(parent?.class || '');
 
     clear(el,
       crumbs.length ? h('nav.crumbs', { 'aria-label': 'Where this block is' }, crumbs) : null,
@@ -46,7 +48,9 @@ export function createInspector(b) {
         h('span.spacer'),
         iconButton('trash-2', 'Delete', { class: 'danger', disabled: !canDelete(tree, b.schema, b.layout(), path), onclick: () => b.remove(path) })),
       d.unknown ? h('div.notice.warn', icon('circle-alert'), h('span', `This engine doesn't know the "${node.block}" block, so the cabinet skips it.`)) : null,
-      h('div.inspector-body', isContainer(node) ? containerForm(node, path) : blockForm(node, path, def)));
+      h('div.inspector-body',
+        inRow ? control(node, path, 'span', b.schema.common.span) : null,
+        isContainer(node) ? containerForm(node, path) : blockForm(node, path, def)));
   }
 
   function blockForm(node, path, def) {

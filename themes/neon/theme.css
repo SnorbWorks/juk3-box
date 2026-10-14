@@ -219,6 +219,22 @@ jb-now-playing { display: block; }
 }
 .jb-np-times { display: none; }
 
+/* Now Playing's card and banner shapes (placed in a row with the page
+   builder): navy glass with the blue edge, the cover's own glow. */
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-card {
+  background: linear-gradient(160deg, rgba(22, 32, 66, 0.88), rgba(8, 12, 28, 0.92));
+  box-shadow: inset 0 0 0 1px var(--edge), 0 1.4vh 3.4vh rgba(0, 0, 0, 0.5);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-cover {
+  box-shadow: 0 0 3vh color-mix(in srgb, var(--jb-art-1, #4a7dff) 45%, transparent), 0 1vh 2.4vh rgba(0, 0, 0, 0.6);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-artist { color: #c3ceff; }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-album { color: var(--ink-soft); }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-progress { background: rgba(70, 95, 170, 0.35); }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-times { color: var(--ink-soft); }
+jb-now-playing[data-shape="banner"] .jb-np-title { font-stretch: 85%; }
+jb-now-playing[data-shape="banner"] .jb-np-tagline { color: #e8dcff; text-shadow: 0 0 1.6vh rgba(170, 140, 255, 0.55); }
+
 
 /* Up Next */
 jb-up-next { flex: 1; min-height: 0; overflow: hidden; }

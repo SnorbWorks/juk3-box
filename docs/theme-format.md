@@ -196,6 +196,20 @@ Containers the owner adds in the page builder can't count on your CSS knowing th
 
 Inside one of your own flex containers, a row, column or grid takes a full line.
 
+### Widths
+
+Any block or container directly inside a `jb-u-row` or grid can have a `span` setting (the page builder's **Width**): `full`, `1-2`, `1-3`, `2-3`, `1-4` or `3-4`. In a row it takes that share of the width less its share of the gaps, so `1-3` + `2-3`, or three `1-3`s, fill a line exactly; blocks without a span share what's left. Shares adding up to more than a line wrap. In a grid, `full` spans the whole line and the larger shares span columns where the grid divides that way (`2-3` in `jb-u-grid-3`; `1-2`, `3-4` in `jb-u-grid-4`).
+
+### Shapes
+
+Some blocks fit themselves to the space they're given. The engine measures the block's width (as a share of the screen's height, so it holds at any resolution) and sets `data-shape` on its element; the owner can fix one instead with the block's `shape` setting (**Layout** in the page builder).
+
+| Block | Shapes, narrowest first |
+| --- | --- |
+| `now-playing` | `compact` (under 0.42 × screen height): your sidebar design. `card` (from 0.42): cover left, words right. `banner` (from 0.95): words left, cover right, a background and the owner's tagline |
+
+The narrowest shape is your theme's own design and gets nothing from the engine. For the wider ones the engine has working defaults in `engine.css`; restyle them with the same selectors, e.g. `jb-now-playing[data-shape="banner"] .jb-np-card { ... }`. Now Playing's template has two elements only those shapes show: `.jb-np-backdrop` (the blurred cover, or the owner's picture, with `data-kind` = `cover`, `picture` or `none`) and `.jb-np-tagline`.
+
 ### Nav buttons
 
 The engine knows these nav buttons. The owner picks which show, and in what order, in Settings.

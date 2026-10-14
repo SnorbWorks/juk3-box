@@ -182,6 +182,28 @@ def test_block_schema_matches_the_engine():
             assert themes.SETTING_RE.match(key), (name, key)
 
 
+def test_block_shapes_match_the_engine():
+    import re
+    here = Path(__file__).resolve().parents[1]
+    schema = json.loads((here / "block_schema.json").read_text())
+    js = (here / "engine" / "js" / "blocks.js").read_text()
+    table = js[js.index("export const SHAPES = {"):]
+    table = table[:table.index("\n};")]
+    engine = {name: re.findall(r"\['([a-z-]+)',", shapes)
+              for name, shapes in re.findall(r"^\s+'?([a-z-]+)'?: \[(.*)\],$", table, re.M)}
+    assert engine
+    for name, block in schema["blocks"].items():
+        shape = block["settings"].get("shape")
+        if name in engine:
+            assert shape, name
+            assert [o["value"] for o in shape["options"]] == [""] + engine[name], name
+        else:
+            assert shape is None, name
+    css = (here / "engine" / "engine.css").read_text()
+    for o in schema["common"]["span"]["options"]:
+        assert not o["value"] or f'[span="{o["value"]}"]' in css, o
+
+
 def test_block_patterns_are_valid_layouts():
     here = Path(__file__).resolve().parents[1]
     schema = json.loads((here / "block_schema.json").read_text())

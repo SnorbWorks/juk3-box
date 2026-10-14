@@ -249,6 +249,41 @@
       "label": "Style",
       "help": "CSS classes for this block (the theme's own).",
       "advanced": true
+    },
+    "span": {
+      "type": "enum",
+      "label": "Width",
+      "help": "How much of the row this takes. Auto shares the row equally with the other Auto blocks.",
+      "options": [
+        {
+          "value": "",
+          "label": "Auto"
+        },
+        {
+          "value": "full",
+          "label": "Full"
+        },
+        {
+          "value": "1-2",
+          "label": "1/2"
+        },
+        {
+          "value": "1-3",
+          "label": "1/3"
+        },
+        {
+          "value": "2-3",
+          "label": "2/3"
+        },
+        {
+          "value": "1-4",
+          "label": "1/4"
+        },
+        {
+          "value": "3-4",
+          "label": "3/4"
+        }
+      ]
     }
   },
   "blocks": {
@@ -352,7 +387,7 @@
         },
         "width": {
           "type": "enum",
-          "label": "Width",
+          "label": "Picture size",
           "default": "full",
           "options": [
             {
@@ -571,8 +606,65 @@
       "label": "Now Playing",
       "group": "music",
       "icon": "now-playing",
-      "description": "The song playing: cover, title, progress. Opens the Now Playing overlay.",
-      "settings": {}
+      "description": "The song playing: cover, title, progress. Fits itself to its space: compact in a sidebar, a card in part of a row, a banner across the screen. Opens the Now Playing overlay.",
+      "settings": {
+        "shape": {
+          "type": "enum",
+          "label": "Layout",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Auto: fits its space"
+            },
+            {
+              "value": "compact",
+              "label": "Compact"
+            },
+            {
+              "value": "card",
+              "label": "Card"
+            },
+            {
+              "value": "banner",
+              "label": "Banner"
+            }
+          ],
+          "help": "Auto picks for you: compact in a sidebar, a card in part of a row, a banner across the screen."
+        },
+        "background": {
+          "type": "enum",
+          "label": "Background",
+          "default": "cover",
+          "options": [
+            {
+              "value": "cover",
+              "label": "Cover art"
+            },
+            {
+              "value": "picture",
+              "label": "Picture"
+            },
+            {
+              "value": "none",
+              "label": "None"
+            }
+          ],
+          "help": "Behind the card and banner layouts. Cover art is the song's cover, softly blurred."
+        },
+        "picture": {
+          "type": "picture",
+          "label": "Picture",
+          "only_when": {
+            "background": "picture"
+          }
+        },
+        "tagline": {
+          "type": "text",
+          "label": "Tagline",
+          "help": "A line of your own for the banner layout, like \"Good Music Never Gets Old\"."
+        }
+      }
     },
     "up-next": {
       "label": "Up Next",

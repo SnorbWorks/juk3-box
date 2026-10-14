@@ -19,7 +19,13 @@ export function h(spec, props, ...children) {
     if (v === undefined || v === null || v === false) continue;
     if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'class') el.className += ` ${v}`;
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      // Custom properties (--depth) only take through setProperty.
+      for (const [p, val] of Object.entries(v)) {
+        if (p.startsWith('--')) el.style.setProperty(p, String(val));
+        else el.style[p] = val;
+      }
+    }
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else if (k in el && typeof v !== 'string') el[k] = v;
     else el.setAttribute(k, v === true ? '' : v);

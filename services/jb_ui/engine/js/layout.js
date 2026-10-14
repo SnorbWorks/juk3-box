@@ -6,7 +6,7 @@
 // sits in the layout -- "home/0/2" is the third child of the first child of
 // home -- so the page builder can tell which node a click landed on.
 
-import { BLOCKS } from './blocks.js';
+import { BLOCKS, fitShape } from './blocks.js';
 
 export function renderLayout(node, ctx, path) {
   if ('block' in node) return renderBlock(node, ctx, path);
@@ -32,6 +32,7 @@ function renderBlock(node, ctx, path) {
   if (path) el.dataset.jbPath = path;
   if (fill) {
     fill(el, node, ctx);
+    fitShape(el, node);
   } else {
     el.dataset.placeholder = node.block;
   }

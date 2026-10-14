@@ -117,3 +117,172 @@ jb-image[align="end"] > img { margin-inline: auto 0; }
 jb-spacer { height: 3vmin; }
 jb-spacer[size="small"] { height: 1.5vmin; }
 jb-spacer[size="large"] { height: 6vmin; }
+
+/* Width in a row or grid: the "span" setting (docs/theme-format.md,
+   "Widths"). A share of the row less its share of the gaps, so 1/3 + 2/3,
+   or three 1/3s, fill a row exactly; Auto blocks share what's left. */
+.jb-u-row > [span] { --jb-u-g: var(--jb-u-gap, 2vmin); }
+.jb-u-row > [span="full"] { flex: 0 0 100%; }
+.jb-u-row > [span="1-2"] { flex: 0 1 calc(50% - var(--jb-u-g) / 2 - 0.5px); }
+.jb-u-row > [span="1-3"] { flex: 0 1 calc(100% / 3 - var(--jb-u-g) * 2 / 3 - 0.5px); }
+.jb-u-row > [span="2-3"] { flex: 0 1 calc(200% / 3 - var(--jb-u-g) / 3 - 0.5px); }
+.jb-u-row > [span="1-4"] { flex: 0 1 calc(25% - var(--jb-u-g) * 3 / 4 - 0.5px); }
+.jb-u-row > [span="3-4"] { flex: 0 1 calc(75% - var(--jb-u-g) / 4 - 0.5px); }
+:is(.jb-u-grid-2, .jb-u-grid-3, .jb-u-grid-4) > [span="full"] { grid-column: 1 / -1; }
+.jb-u-grid-3 > [span="2-3"] { grid-column: span 2; }
+.jb-u-grid-4 > [span="1-2"] { grid-column: span 2; }
+.jb-u-grid-4 > [span="3-4"] { grid-column: span 3; }
+
+/* Shapes (docs/theme-format.md, "Shapes"): a block that fits itself to its
+   space carries data-shape. These are working defaults for every theme; a
+   theme restyles a shape with the same selectors. A block's narrowest
+   shape is the theme's own design and gets nothing here. */
+
+/* Now Playing. Compact: the theme's sidebar card. Card: cover left, words
+   right. Banner: words left, cover right, a background and a tagline. */
+.jb-np-backdrop, .jb-np-tagline { display: none; }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) {
+  --jb-np-pad: 2.6vh;
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-head {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--jb-np-pad) - 0.6vh);
+  left: calc(var(--jb-np-pad) - 0.8vh);
+  margin: 0;
+  padding: 0.6vh 0.8vh;
+  border-radius: 0.8vh;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-head-icon { display: none; }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-head-label {
+  font-size: 1.35vh;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-card {
+  position: relative;
+  display: grid;
+  align-items: center;
+  column-gap: 2.4vh;
+  margin: 0;
+  padding: calc(var(--jb-np-pad) + 3.4vh) var(--jb-np-pad) var(--jb-np-pad);
+  overflow: hidden;
+  border-radius: 2vh;
+  background: rgba(12, 12, 18, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1.2vh 3vh rgba(0, 0, 0, 0.45);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-card > :not(.jb-np-backdrop) {
+  position: relative;
+  z-index: 1;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-backdrop {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.jb-np-backdrop > img { width: 100%; height: 100%; object-fit: cover; }
+.jb-np-backdrop[data-kind="cover"] > img { filter: blur(3.5vh) saturate(1.3); transform: scale(1.3); opacity: 0.75; }
+.jb-np-backdrop[data-kind="none"] { display: none !important; }
+/* A dark wash from the words' side, so they read over any picture. */
+.jb-np-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(8, 8, 12, 0.92) 0%, rgba(8, 8, 12, 0.7) 35%, rgba(8, 8, 12, 0.15) 75%, rgba(8, 8, 12, 0.35) 100%);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-text { margin: 0; grid-area: text; min-width: 0; }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-idle { grid-area: text; }
+/* Nothing playing: no cover, so the words take the card's whole width. */
+jb-now-playing[data-shape="card"][data-state="stopped"] .jb-np-idle { grid-column: 1 / -1; }
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-title,
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-artist,
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-album {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-cover {
+  grid-area: cover;
+  display: block;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 1vh;
+  box-shadow: 0 1vh 2.6vh rgba(0, 0, 0, 0.6);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-progress {
+  grid-area: progress;
+  align-self: end;
+  height: 0.55vh;
+  margin: 2vh 0 0;
+  border-radius: 0.3vh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-progress-fill {
+  height: 100%;
+  width: calc(var(--jb-progress) * 100%);
+  border-radius: inherit;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"]) .jb-np-times {
+  grid-area: times;
+  align-self: start;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.9vh;
+  font-size: 1.45vh;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+jb-now-playing:is([data-shape="card"], [data-shape="banner"])[data-state="stopped"] :is(.jb-np-progress, .jb-np-times) { visibility: hidden; }
+
+jb-now-playing[data-shape="card"] .jb-np-card {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "cover text" "cover progress" "cover times";
+}
+jb-now-playing[data-shape="card"] .jb-np-cover { width: 15vh; height: 15vh; }
+jb-now-playing[data-shape="card"] .jb-np-title { font-size: 2.8vh; font-weight: 700; line-height: 1.15; }
+jb-now-playing[data-shape="card"] .jb-np-artist { margin-top: 0.4vh; font-size: 2vh; }
+jb-now-playing[data-shape="card"] .jb-np-album { margin-top: 0.3vh; font-size: 1.6vh; font-style: italic; opacity: 0.75; }
+jb-now-playing[data-shape="card"] .jb-np-idle { font-size: 2.2vh; opacity: 0.7; }
+
+jb-now-playing[data-shape="banner"] .jb-np-card {
+  grid-template-columns: minmax(0, 52vh) minmax(0, 1fr) auto auto;
+  grid-template-areas: "text . cover tag" "progress . cover tag" "times . cover tag";
+  padding-right: calc(var(--jb-np-pad) * 1.6);
+}
+jb-now-playing[data-shape="banner"] .jb-np-cover { width: 26vh; height: 26vh; }
+jb-now-playing[data-shape="banner"] .jb-np-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  font-size: 5.4vh;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+}
+jb-now-playing[data-shape="banner"] .jb-np-artist { margin-top: 0.8vh; font-size: 3vh; }
+jb-now-playing[data-shape="banner"] .jb-np-album { margin-top: 0.6vh; font-size: 2vh; font-style: italic; opacity: 0.75; }
+jb-now-playing[data-shape="banner"] .jb-np-idle { font-size: 3.6vh; font-weight: 700; opacity: 0.8; }
+jb-now-playing[data-shape="banner"] .jb-np-tagline {
+  display: block;
+  grid-area: tag;
+  max-width: 20vh;
+  margin-left: 3vh;
+  font-size: 3.4vh;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  transform: rotate(-14deg);
+  opacity: 0.9;
+}

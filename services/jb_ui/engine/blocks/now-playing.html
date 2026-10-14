@@ -4,6 +4,7 @@
     <span class="jb-np-head-label">Now Playing</span>
   </div>
   <div class="jb-np-card">
+    <div class="jb-np-backdrop" data-slot="backdrop"></div>
     <img class="jb-np-cover" data-src="cover" data-if="cover" alt="">
     <div class="jb-np-text" data-if="title">
       <div class="jb-np-title" data-text="title"></div>
@@ -13,5 +14,6 @@
     <div class="jb-np-idle" data-if-not="title">Nothing playing</div>
     <div class="jb-np-progress" data-if="title"><div class="jb-np-progress-fill"></div></div>
     <div class="jb-np-times" data-if="title"><span data-text="elapsed"></span><span data-text="length"></span></div>
+    <div class="jb-np-tagline" data-if="tagline" data-text="tagline"></div>
   </div>
 </div>

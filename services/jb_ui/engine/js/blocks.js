@@ -31,6 +31,40 @@ export const BLOCKS = {
   spacer: () => {},
 };
 
+// Blocks that fit themselves to the space they're given
+// (docs/theme-format.md, "Shapes"): their shapes, narrowest first, each
+// with the width it needs, as a share of the screen's height (so it holds
+// at any resolution). The block carries the one that fits as data-shape;
+// its "shape" setting can fix one instead.
+export const SHAPES = {
+  'now-playing': [['compact', 0], ['card', 0.42], ['banner', 0.95]],
+};
+
+const shapeWatch = new ResizeObserver(entries => {
+  for (const { target, contentRect } of entries) {
+    if (!target.isConnected) {
+      shapeWatch.unobserve(target);
+      continue;
+    }
+    const ratio = contentRect.width / window.innerHeight;
+    let fits = target.jbShapes[0][0];
+    for (const [name, from] of target.jbShapes) if (ratio >= from) fits = name;
+    if (target.dataset.shape !== fits) target.dataset.shape = fits;
+  }
+});
+
+export function fitShape(el, node) {
+  const shapes = SHAPES[node.block];
+  if (!shapes) return;
+  if (shapes.some(([name]) => name === node.shape)) {
+    el.dataset.shape = node.shape;
+    return;
+  }
+  el.dataset.shape = shapes[0][0];
+  el.jbShapes = shapes;
+  shapeWatch.observe(el);
+}
+
 function fillLogo(el, node, ctx) {
   const text = () => {
     el.replaceChildren();
@@ -89,11 +123,27 @@ function fillNowPlaying(el, node, ctx) {
   el.dataset.artScope = '';
   // Its header (data-stop="open") opens the Now Playing overlay.
   stopsFrom(el, 'now-playing', { open: () => ctx.actions.nav('now-playing') });
+  // The card and banner shapes' background: the cover, blurred, or a
+  // picture of the owner's. Set by hand, not data-src, so it never takes
+  // over the cover's art colors.
+  const backdrop = slot(el, 'backdrop');
+  const background = node.background || 'cover';
+  const picture = background === 'picture' && node.picture ? assetUrl(node.picture, ctx) : '';
+  if (backdrop) backdrop.dataset.kind = background;
+  const showBackdrop = url => {
+    if (!backdrop || (backdrop.firstChild?.getAttribute('src') ?? '') === url) return;
+    if (!url) return backdrop.replaceChildren();
+    const img = document.createElement('img');
+    img.alt = '';
+    img.src = url;
+    backdrop.replaceChildren(img);
+  };
   const render = () => {
     const d = nowPlayingData();
     el.dataset.state = d.state;
     el.style.setProperty('--jb-progress', d.progress.toFixed(4));
-    bind(el, { ...d, headIcon: ctx.icons['now-playing'] });
+    bind(el, { ...d, headIcon: ctx.icons['now-playing'], tagline: node.tagline || '' });
+    showBackdrop(background === 'cover' ? sized(d.cover, 200) || '' : picture);
   };
   store.watch(el, 'nowPlaying', render);
   // Covers arrive with the library, possibly after the song started.
