@@ -427,3 +427,13 @@ jb-shortcut[tint-strength="strong"] { --jb-tint-amount: 75%; }
   color: #fff;
   font-size: 2vh;
 }
+
+/* Screens fill jb-screen, one over another: the one showing, and any kept
+   for a quick return (main.js, showScreen), which are see-through and
+   can't be touched. Always positioned the same way, so putting one away
+   or bringing it back is only a repaint; moving it in and out of the
+   flow, or hiding it with visibility (inherited by every element), redid
+   its whole layout or styles (1-2 s for All Songs on the Pi 4). */
+jb-screen { position: relative; }
+jb-screen > * { position: absolute; inset: 0; }
+jb-screen > [data-parked] { opacity: 0; pointer-events: none; }

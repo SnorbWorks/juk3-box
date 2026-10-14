@@ -154,6 +154,8 @@ On the page, a container becomes a `<div>` with its class, and a block becomes i
 
 The frame is everything that stays put while screens change, such as a sidebar. It must contain exactly one `screen` block, where the current screen appears.
 
+Give `jb-screen` (the `screen` block) a height, e.g. `height: 100%`. Each screen fills it (`position: absolute; inset: 0`, set by the engine). Home and All Songs are built once and kept, see-through and marked `data-parked`, while another screen shows, so going back to them is instant on a Pi 4. Style screens by their own class (`.home`, `.all-songs`), not by being `jb-screen`'s only or first child.
+
 ```json
 {
   "class": "frame",

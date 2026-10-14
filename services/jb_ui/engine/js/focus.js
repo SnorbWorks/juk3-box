@@ -46,7 +46,7 @@ function watchForChanges() {
   };
   new MutationObserver(elementsOnly).observe(document.body, {
     childList: true, subtree: true, attributes: true,
-    attributeFilter: ['hidden', 'data-empty', 'data-shape', 'data-focus-stop', 'data-modal', 'data-cards'],
+    attributeFilter: ['hidden', 'data-empty', 'data-shape', 'data-focus-stop', 'data-modal', 'data-cards', 'data-parked'],
   });
   addEventListener('resize', drop);
 }
@@ -85,7 +85,7 @@ function workOutOrder() {
     const stops = stopsIn(modal);
     return { stops, rest: stops[0] || null };
   }
-  const groups = [...document.querySelectorAll('[focus]')];
+  const groups = [...document.querySelectorAll('[focus]')].filter(g => !g.closest('[data-parked]'));
   const restGroup = groups.find(g => g.getAttribute('focus-flow') === 'down-from-rest');
   if (!restGroup) {
     const all = groups.flatMap(stopsIn);
@@ -192,6 +192,17 @@ export function goToRest() {
     if (top > 0) {
       scrolledTo.set(s, 0);
       s.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+}
+
+// A screen being put away goes back to its top, as if built anew.
+export function resetScroll(root) {
+  for (const [s, top] of scrolledTo) {
+    if (!s.isConnected) { scrolledTo.delete(s); continue; }
+    if (top > 0 && root.contains(s)) {
+      s.scrollTop = 0;
+      scrolledTo.set(s, 0);
     }
   }
 }

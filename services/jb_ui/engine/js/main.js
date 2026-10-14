@@ -5,7 +5,7 @@ import { albumSongs, openFilter, openList, pick, setSort, upLevel } from './boar
 import { playList, startAutoplay } from './lists.js';
 import { connectBus, PREVIEW, publish } from './bus.js';
 import { startFeatured } from './featured.js';
-import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, rotate } from './focus.js';
+import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, resetScroll, rotate } from './focus.js';
 import { renderLayout } from './layout.js';
 import { nowPlayingData, playingLibraryTrack } from './np.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
@@ -90,21 +90,42 @@ function context() {
   };
 }
 
+// Screens left are kept, hidden, and shown again as they were: building
+// Home or All Songs from scratch took one to five seconds on the Pi 4.
+// Not a collection (its layout changes with what it shows), and not in
+// the admin preview (the layout there is being edited).
+const parked = new Map();   // screen name -> its element
+const keeps = name => !PREVIEW && name !== 'collection';
+
 function showScreen(name, { remember = true } = {}) {
   const holder = document.querySelector('jb-screen');
   if (!holder) return;
   const from = store.get('screen');
   if (name === 'home') history.length = 0;
   else if (remember && from && from !== name) history.push(from);
+  const showing = holder.querySelector(':scope > :not([data-parked])');
+  if (showing && from && from !== name && keeps(from) && !showing.dataset.placeholder) {
+    resetScroll(showing);
+    showing.dataset.parked = '';
+    showing.inert = true;
+    parked.set(from, showing);
+  } else {
+    showing?.remove();
+  }
   const layout = theme.layouts[name] || (name === 'collection' ? DEFAULT_COLLECTION_LAYOUT : null);
-  if (layout) {
-    holder.replaceChildren(renderLayout(layout, context(), PREVIEW ? name : undefined));
+  const kept = parked.get(name);
+  if (kept) {
+    parked.delete(name);
+    kept.inert = false;
+    delete kept.dataset.parked;
+  } else if (layout) {
+    holder.append(renderLayout(layout, context(), PREVIEW ? name : undefined));
   } else {
     // The theme has no layout for this screen (only home and all-songs
     // are required). The engine's own version comes later; for now, say so.
     const missing = document.createElement('div');
     missing.dataset.placeholder = name;
-    holder.replaceChildren(missing);
+    holder.append(missing);
   }
   html.dataset.screen = name;
   store.set('screen', name);

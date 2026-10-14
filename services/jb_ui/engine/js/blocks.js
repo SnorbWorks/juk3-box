@@ -227,29 +227,45 @@ function fillBoard(el, node, ctx) {
     }
   };
 
+  // The slots are built once per layout (which codes, songs or album
+  // cards) and re-bound on every page: building a hundred slots and laying
+  // them out from scratch took over a second a page on the Pi 4.
+  const slotEls = new Map();   // code -> slot element
+  let built = '';
   const draw = () => {
     const v = view();
-    el.style.setProperty('--jb-digits', v.digits);
-    el.toggleAttribute('data-category', v.isCategory);
-    el.toggleAttribute('data-cards', !!v.cards);   // the album browser: cover cards
-    el.toggleAttribute('data-loading', !!v.album?.loading);
-    groups.clear();
-    for (const slotInfo of v.slots) {
-      let group = groups.get(slotInfo.letter);
-      if (!group) {
-        group = document.createElement('div');
-        group.className = 'jb-letter';
-        group.dataset.letter = slotInfo.letter;
-        groups.set(slotInfo.letter, group);
+    const shape = `${v.cards ? 'cards' : 'songs'}:${v.slots.map(s => s.code).join(',')}`;
+    if (shape !== built) {
+      built = shape;
+      el.style.setProperty('--jb-digits', v.digits);
+      el.toggleAttribute('data-cards', !!v.cards);   // the album browser: cover cards
+      groups.clear();
+      slotEls.clear();
+      for (const slotInfo of v.slots) {
+        let group = groups.get(slotInfo.letter);
+        if (!group) {
+          group = document.createElement('div');
+          group.className = 'jb-letter';
+          group.dataset.letter = slotInfo.letter;
+          groups.set(slotInfo.letter, group);
+        }
+        const s = document.createElement('div');
+        s.className = 'jb-slot';
+        s.dataset.code = slotInfo.code;
+        s.dataset.artScope = '';
+        s.append(fromTemplate(ctx.blocks[v.cards ? 'album-card' : 'song-card']));
+        slotEls.set(slotInfo.code, s);
+        group.append(s);
       }
-      const s = document.createElement('div');
-      s.className = 'jb-slot';
-      s.dataset.code = slotInfo.code;
-      s.dataset.artScope = '';
+      el.replaceChildren(...groups.values());
+    }
+    if (el.hasAttribute('data-category') !== v.isCategory) el.toggleAttribute('data-category', v.isCategory);
+    if (el.hasAttribute('data-loading') !== !!v.album?.loading) el.toggleAttribute('data-loading', !!v.album?.loading);
+    for (const slotInfo of v.slots) {
+      const s = slotEls.get(slotInfo.code);
       const item = slotInfo.item;
-      s.append(fromTemplate(ctx.blocks[v.cards ? 'album-card' : 'song-card']));
+      if (s.hasAttribute('data-empty') !== !item) s.toggleAttribute('data-empty', !item);
       if (!item) {
-        s.dataset.empty = '';
         bind(s, { code: slotInfo.code });
       } else if (v.cards) {
         bind(s, { code: slotInfo.code, title: item.category, cover: sized(item.cover, 400) });
@@ -258,11 +274,11 @@ function fillBoard(el, node, ctx) {
         bind(s, { code: slotInfo.code, title: item.category });
       } else {
         const track = toTrack(item);
-        bind(s, { ...track, cover: sized(track.cover, 200), code: slotInfo.code });
+        // Covers here show at about 34 px: 80 px pictures are sharp enough
+        // and decode far faster than 200 px ones, a hundred to a page.
+        bind(s, { ...track, cover: sized(track.cover, 80), code: slotInfo.code });
       }
-      group.append(s);
     }
-    el.replaceChildren(...groups.values());
     showEntry();
   };
 

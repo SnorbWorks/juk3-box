@@ -16,8 +16,38 @@ let canvas = null;
 export function watchArt(img) {
   if (img.jbArt) return;
   img.jbArt = true;
-  img.addEventListener('load', () => apply(img));
-  if (img.complete && img.naturalWidth) apply(img);
+  img.addEventListener('load', () => later(img));
+  if (img.complete && img.naturalWidth) later(img);
+}
+
+// Sampling a picture decodes it on the page's thread (5-30 ms each on the
+// Pi 4), and a song page loads a hundred covers at once: they're sampled
+// in idle time, a few at a time, so page turns and screen changes stay
+// smooth. A picture already sampled applies at once.
+const waiting = new Set();
+let idleQueued = false;
+
+function later(img) {
+  const url = img.currentSrc || img.src;
+  if (cache.has(url)) return apply(img);
+  waiting.add(img);
+  if (!idleQueued) {
+    idleQueued = true;
+    requestIdleCallback(work, { timeout: 3000 });
+  }
+}
+
+function work(deadline) {
+  idleQueued = false;
+  for (const img of waiting) {
+    if (deadline.timeRemaining() < 8 && !deadline.didTimeout) break;
+    waiting.delete(img);
+    if (img.isConnected && img.complete && img.naturalWidth) apply(img);
+  }
+  if (waiting.size) {
+    idleQueued = true;
+    requestIdleCallback(work, { timeout: 3000 });
+  }
 }
 
 function apply(img) {

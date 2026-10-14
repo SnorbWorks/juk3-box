@@ -709,7 +709,9 @@ jb-board {
 .jb-letter[data-entry] {
   box-shadow: inset 0 0 0 1.5px hsl(from var(--opt-highlight) calc(h - 0.755) s calc(l - 1.961) / 0.85), 0 0 3vh hsl(from var(--opt-button) calc(h - 1.733) calc(s * 1.294) calc(l + 10.784) / 0.6), 0 1vh 2.4vh rgba(0, 0, 0, 0.45);
 }
-.jb-slot { min-height: 0; overflow: hidden; border-bottom: 1px solid hsl(from var(--opt-highlight) calc(h - 1.909) calc(s * 0.706) calc(l - 22.549) / 0.18); }
+/* contain: each slot lays out on its own, so a change inside one doesn't
+   re-lay-out the whole board (~150 ms on the Pi 4). */
+.jb-slot { min-height: 0; overflow: hidden; contain: strict; border-bottom: 1px solid hsl(from var(--opt-highlight) calc(h - 1.909) calc(s * 0.706) calc(l - 22.549) / 0.18); }
 .jb-slot:last-child { border-bottom: 0; }
 .jb-song-card { display: flex; align-items: center; gap: 0.6vw; height: 100%; padding: 0 0.2vw; }
 .jb-song-code {
@@ -724,13 +726,14 @@ jb-board {
   line-height: 3.2vh;
   text-align: center;
 }
+/* A fixed size (78% of a slot's height), not a percentage of the slot
+   with an aspect ratio, which laid every slot out twice. */
 .jb-song-cover {
   flex: none;
-  height: 78%;
-  aspect-ratio: 1;
+  width: calc(31vh / var(--jb-digits, 10));
+  height: calc(31vh / var(--jb-digits, 10));
   object-fit: cover;
-  border-radius: calc(0.4vh * var(--opt-roundness));
-  box-shadow: 0 0.3vh 0.8vh rgba(0, 0, 0, 0.6);
+  border-radius: calc(0.4vh * var(--opt-roundness));   /* no shadow: too small to see */
 }
 .jb-song-text { flex: 1; min-width: 0; }
 .jb-song-title { font-size: 1.38vh; font-weight: 500; font-stretch: 88%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -850,7 +853,7 @@ jb-board[data-cards] {
   gap: 1.4vh 1vw;
 }
 jb-board[data-cards] .jb-letter { display: contents; }
-jb-board[data-cards] .jb-slot { border: 0; overflow: visible; min-height: 0; }
+jb-board[data-cards] .jb-slot { border: 0; overflow: visible; min-height: 0; contain: size layout; }   /* no paint clip: the cards' shadows show */
 .jb-album-card {
   position: relative;
   display: flex;

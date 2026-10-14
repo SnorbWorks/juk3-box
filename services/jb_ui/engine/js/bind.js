@@ -7,9 +7,17 @@
 
 import { watchArt } from './art.js';
 
+// Each template is parsed once; every use is a copy (the song board makes
+// a hundred of the same one).
+const parsed = new Map();
+
 export function fromTemplate(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html || '';
+  let t = parsed.get(html || '');
+  if (!t) {
+    t = document.createElement('template');
+    t.innerHTML = html || '';
+    parsed.set(html || '', t);
+  }
   return t.content.cloneNode(true);
 }
 

@@ -159,7 +159,7 @@ jb-board {
   border-radius: 4px;
 }
 .jb-letter[data-entry] { background: rgba(255, 213, 79, 0.15); }
-.jb-slot { min-height: 0; overflow: hidden; }
+.jb-slot { min-height: 0; overflow: hidden; contain: strict; }   /* lays out on its own */
 .jb-song-card {
   display: flex;
   align-items: center;
