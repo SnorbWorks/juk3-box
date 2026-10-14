@@ -59,7 +59,7 @@ const ICON_NAMES = [
   'list-ordered', 'grid-2x2', 'move-vertical', 'scan', 'lock', 'sparkles', 'columns-3', 'rows-2',
   'arrow-up-down', 'frame', 'file-plus', 'circle-check', 'circle-x', 'circle-dot', 'shuffle',
   'square-mouse-pointer', 'hand', 'maximize-2', 'monitor-smartphone', 'link', 'gauge', 'archive',
-  'arrow-up-left', 'swatch-book', 'puzzle', 'square', 'power', 'scroll-text', 'shield-check', 'cpu',
+  'arrow-up-left', 'swatch-book', 'puzzle', 'square', 'power', 'scroll-text', 'shield-check', 'cpu', 'map-pin', 'search',
 ];
 const icons = {};
 

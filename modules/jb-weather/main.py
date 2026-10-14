@@ -44,13 +44,27 @@ def describe(code: int, is_day: bool) -> tuple[str, str]:
     return "", "cloud"
 
 
-async def fetch(session: aiohttp.ClientSession, place: str, units: str) -> dict:
-    async with session.get("https://geocoding-api.open-meteo.com/v1/search",
-                           params={"name": place, "count": 1}) as r:
-        found = (await r.json()).get("results") or []
-    if not found:
-        raise LookupError(f"couldn't find {place!r}")
-    p = found[0]
+# Until the owner picks a location in the admin.
+DEFAULT_PLACE = {"name": "New York", "latitude": 40.7143, "longitude": -74.006}
+
+
+async def where(session: aiohttp.ClientSession, s: dict) -> dict:
+    """The place to report: the location the owner picked in the admin
+    (exact: name and coordinates), else a "place" name from version 1.0
+    (looked up), else New York."""
+    loc = s.get("location")
+    if isinstance(loc, dict) and isinstance(loc.get("latitude"), (int, float)):
+        return loc
+    if isinstance(s.get("place"), str) and s["place"].strip():
+        async with session.get("https://geocoding-api.open-meteo.com/v1/search",
+                               params={"name": s["place"], "count": 1}) as r:
+            found = (await r.json()).get("results") or []
+        if found:
+            return found[0]
+    return DEFAULT_PLACE
+
+
+async def fetch(session: aiohttp.ClientSession, p: dict, units: str) -> dict:
     async with session.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": p["latitude"], "longitude": p["longitude"],
         "current": "temperature_2m,weather_code,is_day",
@@ -64,7 +78,7 @@ async def fetch(session: aiohttp.ClientSession, place: str, units: str) -> dict:
     deg = "°"
     return {
         "v": 1,
-        "place": p.get("name", place),
+        "place": p.get("name", ""),
         "temp": f"{round(now['temperature_2m'])}{deg}",
         "condition": text,
         "icon": icon,
@@ -93,7 +107,7 @@ async def run():
                     while True:
                         s = settings(DEFAULTS)
                         try:
-                            data = await fetch(session, str(s.get("place") or "New York"), str(s.get("units")))
+                            data = await fetch(session, await where(session, s), str(s.get("units")))
                             await bus.publish(TOPIC, data, retain=True)
                             log.info("%s: %s %s", data["place"], data["temp"], data["condition"])
                         except Exception as e:      # offline, a bad place: try again later

@@ -118,6 +118,7 @@ function settingsForm(m) {
       const inp = h('input', { type: 'number', value: v ?? '', min: spec.min, max: spec.max, oninput: () => set(inp.value === '' ? undefined : Number(inp.value)) });
       return field(spec.label, inp, spec.help);
     }
+    if (spec.type === 'location') return locationField(spec, v, set);
     if (spec.type === 'secret') {
       const inp = h('input', { type: 'password', autocomplete: 'off', placeholder: v?.set ? 'Saved (type to replace)' : 'Not set', oninput: () => set(inp.value) });
       return field(spec.label, inp, spec.help || 'Kept privately on the jukebox; never shown again.');
@@ -183,4 +184,32 @@ async function addModule(file, refresh) {
       } },
     ],
   });
+}
+
+// A location: type a ZIP code or a town (with its state if there are many),
+// Find, pick the right one. Exactly that place is saved.
+function locationField(spec, value, set) {
+  const current = h('div.location-current', value?.label ? [icon('circle-check'), h('span', value.label)] : h('span.muted', 'Not set yet'));
+  const results = h('div.location-results');
+  const input = h('input', { type: 'text', placeholder: 'ZIP code, or town and state (e.g. 97034, or Portland, OR)', autocomplete: 'off',
+    onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); search(); } } });
+  const search = async () => {
+    const q = input.value.trim();
+    if (q.length < 2) return;
+    clear(results, h('span.muted', h('span.spinner'), ' Searching…'));
+    try {
+      const { places } = await get(`/api/places?q=${encodeURIComponent(q)}`);
+      if (!places.length) { clear(results, h('span.muted', 'No places found. Try a ZIP code, or add the state.')); return; }
+      clear(results, h('div.location-choices', { role: 'radiogroup' }, places.map(p => h('button.location-choice', {
+        type: 'button', role: 'radio', 'aria-checked': 'false',
+        onclick: e => {
+          for (const b of results.querySelectorAll('.location-choice')) b.setAttribute('aria-checked', String(b === e.currentTarget));
+          set(p);
+          clear(current, icon('circle-check'), h('span', p.label), h('span.muted', ' · save to use it'));
+        },
+      }, icon('map-pin'), h('span', p.label)))));
+    } catch (e) { clear(results, h('span.muted', e.message)); }
+  };
+  return field(spec.label, h('div.stack.location-field', current, h('div.location-search', input, button('Find', { variant: 'small', onclick: search }, 'search')), results),
+    spec.help);
 }

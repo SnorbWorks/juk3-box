@@ -50,7 +50,7 @@ All of [modules.md](modules.md)'s fields, plus:
 | `permissions.network` | installed | `none` (default): only the bus. `internet`: the internet, but not this Pi's own services or the local network. (`lan` is reserved: it would let a module reach the open bus listeners, so it isn't granted until the core moves to bus logins) |
 | `permissions.devices` | installed | Reserved (`bluetooth`, `audio`, `gpio`...). None are granted in version 1 |
 | `resources` | installed | `cpu`: percent of one core (default 25, at most 100). `memory_mb` (default 128, at most 512). Enforced; shown on the module's card |
-| `owner_settings` | both | Settings the owner changes in the admin (the module's card, Settings). Types: `text`, `number` (`min`, `max`), `enum` (`options`), `toggle`, `secret` (stored privately, never shown back in full) |
+| `owner_settings` | both | Settings the owner changes in the admin (the module's card, Settings). Types: `text`, `number` (`min`, `max`), `enum` (`options`), `toggle`, `secret` (stored privately, never shown back in full), `location` (the owner types a ZIP code or a town and picks the exact match; the module gets `{name, admin1, country, latitude, longitude, timezone, label}`) |
 | `blocks` | both | Blocks the module adds to the page builder (see Blocks) |
 
 `publishes` and `subscribes` are **enforced** for installed modules (see Bus access); for built-in ones they remain documentation.

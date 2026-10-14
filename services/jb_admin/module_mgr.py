@@ -18,6 +18,7 @@ import time
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from services.jb_admin import places
 from services.jb_admin.files import read_json, write_json
 from services.jb_ui import module_blocks, themes
 
@@ -25,7 +26,7 @@ ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 TOPIC_RE = re.compile(r"^jukebox/[A-Za-z0-9_./+#-]+$")
 RUN_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*\.py$")
 ROLES = {"source", "analyzer", "input", "output", "service"}
-SETTING_TYPES = {"text", "number", "enum", "toggle", "secret"}
+SETTING_TYPES = {"text", "number", "enum", "toggle", "secret", "location"}
 KEEP = {".py", ".json", ".html", ".css", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".txt", ".md"}
 KEEP_NAMES = {"LICENSE", "LICENCE", "README", "COPYING"}
 MAX_FILES = 200
@@ -319,6 +320,7 @@ class Manager:
             raise ModuleError("Expected values.")
         values = read_json(self.settings_dir / f"{mid}.json", {}) or {}
         kept = read_json(self.secrets_dir / f"{mid}.json", {}) or {}
+        kept_before = dict(kept)
         for k, v in raw.items():
             spec = schema.get(k)
             if not spec:
@@ -339,10 +341,13 @@ class Manager:
                 values[k] = v
             elif t == "toggle" and isinstance(v, bool):
                 values[k] = v
+            elif t == "location" and places.clean(v):
+                values[k] = places.clean(v)
             else:
                 raise ModuleError(f"{spec.get('label', k)}: {v!r} isn't usable")
         write_json(self.settings_dir / f"{mid}.json", values)
-        write_json(self.secrets_dir / f"{mid}.json", kept, private=True)
+        if kept != kept_before:
+            write_json(self.secrets_dir / f"{mid}.json", kept, private=True)
         return self.get_settings(mid, m)
 
     # Logs

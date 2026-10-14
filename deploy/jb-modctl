@@ -215,6 +215,9 @@ def cmd_install(mid: str):
     write(CREDS / mid / "bus.json", json.dumps({"socket": str(SOCKET), "username": user, "password": password}), 0o600)
     for folder, owner in ((SETTINGS, "admin:admin"), (SECRETS, "admin:admin")):
         folder.mkdir(parents=True, exist_ok=True)
+        # jb-admin writes these (atomically, so it needs the folder too).
+        shutil.chown(folder, *owner.split(":"))
+        os.chmod(folder, 0o755 if folder == SETTINGS else 0o700)
         f = folder / f"{mid}.json"
         if not f.exists():
             write(f, "{}\n", 0o644 if folder == SETTINGS else 0o600, owner)

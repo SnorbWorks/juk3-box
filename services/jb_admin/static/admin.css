@@ -560,3 +560,11 @@ body.builder-open .content { min-height: 0; display: flex; }
 .list.review li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
 .list.review .icon { color: var(--accent); flex: none; margin-top: 2px; }
 .module-log { max-height: 50vh; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+.location-field { gap: 8px; }
+.location-current { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.location-current .icon { color: var(--ok); }
+.location-search { display: flex; gap: 8px; }
+.location-search input { flex: 1; min-width: 0; }
+.location-choices { display: flex; flex-direction: column; gap: 4px; }
+.location-choice { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.location-choice[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

@@ -3,28 +3,87 @@
   "id": "jb-weather",
   "name": "Weather",
   "description": "The weather where the jukebox is, for a Weather block on the screen. From Open-Meteo (no account needed).",
-  "version": "1.0.0",
-  "roles": ["source"],
+  "version": "1.1.0",
+  "roles": [
+    "source"
+  ],
   "run": "main.py",
-  "publishes": ["jukebox/jb-weather/current", "jukebox/jb-weather/heartbeat"],
+  "publishes": [
+    "jukebox/jb-weather/current",
+    "jukebox/jb-weather/heartbeat"
+  ],
   "subscribes": [],
-  "permissions": { "network": "internet" },
-  "resources": { "cpu": 10, "memory_mb": 96 },
-  "owner_settings": {
-    "place": { "type": "text", "label": "Place", "default": "New York", "help": "A city or town, e.g. \"Austin\" or \"Paris, France\"." },
-    "units": { "type": "enum", "label": "Units", "default": "fahrenheit",
-               "options": [{ "value": "fahrenheit", "label": "°F" }, { "value": "celsius", "label": "°C" }] },
-    "refresh": { "type": "number", "label": "Check every (minutes)", "default": 15, "min": 5, "max": 180 }
+  "permissions": {
+    "network": "internet"
   },
-  "blocks": [{
-    "id": "weather",
-    "label": "Weather",
-    "description": "The weather where you are: now, and today's high and low.",
-    "group": "content",
-    "topic": "jukebox/jb-weather/current",
-    "template": "blocks/weather.html",
-    "style": "blocks/weather.css",
-    "icons": ["sun", "moon", "cloud-sun", "cloud-moon", "cloud", "cloud-fog", "cloud-drizzle", "cloud-rain", "cloud-snow", "cloud-lightning"],
-    "shapes": [["compact", 0], ["card", 0.42], ["banner", 0.95]]
-  }]
+  "resources": {
+    "cpu": 10,
+    "memory_mb": 96
+  },
+  "owner_settings": {
+    "location": {
+      "type": "location",
+      "label": "Location",
+      "help": "A ZIP code, or a town (add the state if there are several, e.g. Portland, OR). Pick the right one from the list."
+    },
+    "units": {
+      "type": "enum",
+      "label": "Units",
+      "default": "fahrenheit",
+      "options": [
+        {
+          "value": "fahrenheit",
+          "label": "°F"
+        },
+        {
+          "value": "celsius",
+          "label": "°C"
+        }
+      ]
+    },
+    "refresh": {
+      "type": "number",
+      "label": "Check every (minutes)",
+      "default": 15,
+      "min": 5,
+      "max": 180
+    }
+  },
+  "blocks": [
+    {
+      "id": "weather",
+      "label": "Weather",
+      "description": "The weather where you are: now, and today's high and low.",
+      "group": "content",
+      "topic": "jukebox/jb-weather/current",
+      "template": "blocks/weather.html",
+      "style": "blocks/weather.css",
+      "icons": [
+        "sun",
+        "moon",
+        "cloud-sun",
+        "cloud-moon",
+        "cloud",
+        "cloud-fog",
+        "cloud-drizzle",
+        "cloud-rain",
+        "cloud-snow",
+        "cloud-lightning"
+      ],
+      "shapes": [
+        [
+          "compact",
+          0
+        ],
+        [
+          "card",
+          0.42
+        ],
+        [
+          "banner",
+          0.95
+        ]
+      ]
+    }
+  ]
 }

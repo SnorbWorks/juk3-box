@@ -509,6 +509,16 @@ class Admin:
         await self.announce(f"module:{m['id']}")
         return web.json_response(saved)
 
+    async def geocode(self, request):
+        """Places matching what the owner typed, for a location setting."""
+        from services.jb_admin import places
+        try:
+            found = await places.find(request.query.get("q", ""))
+        except Exception as e:     # offline, the service down
+            self.log.warning("place search: %s", e)
+            raise error(400, "Couldn't search for places right now. Is the jukebox online?")
+        return web.json_response({"places": found})
+
     async def upload_module(self, request):
         tmp = await save_upload(request, Path(self.cfg["admin_dir"]) / "uploads", ".zip", 25 * 1024 * 1024)
         try:
@@ -829,6 +839,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/layouts/{theme}/{name}/revisions", admin.revisions)
     r.add_get("/api/layouts/{theme}/{name}/revisions/{rev}", admin.revision)
     r.add_get("/api/library/{field}", admin.library_list)
+    r.add_get("/api/places", admin.geocode)
     r.add_post("/api/modules/upload", admin.upload_module)
     r.add_post("/api/modules/install", admin.install_module)
     r.add_delete("/api/modules/staged/{token}", admin.discard_module)
