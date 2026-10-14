@@ -650,7 +650,14 @@ jb-header { flex: 1; min-width: 0; display: block; }
   background: hsl(from var(--opt-highlight) calc(h - 1.909) calc(s * 0.615) calc(l - 14.706) / 0.35);
 }
 .jb-back-icon { display: flex; font-size: 2.4vh; }
-.jb-back[data-focused] { background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+/* Focused: the same blue-violet pill as See All and the active nav item,
+   drawn on the button itself (no extra layers to fade). */
+.jb-back[data-focused] {
+  color: #fff;
+  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
+  box-shadow: inset 0 0 1.4vh hsl(from var(--opt-highlight) calc(h - 4.159) s calc(l - 4.902) / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 2.2vh hsl(from var(--opt-button) calc(h + 0.086) calc(s * 1.294) calc(l + 10.784) / 0.55);
+}
 .jb-back[data-pressed] { transform: scale(0.96); }
 .jb-header-text { margin-left: 0.6vw; min-width: 0; }
 .jb-header-title { margin: 0; font-size: 3.9vh; font-weight: 650; letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
