@@ -148,7 +148,8 @@ function describeNode(schema, node) {
   if (!def) return { label: node.block, detail: 'Not known to this engine', icon: 'circle-alert', unknown: true };
   let detail = '';
   if (node.block === 'section') {
-    const type = def.settings.type.options.find(o => o.value === node.type)?.label || node.type;
+    const type = node.type === 'featured-artist' ? featuredHeading(def, node)
+      : def.settings.type.options.find(o => o.value === node.type)?.label || node.type;
     detail = [node.title, type].filter(Boolean).join(' · ');
     if (node.show === false || node.show === 'false') detail += ' (hidden)';
   } else if (node.block === 'heading' || node.block === 'text') {
@@ -168,3 +169,11 @@ export const ICONS = {
   pager: 'arrow-up-down', logo: 'sparkles', nav: 'navigation', header: 'heading', phone: 'smartphone',
   screen: 'app-window',
 };
+
+// A Featured block's heading, as the cabinet shows it ("Most Played Album").
+function featuredHeading(def, node) {
+  const what = def.settings.feature?.options.find(o => o.value === (node.feature || 'artist'))?.label || 'Artist';
+  if (node.from === 'pinned') return node.pin ? `Featured ${what}: ${node.pin}` : `Featured ${what}`;
+  const lead = { 'most-played': 'Most Played', 'recently-added': 'New', 'recently-played': 'Recently Played' }[node.from] || 'Featured';
+  return `${lead} ${what}`;
+}

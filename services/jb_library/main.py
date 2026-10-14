@@ -415,7 +415,10 @@ class Snapshots:
                    t.lastfm_listeners, t.play_count, t.last_played_at, t.added_at, t.favorite,
                    t.album_track, r.rank
             FROM tracks t
-            LEFT JOIN album_recent r ON r.phone_mac = t.phone_mac AND r.album = t.phone_album
+            -- By the phone's album name where the deep crawl gave one, else the
+            -- lookup's (they're the same for most albums): the phone's Recently
+            -- Added order reaches far more songs than the crawled ones.
+            LEFT JOIN album_recent r ON r.phone_mac = t.phone_mac AND r.album = COALESCE(t.phone_album, t.album)
             ORDER BY t.title COLLATE NOCASE
             """
         ).fetchall()

@@ -114,6 +114,11 @@ class Admin:
         self.videos = media.VideoOptimizer(Path(cfg["media_cache_dir"]), log)
         self.schema_blocks = json.loads((UI_DIR / "block_schema.json").read_text())
         self.live: dict[str, dict] = {}          # latest state off the bus, for the dashboard
+        # Names in the library, for settings that pick one (a pinned
+        # Featured artist): {"artist": [...], "album": [...], ...}.
+        self.library_names: dict[str, list[str]] = {}
+        self._library_tracks: list = []
+        self._library_playlists: list = []
         self.bus = None
         self._bus_task = None
 
@@ -126,6 +131,22 @@ class Admin:
         "jukebox/jb-core/queue": "queue",
     }
 
+    LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
+
+    def heard_library(self, topic: str, payload) -> None:
+        """Keeps only the names out of jb-library's snapshots."""
+        if not isinstance(payload, dict):
+            return
+        if topic.endswith("/tracks"):
+            self._library_tracks = [t for t in payload.get("tracks") or [] if isinstance(t, dict)]
+        else:
+            self._library_playlists = [p for p in payload.get("playlists") or [] if isinstance(p, dict)]
+        names = {}
+        for field in ("artist", "album", "genre"):
+            names[field] = sorted({str(t[field]) for t in self._library_tracks if t.get(field)}, key=str.casefold)
+        names["playlist"] = [str(p["name"]) for p in self._library_playlists if p.get("name")]
+        self.library_names = names
+
     async def run_bus(self):
         from shared.bus import Bus
         while True:
@@ -136,12 +157,14 @@ class Admin:
                     heartbeat = asyncio.create_task(bus.run_heartbeat())
                     try:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
-                                      *self.LIVE_TOPICS):
+                                      *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
                             await bus._client.subscribe(topic)
                         messages = bus._iter_messages()
                         async for topic, payload in messages:
                             if topic in self.LIVE_TOPICS:
                                 self.live[self.LIVE_TOPICS[topic]] = payload
+                            elif topic in self.LIBRARY_TOPICS:
+                                self.heard_library(topic, payload)
                             else:
                                 self.registry.heard(topic, payload)
                     finally:
@@ -417,6 +440,12 @@ class Admin:
         if theme_id == self.active_theme():
             await self.announce("layouts")
         return web.json_response({"ok": True})
+
+    async def library_list(self, request):
+        field = request.match_info["field"]
+        if field not in ("artist", "album", "genre", "playlist"):
+            raise web.HTTPNotFound()
+        return web.json_response({"names": self.library_names.get(field, []), "bus": self.bus is not None})
 
     # Customize: a theme's global options ------------------------------------------
 
@@ -705,6 +734,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_delete("/api/layouts/{theme}/{name}", admin.reset_layout)
     r.add_get("/api/layouts/{theme}/{name}/revisions", admin.revisions)
     r.add_get("/api/layouts/{theme}/{name}/revisions/{rev}", admin.revision)
+    r.add_get("/api/library/{field}", admin.library_list)
     r.add_get("/api/customize/{theme}", admin.get_customize)
     r.add_put("/api/customize/{theme}/draft", admin.save_customize_draft)
     r.add_delete("/api/customize/{theme}/draft", admin.discard_customize_draft)

@@ -485,7 +485,7 @@
           }
         },
         {
-          "label": "Featured artist",
+          "label": "Featured",
           "values": {
             "type": "featured-artist"
           }
@@ -528,7 +528,7 @@
             },
             {
               "value": "featured-artist",
-              "label": "Featured artist"
+              "label": "Featured"
             },
             {
               "value": "playlists",
@@ -539,6 +539,117 @@
               "label": "Browse shortcuts"
             }
           ]
+        },
+        "feature": {
+          "type": "enum",
+          "label": "Feature",
+          "default": "artist",
+          "only_when": {
+            "type": "featured-artist"
+          },
+          "options": [
+            {
+              "value": "artist",
+              "label": "Artist"
+            },
+            {
+              "value": "album",
+              "label": "Album"
+            },
+            {
+              "value": "genre",
+              "label": "Genre"
+            },
+            {
+              "value": "playlist",
+              "label": "Playlist"
+            }
+          ]
+        },
+        "from": {
+          "type": "enum",
+          "label": "Pick from",
+          "default": "any",
+          "only_when": {
+            "type": "featured-artist"
+          },
+          "help": "The heading follows: \"Featured Artist\", \"Most Played Album\", \"New Artist\"...",
+          "options": [
+            {
+              "value": "any",
+              "label": "Any, at random"
+            },
+            {
+              "value": "most-played",
+              "label": "Most played here"
+            },
+            {
+              "value": "recently-added",
+              "label": "Recently added"
+            },
+            {
+              "value": "recently-played",
+              "label": "Recently played"
+            },
+            {
+              "value": "pinned",
+              "label": "One I choose"
+            }
+          ]
+        },
+        "pin": {
+          "type": "library",
+          "label": "Show",
+          "field_from": "feature",
+          "only_when": {
+            "type": "featured-artist",
+            "from": "pinned"
+          },
+          "help": "Start typing to pick from your library."
+        },
+        "every": {
+          "type": "enum",
+          "label": "Change it",
+          "default": "30",
+          "only_when": {
+            "type": "featured-artist"
+          },
+          "options": [
+            {
+              "value": "15",
+              "label": "Every 15 minutes"
+            },
+            {
+              "value": "30",
+              "label": "Every 30 minutes"
+            },
+            {
+              "value": "60",
+              "label": "Every hour"
+            },
+            {
+              "value": "240",
+              "label": "Every 4 hours"
+            },
+            {
+              "value": "1440",
+              "label": "Every day"
+            },
+            {
+              "value": "0",
+              "label": "Never"
+            }
+          ],
+          "help": "Never: the top one of the list stays (or one at random, for Any) until the list changes."
+        },
+        "repeats": {
+          "type": "bool",
+          "label": "Allow repeats",
+          "default": false,
+          "only_when": {
+            "type": "featured-artist"
+          },
+          "help": "Off: one doesn't come back until the last 10 have had a turn."
         },
         "title": {
           "type": "text",

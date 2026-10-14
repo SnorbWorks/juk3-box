@@ -6,6 +6,7 @@
 
 import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, coversFor, playlistSongs } from './board.js';
+import { featuredFor, headingOf, KINDS } from './featured.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
@@ -26,8 +27,8 @@ const BROWSE_DESCRIPTIONS = {
 };
 
 // A Browse card with no picture from the theme shows a random cover from
-// its own songs. Kept until the featured artist changes (every 30 minutes),
-// so cards don't change on every re-render.
+// its own songs. Kept for half an hour (the "featured" tick), so cards
+// don't change on every re-render.
 const browseCovers = new Map();
 let coversFeatured;
 
@@ -72,20 +73,28 @@ const SECTIONS = {
     items: tracks => tracks.filter(t => t.last_played_at).sort((a, b) => b.last_played_at - a.last_played_at),
     all: { limit: 100, subtitle: n => `The last ${n} played` },
   },
+  // "Featured" in the admin: one artist, album, genre or playlist, picked
+  // by the block's settings (featured.js). The type keeps its first name
+  // so layouts and themes made for it still work.
   'featured-artist': {
     title: 'Featured Artist',
+    heading: node => headingOf(node),
     kind: 'link',
     limit: 1,
-    items: (tracks, ctx) => {
-      const f = store.get('featured');
+    items: (tracks, ctx, node, el) => {
+      const f = el && featuredFor(el, node, tracks);
       if (!f) return [];
-      const count = tracks.filter(t => t.artist === f.artist).length;
+      const field = KINDS[node.feature] ? KINDS[node.feature].field : 'artist';
+      const n = f.songs.length;
+      const songs = `${n} song${n === 1 ? '' : 's'}`;
+      const artists = [...new Set(f.songs.map(t => t.artist).filter(Boolean))];
       return [{
-        label: f.artist,
-        description: `${count} song${count === 1 ? '' : 's'}`,
-        image: sized(f.artwork_url, 600),
-        backdrop: sized(f.artwork_url, 24),
-        open: () => ctx.actions.openFilter('artist', f.artist),
+        label: f.value,
+        kicker: headingOf(node),
+        description: field === 'album' && artists.length === 1 ? `${artists[0]} · ${songs}` : songs,
+        image: sized(f.cover, 600),
+        backdrop: sized(f.cover, 24),
+        open: () => ctx.actions.openFilter(field, f.value),
       }];
     },
   },
@@ -174,11 +183,19 @@ export function fillSection(el, node, ctx) {
   const hasSeeAll = !!def.all && !off(node['see-all']);
   if (seeAll && hasSeeAll) makeStop(seeAll, `see-all:${node.type}`, () => ctx.actions.openCollection(node.type));
 
+  let shown = null;
   const render = () => {
+    // A Featured block picks once it's on the page (its place there tells
+    // it apart from other Featured blocks).
+    if (def.heading && !el.isConnected) return requestAnimationFrame(() => el.isConnected && render());
     const tracks = store.get('tracks') || [];
-    const items = def.items(tracks, ctx, node).slice(0, limit);
+    const items = def.items(tracks, ctx, node, el).slice(0, limit);
+    // Unchanged: leave the cards be (a focused card keeps its focus).
+    const sig = JSON.stringify(items.map(i => [i.title, i.artist, i.artwork_url, i.label, i.image, i.description]));
+    if (sig === shown) return;
+    shown = sig;
     bind(el, {
-      title: node.title || def.title,
+      title: node.title || (def.heading ? def.heading(node) : def.title),
       count: items.length,
       more: hasSeeAll && items.length > 0,
       seeAll: 'See All',

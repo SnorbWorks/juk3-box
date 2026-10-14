@@ -1,6 +1,7 @@
 // The Settings panel: the selected block's settings, drawn from the block
 // schema (services/jb_ui/block_schema.json), and what you can do with it.
 
+import { get } from '../api.js';
 import { button, clear, field, h, icon, iconButton, switchControl } from '../ui.js';
 import { pickPicture } from '../pages/media.js';
 import { at, canDelete, canDuplicate, describe, isContainer } from './model.js';
@@ -163,6 +164,20 @@ export function createInspector(b) {
           } }, n >= 0 ? h('span.chip-n', String(n + 1)) : null, o.label);
         }));
         return field(spec.label, chips, help || 'Cards show in the order you pick them.');
+      }
+      case 'library': {
+        // A name from the library (an artist, album...), typed with
+        // suggestions. Which list depends on another setting (field_from).
+        const which = node[spec.field_from] || b.schema.blocks[node.block]?.settings[spec.field_from]?.default || 'artist';
+        const listId = `lib-${which}`;
+        const input = h('input', { type: 'text', value: value ?? '', list: listId, autocomplete: 'off', placeholder: `Type a name`,
+          onchange: () => set(input.value.trim() === '' ? undefined : input.value.trim()) });
+        const list = h('datalist', { id: listId });
+        get(`/api/library/${encodeURIComponent(which)}`).then(r => {
+          list.replaceChildren(...r.names.map(n => h('option', { value: n })));
+          if (!r.names.length) input.placeholder = 'The library hasn\'t loaded yet';
+        }).catch(() => {});
+        return field(spec.label, h('div', input, list), help);
       }
       case 'picture': {
         const src = value ? String(value) : '';

@@ -384,3 +384,18 @@ def test_customize_needs_a_known_theme(tmp_path):
         assert (await c.get("/api/customize/..%2Fx")).status in (404, 409)
         assert (await c.put("/api/customize/nope/draft", json={}, headers=H)).status == 409
     run(tmp_path, check)
+
+
+def test_library_names_come_from_the_bus_snapshots(tmp_path):
+    async def check(c, admin):
+        assert (await (await c.get("/api/library/artist")).json())["names"] == []
+        admin.heard_library("jukebox/jb-library/tracks", {"tracks": [
+            {"title": "a", "artist": "beta", "album": "X", "genre": "Rock"},
+            {"title": "b", "artist": "Alpha", "album": "Y", "genre": "Rock"},
+            {"title": "c", "artist": None}, "junk"]})
+        admin.heard_library("jukebox/jb-library/playlists", {"playlists": [{"name": "Road trip"}]})
+        assert (await (await c.get("/api/library/artist")).json())["names"] == ["Alpha", "beta"]
+        assert (await (await c.get("/api/library/genre")).json())["names"] == ["Rock"]
+        assert (await (await c.get("/api/library/playlist")).json())["names"] == ["Road trip"]
+        assert (await c.get("/api/library/title")).status == 404
+    run(tmp_path, check)

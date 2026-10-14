@@ -274,7 +274,7 @@ Each section is a row of cards. There are two kinds of card:
 | --- | --- | --- |
 | `new` | Songs added to the phone since the jukebox first synced it, newest first | Plays the song |
 | `recents` | Songs played for at least 30 seconds, most recent first | Plays the song |
-| `featured-artist` | An artist the engine picks at random, at startup and every 30 minutes | Opens the board filtered to that artist |
+| `featured-artist` | **Featured** in the admin: one artist, album, genre or playlist. Settings: `feature` (artist, album, genre, playlist), `from` (any, most-played, recently-added, recently-played, pinned, with `pin` naming it), `every` (minutes between changes, 0 = never), `repeats`. The pick is kept in the browser, so a reload doesn't change it; several Featured blocks never show the same thing at once. Cards get `kicker`, the heading ("Most Played Album") | Opens the board filtered to it |
 | `playlists` | The phone's own playlists (from the deep crawl), with a cover from their songs. Empty playlists are left out | Opens the board on that playlist's songs, in its order |
 | `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played` | Opens the board in that sort |
 
