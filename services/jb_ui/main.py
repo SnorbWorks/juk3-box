@@ -21,7 +21,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, logging as jb_logging
-from services.jb_ui import icons, markup, media, themes
+from services.jb_ui import customize, icons, markup, media, themes
 
 SERVICE_NAME = "jb-ui"
 HERE = Path(__file__).resolve().parent
@@ -48,6 +48,9 @@ DEFAULTS = {
     # Pictures the owner uploaded in the admin (the media library), for
     # image and logo blocks: "/media/<file>".
     "media_dir": "/var/lib/juk3-box/media",
+    # The owner's published theme options (colors, fonts...), per theme:
+    # <dir>/<theme>/custom.json (written by jb-admin).
+    "owner_styles_dir": "/var/lib/juk3-box/styles",
 }
 
 # Themes are data only: the engine's own scripts run, nothing else does.
@@ -94,14 +97,18 @@ def media_path(folder: Path, name: str) -> Path | None:
 
 
 def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
-                  layout_folders: list, log) -> dict:
+                  layout_folders: list, log, style: dict | None = None) -> dict:
     """What /api/theme sends the engine: the theme (its manifest, layouts
-    with the owner's laid over them, block markup, icons) and the owner's
-    settings. Shared with jb-admin's preview, which adds drafts to
-    `layout_folders`."""
+    with the owner's laid over them, block markup, icons, its options with
+    the owner's choices) and the owner's settings. Shared with jb-admin's
+    preview, which adds drafts to `layout_folders` and passes the draft
+    `style`."""
     layouts, origins, problems = themes.owner_layouts(theme, layout_folders)
     for p in problems:
         log.warning("theme %s: using the theme's layout instead: %s", theme.id, p)
+    custom, style_problems = customize.resolve(theme.manifest, theme.root, style)
+    for p in style_problems:
+        log.warning("theme %s options: using the theme's value instead: %s", theme.id, p)
     base = f"/themes/{theme.id}/"
     return {
         "id": theme.id,
@@ -116,7 +123,9 @@ def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
         ),
         "browse_images": {name: base + path for name, path in themes.browse_images(theme.root).items()},
         "settings": settings,
-        "warnings": theme.warnings + problems,
+        "customize": custom,
+        "fonts": [{**f, "src": f"/engine/fonts/{f['src']}"} for f in customize.font_library()],
+        "warnings": theme.warnings + problems + style_problems,
         "fallback": fallback,
     }
 
@@ -183,7 +192,8 @@ class App:
                 self.videos.served_path(bg_path)
         settings = owner_settings(read_settings(self.settings_path))
         folders = [("owner", Path(self.cfg["owner_layouts_dir"]) / theme.id)]
-        return web.json_response(theme_payload(theme, fallback, settings, folders, self.log))
+        style = read_settings(Path(self.cfg["owner_styles_dir"]) / theme.id / "custom.json") or None
+        return web.json_response(theme_payload(theme, fallback, settings, folders, self.log, style))
 
     async def media_file(self, request: web.Request) -> web.StreamResponse:
         path = media_path(Path(self.cfg["media_dir"]), request.match_info["name"])

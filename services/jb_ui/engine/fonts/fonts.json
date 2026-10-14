@@ -1,0 +1,9 @@
+[
+  { "id": "inter", "label": "Inter", "style": "clean", "family": "Inter", "src": "Inter.ttf", "weight": "100 900", "fallback": "sans-serif" },
+  { "id": "oswald", "label": "Oswald", "style": "condensed", "family": "Oswald", "src": "Oswald.ttf", "weight": "200 700", "fallback": "sans-serif" },
+  { "id": "bebas-neue", "label": "Bebas Neue", "style": "tall capitals", "family": "Bebas Neue", "src": "BebasNeue.ttf", "fallback": "sans-serif" },
+  { "id": "righteous", "label": "Righteous", "style": "retro", "family": "Righteous", "src": "Righteous.ttf", "fallback": "sans-serif" },
+  { "id": "nunito", "label": "Nunito", "style": "rounded", "family": "Nunito", "src": "Nunito.ttf", "weight": "200 1000", "fallback": "sans-serif" },
+  { "id": "courier-prime", "label": "Courier Prime", "style": "typewriter", "family": "Courier Prime", "src": "CourierPrime.ttf", "fallback": "monospace" },
+  { "id": "playfair-display", "label": "Playfair Display", "style": "serif", "family": "Playfair Display", "src": "PlayfairDisplay.ttf", "weight": "400 900", "fallback": "serif" }
+]

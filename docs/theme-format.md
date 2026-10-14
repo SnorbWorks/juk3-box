@@ -87,6 +87,39 @@ Themes live in two places:
 | `icons` | no | Library icons for the engine's buttons, e.g. `{"home": "lucide:house"}` (see Icons) |
 | `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS. Ship a video at any size, frame rate or format: JUKE.BOX re-encodes it once for the hardware (H.264, at most 1280x720, 30 fps) and plays that copy; your file is never changed |
 | `sizing` | no | `fluid` (default) or `canvas`; see Fitting any screen |
+| `customize` | no | The options an owner can change from the admin's Appearance page, and your preset styles; see Customize |
+
+### Customize
+
+The global look an owner can change without touching your files: colors, font, shape, background. You declare the options and a few preset **styles** (options that go together); the admin draws the form from them, and the owner picks a style and changes any option on top of it.
+
+```json
+"customize": {
+  "options": [
+    { "id": "panel", "label": "Panels", "group": "colors", "type": "color", "default": "#0d1428", "help": "The sidebar and cards." },
+    { "id": "cover-colors", "label": "Use cover colors", "group": "colors", "type": "toggle", "default": true },
+    { "id": "font", "label": "Font", "group": "fonts", "type": "font", "default": "theme", "family": "\"Oswald\", sans-serif" },
+    { "id": "roundness", "label": "Corner roundness", "group": "shape", "type": "range", "min": 0, "max": 2, "step": 0.1, "default": 1 },
+    { "id": "background", "label": "Background picture", "group": "background", "type": "picture", "role": "background", "default": "" }
+  ],
+  "styles": [
+    { "id": "midnight", "label": "Midnight", "description": "The original.", "values": {} },
+    { "id": "sunset", "label": "Sunset", "values": { "panel": "#22102a" } }
+  ]
+}
+```
+
+The engine sets every option on the page as `--opt-<id>` before your CSS loads, so your CSS reads `var(--opt-panel)`:
+
+| Type | Value | `--opt-<id>` |
+| --- | --- | --- |
+| `color` | `#rrggbb` | the color. For shades of it use `hsl(from var(--opt-panel) h s calc(l + 8) / 0.8)`: a whole family of shades follows the one option (scale saturation, `calc(s * 0.9)`, rather than adding to it, so a grey choice stays grey) |
+| `range` | a number from `min` to `max` | the number, e.g. `calc(1.7vh * var(--opt-roundness))` |
+| `toggle` | true / false | `1` / `0`; also `<html data-opt-<id>="on|off">` for selectors |
+| `font` | `theme` or a font from the engine's library (Inter, Oswald, Bebas Neue, Righteous, Nunito, Courier Prime, Playfair Display) | a `font-family` value; `theme` gives the option's `family` |
+| `picture` | `""` (your default), a file in your theme, or an owner upload (`/media/<file>`) | `url(...)`. With `"role": "background"` it replaces the theme's background |
+
+Groups (`colors`, `fonts`, `shape`, `background`, `motion`) set where an option shows in the admin. The first style is the default, so make it your theme as designed with `"values": {}`. An owner's value that's no longer usable (an option you removed, a color in the wrong form) is ignored, with a warning in the log, and the style's value used.
 
 ## Layouts
 

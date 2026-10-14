@@ -30,7 +30,7 @@ from services.jb_admin.auth import Auth
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
 from services.jb_admin.registry import Registry
 from services.jb_ui import main as ui
-from services.jb_ui import icons, media, themes
+from services.jb_ui import customize, icons, media, themes
 
 SERVICE_NAME = "jb-admin"
 HERE = Path(__file__).resolve().parent
@@ -48,6 +48,9 @@ DEFAULTS = {
     "drafts_dir": str(DATA / "drafts"),
     "revisions_dir": str(DATA / "revisions"),
     "media_dir": str(DATA / "media"),
+    "owner_styles_dir": str(DATA / "styles"),
+    "style_drafts_dir": str(DATA / "style-drafts"),
+    "style_revisions_dir": str(DATA / "style-revisions"),
     "media_cache_dir": str(DATA / "cache" / "video"),
     "admin_dir": str(DATA / "admin"),
     "module_dirs": [str(REPO_DIR / "services"), str(DATA / "modules")],
@@ -102,6 +105,9 @@ class Admin:
         self.added_dir = self.theme_dirs[-1]
         self.settings_path = Path(cfg["settings_path"])
         self.layouts = Layouts(Path(cfg["owner_layouts_dir"]), Path(cfg["drafts_dir"]), Path(cfg["revisions_dir"]))
+        # The owner's theme options: one "custom" entry per theme, with the
+        # same draft, publish and revisions as layouts.
+        self.styles = Layouts(Path(cfg["owner_styles_dir"]), Path(cfg["style_drafts_dir"]), Path(cfg["style_revisions_dir"]))
         self.media_dir = Path(cfg["media_dir"])
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
@@ -334,6 +340,7 @@ class Admin:
         except theme_store.InstallError as e:
             raise error(400, str(e))
         self.layouts.forget_theme(theme_id)
+        self.styles.forget_theme(theme_id)
         return web.json_response({"ok": True})
 
     # Layouts (the page builder) ------------------------------------------------
@@ -410,6 +417,74 @@ class Admin:
         if theme_id == self.active_theme():
             await self.announce("layouts")
         return web.json_response({"ok": True})
+
+    # Customize: a theme's global options ------------------------------------------
+
+    STYLE = "custom"
+
+    async def get_customize(self, request):
+        theme_id = request.match_info["theme"]
+        theme = self.load_theme(theme_id)
+        published, draft = self.styles.get(theme_id, self.STYLE)
+        return web.json_response({
+            "theme": theme_id,
+            "name": theme.manifest.get("name"),
+            "active": theme_id == self.active_theme(),
+            "options": customize.options_of(theme.manifest),
+            "styles": customize.styles_of(theme.manifest),
+            "groups": list(customize.GROUPS),
+            "fonts": customize.font_library(),
+            "published": published,
+            "draft": draft,
+        })
+
+    async def save_customize_draft(self, request):
+        theme_id = request.match_info["theme"]
+        theme = self.load_theme(theme_id)
+        clean, problems = customize.clean(theme.manifest, theme.root, await json_body(request))
+        if problems:
+            raise error(400, "Some choices can't be used.", problems=problems)
+        self.styles.save_draft(theme_id, self.STYLE, clean)
+        return web.json_response({"ok": True, "saved": clean})
+
+    async def discard_customize_draft(self, request):
+        self.load_theme(request.match_info["theme"])
+        self.styles.discard_draft(request.match_info["theme"], self.STYLE)
+        return web.json_response({"ok": True})
+
+    async def publish_customize(self, request):
+        theme_id = request.match_info["theme"]
+        theme = self.load_theme(theme_id)
+        draft = self.styles.get(theme_id, self.STYLE)[1]
+        if draft is None:
+            raise error(400, "There's nothing new to publish.")
+        _, problems = customize.clean(theme.manifest, theme.root, draft)
+        if problems:
+            raise error(400, "Some choices can't be used.", problems=problems)
+        self.styles.publish(theme_id, self.STYLE)
+        self.log.info("published %s options", theme_id)
+        if theme_id == self.active_theme():
+            await self.announce("customize")
+        return web.json_response({"ok": True})
+
+    async def reset_customize(self, request):
+        theme_id = request.match_info["theme"]
+        self.load_theme(theme_id)
+        self.styles.reset(theme_id, self.STYLE)
+        if theme_id == self.active_theme():
+            await self.announce("customize")
+        return web.json_response({"ok": True})
+
+    async def customize_revisions(self, request):
+        theme_id = request.match_info["theme"]
+        self.load_theme(theme_id)
+        return web.json_response({"revisions": self.styles.list_revisions(theme_id, self.STYLE)})
+
+    async def customize_revision(self, request):
+        data = self.styles.get_revision(request.match_info["theme"], self.STYLE, request.match_info["rev"])
+        if data is None:
+            raise web.HTTPNotFound()
+        return web.json_response({"values": data})
 
     async def theme_pictures(self, request):
         """Pictures inside a theme's folder, for image and logo settings."""
@@ -505,7 +580,9 @@ class Admin:
             folders.append(("draft", Path(self.cfg["drafts_dir"]) / theme_id))
         folders.append(("owner", Path(self.cfg["owner_layouts_dir"]) / theme_id))
         settings = ui.owner_settings(self.raw_settings())
-        return web.json_response(ui.theme_payload(theme, None, settings, folders, self.log))
+        published, draft = self.styles.get(theme_id, self.STYLE)
+        style = (draft if request.query.get("drafts") != "0" and draft is not None else published)
+        return web.json_response(ui.theme_payload(theme, None, settings, folders, self.log, style))
 
     async def theme_file(self, request):
         root = themes.find_theme_dir(request.match_info["theme_id"], self.theme_dirs)
@@ -628,6 +705,13 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_delete("/api/layouts/{theme}/{name}", admin.reset_layout)
     r.add_get("/api/layouts/{theme}/{name}/revisions", admin.revisions)
     r.add_get("/api/layouts/{theme}/{name}/revisions/{rev}", admin.revision)
+    r.add_get("/api/customize/{theme}", admin.get_customize)
+    r.add_put("/api/customize/{theme}/draft", admin.save_customize_draft)
+    r.add_delete("/api/customize/{theme}/draft", admin.discard_customize_draft)
+    r.add_post("/api/customize/{theme}/publish", admin.publish_customize)
+    r.add_delete("/api/customize/{theme}", admin.reset_customize)
+    r.add_get("/api/customize/{theme}/revisions", admin.customize_revisions)
+    r.add_get("/api/customize/{theme}/revisions/{rev}", admin.customize_revision)
     r.add_get("/api/media", admin.list_media)
     r.add_post("/api/media", admin.upload_media)
     r.add_delete("/api/media/{name}", admin.delete_media)

@@ -11,6 +11,7 @@ Anything an owner or builder would want to change lives in data a tool can edit,
 | **Module config** | The builder (installer, SSH, later the admin) | `/etc/juk3-box/<module>.json` | MQTT host, audio device, Last.fm key |
 | **Owner settings** | The owner, from the admin or the cabinet's Settings screen | `/var/lib/juk3-box/settings.json` | Active theme, nav buttons, songs per page |
 | **Owner layouts** | The owner, from the page builder | `/var/lib/juk3-box/layouts/<theme>/<layout>.json` | Their own Home screen |
+| **Owner styles** | The owner, from the admin's Appearance page | `/var/lib/juk3-box/styles/<theme>/custom.json` | Sunset colors with a red button |
 
 Defaults live with the code that uses them, so a missing or partly broken file always falls back to something that works. A module never refuses to start because of an owner setting.
 
@@ -41,11 +42,23 @@ The theme's layouts (`<theme>/layouts/<name>.json`) are its defaults and are nev
 - **Publish** moves the draft over the published layout. **Reset to theme default** deletes the published layout (and the draft).
 - jb-ui validates an owner layout exactly like a theme's (see [theme-format.md](../theme-format.md), Layouts). An owner layout that fails is ignored, with a warning in the log, and the theme's own layout is shown. A bad edit can never blank the cabinet.
 
+## Owner styles
+
+A theme's global options (see [theme-format.md](../theme-format.md), Customize) with the owner's choices, per theme:
+
+```
+/var/lib/juk3-box/styles/<theme-id>/custom.json          published: {"style": "sunset", "values": {"button": "#e0303a"}}
+/var/lib/juk3-box/style-drafts/<theme-id>/custom.json    draft: only the admin preview shows it
+/var/lib/juk3-box/style-revisions/<theme-id>/custom/     every published version, the newest 20
+```
+
+`values` holds only what differs from the style. jb-ui lays them over the theme's defaults and the style; an unusable value is skipped with a warning, never a broken screen.
+
 ## Writing
 
 - Every write is atomic: write a temporary file in the same folder, then rename it over the old one. A reader sees the old file or the new one, never half of one.
 - One writer per file: settings and owner layouts are written only by jb-admin (and later by jb-ui's Settings screen through a jb-admin command, so there is still one writer).
-- After a change the writer publishes the event `jukebox/jb-admin/changed`: `{"what": ["settings" | "layouts" | "theme"], "at": <unix seconds>}`. It is not retained, so a module starting later just reads the files. jb-ui reloads its page on it, which is how a published edit reaches the cabinet.
+- After a change the writer publishes the event `jukebox/jb-admin/changed`: `{"what": ["settings" | "layouts" | "customize" | "theme"], "at": <unix seconds>}`. It is not retained, so a module starting later just reads the files. jb-ui reloads its page on it, which is how a published edit reaches the cabinet.
 
 ## Proving notes
 

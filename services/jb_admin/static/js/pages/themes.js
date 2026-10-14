@@ -39,7 +39,8 @@ function themeCard(t) {
     h('div.theme-actions',
       !t.active && !broken ? button('Activate', { variant: 'primary small', onclick: () => activate(t) }) : null,
       !broken ? button('Preview', { variant: 'small', onclick: () => preview(t) }, 'eye') : null,
-      !broken ? button('Customize', { variant: 'small', onclick: () => { location.hash = `#/builder/home/${t.id}`; } }, 'layout-template') : null,
+      !broken ? button('Customize', { variant: 'small', onclick: () => { location.hash = `#/appearance/${t.id}`; } }, 'swatch-book') : null,
+      !broken ? button('Edit layouts', { variant: 'small', onclick: () => { location.hash = `#/builder/home/${t.id}`; } }, 'layout-template') : null,
       !t.shipped && !t.active ? button('Delete', { variant: 'small danger', onclick: () => remove(t) }, 'trash-2') : null));
 }
 

@@ -2,13 +2,20 @@
   "format": 1,
   "id": "neon",
   "name": "Neon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "JUKE.BOX",
   "license": "GPL-3.0",
   "description": "Dark navy glass over a smoky stage: glowing cards that take their colors from the art.",
-  "styles": ["theme.css"],
+  "styles": [
+    "theme.css"
+  ],
   "fonts": [
-    { "family": "Google Sans Flex", "src": "assets/fonts/GoogleSansFlex.ttf", "weight": "1 1000", "stretch": "25% 151%" }
+    {
+      "family": "Google Sans Flex",
+      "src": "assets/fonts/GoogleSansFlex.ttf",
+      "weight": "1 1000",
+      "stretch": "25% 151%"
+    }
   ],
   "icons": {
     "home": "lucide:house",
@@ -19,6 +26,178 @@
     "shuffle": "lucide:shuffle",
     "shuffle-on": "lucide:list-music"
   },
-  "background": { "type": "image", "src": "assets/background.jpg" },
-  "sizing": { "mode": "fluid" }
+  "background": {
+    "type": "image",
+    "src": "assets/background.jpg"
+  },
+  "sizing": {
+    "mode": "fluid"
+  },
+  "customize": {
+    "options": [
+      {
+        "id": "panel",
+        "label": "Panels",
+        "group": "colors",
+        "type": "color",
+        "default": "#0d1428",
+        "help": "The sidebar, cards, popups and the song board."
+      },
+      {
+        "id": "text",
+        "label": "Text",
+        "group": "colors",
+        "type": "color",
+        "default": "#f2f4ff"
+      },
+      {
+        "id": "secondary",
+        "label": "Artist names",
+        "group": "colors",
+        "type": "color",
+        "default": "#c3ceff",
+        "help": "Artists, subtitles and other second lines."
+      },
+      {
+        "id": "button",
+        "label": "Buttons",
+        "group": "colors",
+        "type": "color",
+        "default": "#3c56e6",
+        "help": "The pill on the active nav button and See All, and the focus glow."
+      },
+      {
+        "id": "highlight",
+        "label": "Highlights and edges",
+        "group": "colors",
+        "type": "color",
+        "default": "#c8d4ff",
+        "help": "Rims, outlines and the soft light in card corners."
+      },
+      {
+        "id": "accent",
+        "label": "Accent",
+        "group": "colors",
+        "type": "color",
+        "default": "#3fd0ff",
+        "help": "Progress bars and glows."
+      },
+      {
+        "id": "accent2",
+        "label": "Second accent",
+        "group": "colors",
+        "type": "color",
+        "default": "#4a7dff",
+        "help": "The other end of the progress bars."
+      },
+      {
+        "id": "cover-colors",
+        "label": "Use cover colors",
+        "group": "colors",
+        "type": "toggle",
+        "default": true,
+        "help": "Cards glow in their own album art's colors. Off: they use the colors above."
+      },
+      {
+        "id": "font",
+        "label": "Font",
+        "group": "fonts",
+        "type": "font",
+        "default": "theme",
+        "family": "\"Google Sans Flex\", sans-serif"
+      },
+      {
+        "id": "roundness",
+        "label": "Corner roundness",
+        "group": "shape",
+        "type": "range",
+        "min": 0,
+        "max": 2,
+        "step": 0.1,
+        "default": 1
+      },
+      {
+        "id": "glass",
+        "label": "Sidebar solidity",
+        "group": "shape",
+        "type": "range",
+        "min": 0.4,
+        "max": 1,
+        "step": 0.05,
+        "default": 0.8,
+        "help": "How much of the background shows through the sidebar."
+      },
+      {
+        "id": "background",
+        "label": "Background picture",
+        "group": "background",
+        "type": "picture",
+        "role": "background",
+        "default": "",
+        "help": "Leave empty for the theme's stage picture."
+      },
+      {
+        "id": "wash",
+        "label": "Background shade",
+        "group": "background",
+        "type": "range",
+        "min": 0,
+        "max": 1.25,
+        "step": 0.05,
+        "default": 1,
+        "help": "How much the background is darkened behind everything."
+      }
+    ],
+    "styles": [
+      {
+        "id": "midnight",
+        "label": "Midnight",
+        "description": "Navy glass and electric blue: the original Neon.",
+        "values": {}
+      },
+      {
+        "id": "sunset",
+        "label": "Sunset",
+        "description": "Deep plum with coral and gold.",
+        "values": {
+          "panel": "#22102a",
+          "text": "#fff4ef",
+          "secondary": "#ffc6b3",
+          "button": "#d9465f",
+          "highlight": "#ffd6c8",
+          "accent": "#ffb347",
+          "accent2": "#ff5f6d"
+        }
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "description": "Dark green glass with mint light.",
+        "values": {
+          "panel": "#06201c",
+          "text": "#effff9",
+          "secondary": "#a6ecd6",
+          "button": "#118a6c",
+          "highlight": "#c4f5e6",
+          "accent": "#4ff0c3",
+          "accent2": "#1fb5a0"
+        }
+      },
+      {
+        "id": "mono",
+        "label": "Mono",
+        "description": "Charcoal and white, one gold accent; cards keep to it.",
+        "values": {
+          "panel": "#151517",
+          "text": "#f4f4f4",
+          "secondary": "#c4c4c4",
+          "button": "#47474d",
+          "highlight": "#e2e2e2",
+          "accent": "#f5c542",
+          "accent2": "#e09b2d",
+          "cover-colors": false
+        }
+      }
+    ]
+  }
 }

@@ -173,6 +173,9 @@ def _check_manifest(m: dict, theme_id: str, root: Path, problems: list[str]) -> 
             isinstance(k, str) and isinstance(v, str) for k, v in theme_icons.items()):
         problems.append('icons must map names to icon names, e.g. {"home": "lucide:house"}')
 
+    from services.jb_ui import customize   # (it uses this module)
+    customize.check(m, root, problems)
+
     sizing = m.get("sizing")
     if sizing is not None:
         if not isinstance(sizing, dict) or sizing.get("mode") not in SIZING_MODES:

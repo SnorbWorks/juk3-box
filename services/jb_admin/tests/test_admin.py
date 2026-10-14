@@ -24,6 +24,9 @@ def config(tmp_path):
             "owner_layouts_dir": str(tmp_path / "layouts"),
             "drafts_dir": str(tmp_path / "drafts"),
             "revisions_dir": str(tmp_path / "revisions"),
+            "owner_styles_dir": str(tmp_path / "styles"),
+            "style_drafts_dir": str(tmp_path / "style-drafts"),
+            "style_revisions_dir": str(tmp_path / "style-revisions"),
             "media_dir": str(tmp_path / "media"),
             "media_cache_dir": str(tmp_path / "cache"),
             "admin_dir": str(tmp_path / "admin"),
@@ -333,3 +336,51 @@ def test_theme_cards_use_a_preview_else_the_background_picture(tmp_path):
     (added / "pic" / "preview.png").write_bytes(b"png")
     info = theme_store.describe("pic", dirs, "")
     assert info["preview"] == "/themes/pic/preview.png" and "_manifest" not in info
+
+
+# Customize
+
+def test_customize_draft_preview_publish_reset(tmp_path):
+    async def check(c, admin):
+        info = await (await c.get("/api/customize/neon")).json()
+        ids = {o["id"] for o in info["options"]}
+        assert {"panel", "button", "font", "cover-colors"} <= ids
+        assert [s["id"] for s in info["styles"]][:2] == ["midnight", "sunset"]
+        assert info["published"] is None and info["draft"] is None
+
+        # Bad values are refused, and nothing is saved.
+        r = await c.put("/api/customize/neon/draft", json={"style": "sunset", "values": {"panel": "red"}}, headers=H)
+        assert r.status == 400 and (await r.json())["problems"]
+        r = await c.put("/api/customize/neon/draft", json={"style": "nope", "values": {}}, headers=H)
+        assert r.status == 400
+        assert (await (await c.get("/api/customize/neon")).json())["draft"] is None
+
+        # Values equal to the style's are dropped: only real changes are kept.
+        r = await c.put("/api/customize/neon/draft", headers=H,
+                        json={"style": "sunset", "values": {"panel": "#22102a", "button": "#123456", "roundness": 0.5}})
+        assert (await r.json())["saved"] == {"style": "sunset", "values": {"button": "#123456", "roundness": 0.5}}
+
+        # The preview shows the draft; the published look is untouched.
+        p = await (await c.get("/api/theme?theme=neon")).json()
+        assert p["customize"]["style"] == "sunset"
+        assert p["customize"]["values"]["button"] == "#123456"
+        assert p["customize"]["values"]["panel"] == "#22102a"
+        assert p["customize"]["values"]["text"] == "#fff4ef"
+        p = await (await c.get("/api/theme?theme=neon&drafts=0")).json()
+        assert p["customize"]["style"] == "midnight" and p["customize"]["values"]["button"] == "#3c56e6"
+
+        assert (await c.post("/api/customize/neon/publish", headers=H)).status == 200
+        assert (tmp_path / "styles" / "neon" / "custom.json").is_file()
+        assert len((await (await c.get("/api/customize/neon/revisions")).json())["revisions"]) == 1
+        assert (await c.post("/api/customize/neon/publish", headers=H)).status == 400   # nothing new
+
+        assert (await c.delete("/api/customize/neon", headers=H)).status == 200
+        assert not (tmp_path / "styles" / "neon" / "custom.json").exists()
+    run(tmp_path, check)
+
+
+def test_customize_needs_a_known_theme(tmp_path):
+    async def check(c, admin):
+        assert (await c.get("/api/customize/..%2Fx")).status in (404, 409)
+        assert (await c.put("/api/customize/nope/draft", json={}, headers=H)).status == 409
+    run(tmp_path, check)
