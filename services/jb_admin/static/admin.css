@@ -504,3 +504,4 @@ body.builder-open .content { min-height: 0; display: flex; }
   body.builder-open .main-col { margin-left: 0; }
 }
 .list.revisions li { padding: 8px 4px; }
+.width-wrap { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; font-size: 13px; }

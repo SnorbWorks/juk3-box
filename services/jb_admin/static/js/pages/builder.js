@@ -253,13 +253,15 @@ function api() {
       S.selected = to;
       renderAll();
     },
-    wrap(path) {
+    // A new container around one node: a column (the toolbar's Wrap), or a
+    // row with the node still selected (Width's "Put it in a row").
+    wrap(path, cls = 'jb-u-column') {
       change(() => {
         const parent = M.at(S.tree, path.slice(0, -1));
         const i = path[path.length - 1];
-        parent.children[i] = { class: 'jb-u-column', children: [parent.children[i]] };
+        parent.children[i] = { class: cls, children: [parent.children[i]] };
       });
-      S.selected = path;
+      S.selected = cls === 'jb-u-row' ? [...path, 0] : path;
       renderAll();
     },
     unwrap(path) {

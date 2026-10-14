@@ -49,7 +49,11 @@ export function createInspector(b) {
         iconButton('trash-2', 'Delete', { class: 'danger', disabled: !canDelete(tree, b.schema, b.layout(), path), onclick: () => b.remove(path) })),
       d.unknown ? h('div.notice.warn', icon('circle-alert'), h('span', `This engine doesn't know the "${node.block}" block, so the cabinet skips it.`)) : null,
       h('div.inspector-body',
-        inRow ? control(node, path, 'span', b.schema.common.span) : null,
+        inRow ? control(node, path, 'span', b.schema.common.span)
+          : isRoot ? null
+          : field('Width', h('div.width-wrap',
+            h('span.muted', 'Its width comes from where it sits. Put it in a row to choose 1/2, 1/3, 2/3…'),
+            button('Put it in a row', { variant: 'small', onclick: () => b.wrap(path, 'jb-u-row') }, 'columns-3'))),
         isContainer(node) ? containerForm(node, path) : blockForm(node, path, def)));
   }
 
