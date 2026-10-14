@@ -461,3 +461,39 @@ def test_library_names_come_from_the_bus_snapshots(tmp_path):
         assert (await (await c.get("/api/library/playlist")).json())["names"] == ["Road trip"]
         assert (await c.get("/api/library/title")).status == 404
     run(tmp_path, check)
+
+
+class RecordingBus:
+    def __init__(self):
+        self.sent = []
+
+    async def publish(self, topic, payload, retain=False):
+        self.sent.append((topic, payload))
+
+
+def test_phones_page_sends_only_phone_commands(tmp_path):
+    async def check(client, admin):
+        admin.live["phones"] = {"phones": [{"mac": "88:51:F2:56:4B:2B", "name": "Shawn's iPhone", "connected": True}]}
+        data = await (await client.get("/api/phones", headers=H)).json()
+        assert data["phones"][0]["name"] == "Shawn's iPhone" and data["pairing"]["state"] == "idle"
+        # No bus: says so instead of pretending.
+        assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 503
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 200
+        assert (await client.post("/api/phones/pair_confirm", json={"ok": True}, headers=H)).status == 200
+        assert (await client.post("/api/phones/forget", json={"mac": "88:51:f2:56:4b:2b"}, headers=H)).status == 200
+        assert (await client.post("/api/phones/forget", json={"mac": "nope"}, headers=H)).status == 400
+        assert (await client.post("/api/phones/reboot", json={}, headers=H)).status == 404
+        assert admin.bus.sent == [
+            ("jukebox/jb-source-phone/cmd", {"action": "pair_start"}),
+            ("jukebox/jb-source-phone/cmd", {"action": "pair_confirm", "ok": True}),
+            ("jukebox/jb-source-phone/cmd", {"action": "forget", "mac": "88:51:F2:56:4B:2B"}),
+        ]
+    run(tmp_path, check)
+
+
+def test_phones_page_needs_the_owner(tmp_path):
+    async def check(client, admin):
+        assert (await client.get("/api/phones", headers=H)).status == 401
+        assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 401
+    run(tmp_path, check, login=False)

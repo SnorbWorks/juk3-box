@@ -568,3 +568,10 @@ body.builder-open .content { min-height: 0; display: flex; }
 .location-choices { display: flex; flex-direction: column; gap: 4px; }
 .location-choice { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
 .location-choice[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* Phones */
+.phone-row { display: flex; gap: 14px; align-items: center; }
+.phone-text { flex: 1; min-width: 0; }
+.phone-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pair-code { font-size: 44px; font-weight: 700; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .phone-row { flex-wrap: wrap; } .phone-actions { width: 100%; justify-content: flex-start; } }

@@ -131,7 +131,13 @@ class Admin:
         "jukebox/jb-source-phone/connected": "phone",
         "jukebox/jb-audio/state": "volume",
         "jukebox/jb-core/queue": "queue",
+        "jukebox/jb-source-phone/phones": "phones",
+        "jukebox/jb-source-phone/pairing": "pairing",
+        "jukebox/jb-source-phone/switch": "phone_switch",
     }
+
+    # What the Phones page may ask jb-source-phone to do.
+    PHONE_ACTIONS = {"pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
 
@@ -308,6 +314,35 @@ class Admin:
             "theme": self.active_theme(),
             "theme_name": self.theme_name(self.active_theme()),
         })
+
+    # Phones -------------------------------------------------------------------
+
+    async def get_phones(self, request):
+        return web.json_response({
+            "phones": (self.live.get("phones") or {}).get("phones") or [],
+            "pairing": self.live.get("pairing") or {"state": "idle"},
+            "switch": self.live.get("phone_switch") or {"state": "idle"},
+            "bus": self.bus is not None,
+        })
+
+    async def phone_action(self, request):
+        action = request.match_info["action"]
+        if action not in self.PHONE_ACTIONS:
+            raise web.HTTPNotFound()
+        body = await json_body(request)
+        cmd = {"action": action}
+        if action in ("switch", "disconnect", "forget"):
+            mac = body.get("mac")
+            if not isinstance(mac, str) or not re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", mac):
+                raise error(400, "Which phone?")
+            cmd["mac"] = mac.upper()
+        if action == "pair_confirm":
+            cmd["ok"] = bool(body.get("ok"))
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-source-phone/cmd", cmd)
+        self.log.info("phones: %s %s", action, cmd.get("mac", ""))
+        return web.json_response({"ok": True})
 
     def theme_name(self, theme_id: str) -> str:
         try:
@@ -755,7 +790,8 @@ class Admin:
 
 def error(status: int, message: str, **extra) -> web.HTTPException:
     cls = {400: web.HTTPBadRequest, 401: web.HTTPUnauthorized, 403: web.HTTPForbidden,
-           404: web.HTTPNotFound, 409: web.HTTPConflict, 429: web.HTTPTooManyRequests}[status]
+           404: web.HTTPNotFound, 409: web.HTTPConflict, 429: web.HTTPTooManyRequests,
+           503: web.HTTPServiceUnavailable}[status]
     return cls(text=json.dumps({"error": message, **extra}), content_type="application/json")
 
 
@@ -833,6 +869,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/password", admin.change_password)
     r.add_get("/api/status", admin.status)
     r.add_get("/api/settings", admin.get_settings)
+    r.add_get("/api/phones", admin.get_phones)
+    r.add_post("/api/phones/{action}", admin.phone_action)
     r.add_put("/api/settings", admin.put_settings)
     r.add_get("/api/themes", admin.list_themes)
     r.add_post("/api/themes/activate", admin.activate_theme)

@@ -1,0 +1,18 @@
+<div class="jb-pairing">
+  <div class="jb-pairing-step" data-if="waiting">
+    <div class="jb-phones-message">On the phone, open <b>Settings</b> → <b>Bluetooth</b> and tap <b data-text="jukebox"></b>.</div>
+    <div class="jb-pairing-countdown" data-text="countdown"></div>
+  </div>
+  <div class="jb-pairing-step" data-if="confirm">
+    <div class="jb-phones-message">Does <b data-text="name"></b> show this code?</div>
+    <div class="jb-pairing-code" data-text="code"></div>
+    <div class="jb-pairing-hint">Tap Pair on the phone too.</div>
+  </div>
+  <div class="jb-pairing-step" data-if="done">
+    <div class="jb-phones-message" data-text="result"></div>
+  </div>
+  <div class="jb-popup-actions" data-if-not="done">
+    <div class="jb-popup-button jb-popup-primary" data-stop="accept" data-if="confirm">Pair</div>
+    <div class="jb-popup-button" data-stop="cancel">Cancel</div>
+  </div>
+</div>

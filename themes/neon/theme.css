@@ -772,9 +772,31 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
 .jb-volume-bar { height: 1.2vh; border-radius: calc(0.6vh * var(--opt-roundness)); background: hsl(from var(--opt-button) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
 .jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent) h s l), hsl(from var(--opt-accent2) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent) h s l / 0.6); }
 .jb-volume-value { margin-top: 1.8vh; font-size: 3.4vh; font-weight: 600; }
-.jb-notice, .jb-phones { font-size: 1.9vh; line-height: 1.5; color: var(--ink-soft); }
-.jb-phones-name { font-size: 2.4vh; font-weight: 620; color: var(--ink); }
-.jb-phones-later { margin-top: 1.6vh; font-size: 1.5vh; color: var(--ink-faint); }
+.jb-notice, .jb-phones, .jb-pairing { font-size: 1.9vh; line-height: 1.5; color: var(--ink-soft); }
+.jb-phones, .jb-pairing { min-width: 52vh; max-width: 70vh; text-align: center; }
+.jb-phone-row { text-align: left; }
+.jb-phones-message b, .jb-pairing b { color: var(--ink); font-weight: 620; }
+.jb-phones-empty { color: var(--ink-faint); }
+
+/* Phones menu: one row per paired phone, then the buttons. */
+.jb-phones-list { display: flex; flex-direction: column; gap: 0.8vh; margin-bottom: 2.4vh; }
+.jb-phone-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 2vw;
+  padding: 1.4vh 1.6vw;
+  border-radius: calc(1.3vh * var(--opt-roundness));
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: transform 180ms var(--ease);
+}
+.jb-phone-name { font-size: 2.2vh; font-weight: 620; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-phone-status { flex: none; font-size: 1.6vh; color: var(--ink-faint); }
+.jb-phone-row[data-connected] .jb-phone-status { color: hsl(from var(--opt-accent) h s calc(l + 10)); }
+.jb-phone-row[data-pressed] { transform: scale(0.98); }
+
+/* Pairing: the code, big, to compare with the phone's. */
+.jb-pairing-code { margin: 2.4vh 0 1vh; font-size: 7vh; font-weight: 700; letter-spacing: 0.08em; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums; }
+.jb-pairing-hint, .jb-pairing-countdown { margin-top: 1.2vh; font-size: 1.5vh; color: var(--ink-faint); }
+.jb-pairing .jb-popup-actions { margin-top: 2.4vh; }
 
 /* The Now Playing overlay: full screen glass, the song large. */
 .jb-popup-frame[data-popup="now-playing"] { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
@@ -827,8 +849,9 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
 /* The power menu (hold Reset): Reboot / Shut down / Cancel, knob-driven. */
 .jb-power { display: flex; flex-direction: column; align-items: center; gap: 2.4vh; padding: 1vh 1vw 0; }
 .jb-power-message { font-size: 2.2vh; color: rgba(255, 255, 255, 0.85); }
-.jb-power-actions { display: flex; gap: 1.2vw; }
-.jb-power-button {
+.jb-power-actions, .jb-popup-actions { display: flex; gap: 1.2vw; }
+.jb-popup-actions { flex-wrap: wrap; justify-content: center; }
+.jb-power-button, .jb-popup-button {
   padding: 1.4vh 2vw;
   border-radius: calc(3vh * var(--opt-roundness));
   font-size: 2vh;
@@ -837,8 +860,18 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   transition: background 260ms var(--ease), box-shadow 260ms var(--ease), transform 180ms var(--ease);
 }
-.jb-power-button[data-focused] { background: rgba(255, 255, 255, 0.2); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.75), 0 0 2.4vh rgba(255, 255, 255, 0.2); }
-.jb-power-button[data-pressed] { transform: scale(0.96); }
+.jb-power-button[data-focused], .jb-popup-button[data-focused] { background: rgba(255, 255, 255, 0.2); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.75), 0 0 2.4vh rgba(255, 255, 255, 0.2); }
+.jb-power-button[data-pressed], .jb-popup-button[data-pressed] { transform: scale(0.96); }
+/* The way forward, and the phone rows, light up in the blue-violet pill
+   like Back and See All; Forget in red, like the power menu's. */
+.jb-popup-button.jb-popup-primary[data-focused], .jb-phone-row[data-focused] {
+  color: #fff;
+  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
+  box-shadow: inset 0 0 1.4vh hsl(from var(--opt-highlight) calc(h - 4.159) s calc(l - 4.902) / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 2.2vh hsl(from var(--opt-button) calc(h + 0.086) calc(s * 1.294) calc(l + 10.784) / 0.55);
+}
+.jb-phone-row[data-focused] .jb-phone-status { color: rgba(255, 255, 255, 0.85); }
+.jb-popup-button.jb-popup-danger[data-focused] { background: rgba(255, 70, 70, 0.32); box-shadow: inset 0 0 0 1.5px rgba(255, 150, 150, 0.85), 0 0 2.4vh rgba(255, 60, 60, 0.35); }
 .jb-power-button[data-stop="reboot"][data-focused],
 .jb-power-button[data-stop="shutdown"][data-focused] { background: rgba(255, 70, 70, 0.32); box-shadow: inset 0 0 0 1.5px rgba(255, 150, 150, 0.85), 0 0 2.4vh rgba(255, 60, 60, 0.35); }
 .jb-power-countdown { font-size: 1.5vh; color: rgba(255, 255, 255, 0.5); }

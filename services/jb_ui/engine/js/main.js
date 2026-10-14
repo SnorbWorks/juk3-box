@@ -9,6 +9,7 @@ import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refo
 import { renderLayout } from './layout.js';
 import { nowPlayingData, playingLibraryTrack } from './np.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
+import { initPhones, openPhones } from './phones.js';
 import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
@@ -266,16 +267,9 @@ function watchPower() {
   });
 }
 
-// The phone badge. Managing phones (connect, switch, forget) comes with
-// the phone connection manager; for now it shows who's connected.
+// The phone badge opens the Phones menu (phones.js).
 function phones() {
-  const p = store.get('phone');
-  openPopup('phones', {
-    title: 'Phone',
-    name: p?.connected ? p.name : 'No phone connected',
-    status: p?.connected ? 'Connected over Bluetooth' : 'Connect your phone in its Bluetooth settings.',
-  });
-  setTimeout(() => closePopup('phones'), NOTICE_MS);
+  openPhones(currentStopKey());
 }
 
 function watchSystem() {
@@ -373,6 +367,7 @@ async function start() {
   await applyTheme(theme);
   store.set('settings', theme.settings);
   initPopups(theme.blocks);
+  initPhones(theme.blocks, html);
   watchSystem();
   watchPower();
   watchAlbumPlay();

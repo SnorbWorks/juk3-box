@@ -31,6 +31,9 @@ const HANDLERS = {
   'jukebox/jb-audio/state': v => store.set('volume', v),
   'jukebox/jb-core/notice': n => store.set('notice', n),
   'jukebox/jb-core/power': p => store.set('power', p),
+  'jukebox/jb-source-phone/phones': p => store.set('phones', p.phones || []),
+  'jukebox/jb-source-phone/pairing': s => store.set('pairing', s),
+  'jukebox/jb-source-phone/switch': s => store.set('phoneSwitch', s),
   'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
   // The owner published a change in the admin (settings, layouts, theme):

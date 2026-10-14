@@ -1,5 +1,8 @@
 <div class="jb-phones">
-  <div class="jb-phones-name" data-text="name"></div>
-  <div class="jb-phones-status" data-text="status"></div>
-  <div class="jb-phones-later">Managing more phones is coming soon.</div>
+  <div class="jb-phones-list" data-slot="phones"></div>
+  <div class="jb-phones-empty" data-if="empty">No phones paired yet.</div>
+  <div class="jb-popup-actions">
+    <div class="jb-popup-button jb-popup-primary" data-stop="pair">Pair a new phone</div>
+    <div class="jb-popup-button" data-stop="close">Close</div>
+  </div>
 </div>

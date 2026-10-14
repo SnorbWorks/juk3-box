@@ -13,7 +13,8 @@ DisplayYesNo, which gives numeric comparison (the code on both screens)
 with phones. The window and the questions are reported on
 jukebox/jb-source-phone/pairing (retained) as
   {"state": "idle" | "waiting" | "confirm" | "paired" | "failed",
-   "until": epoch s (waiting), "code": "123456", "name": phone name, "mac": ...}
+   "until": epoch s and "jukebox": the name to tap (waiting),
+   "code": "123456", "name": phone name, "mac": ...}
 """
 
 import asyncio
@@ -95,6 +96,7 @@ class Pairing:
         self.closer: asyncio.Task | None = None
         self.on_paired = None            # async fn(mac, name), set by main
         self.claim = None                # fn(mac): the jukebox is about to be this phone's
+        self.alias = None                # the name phones see the jukebox by
 
     async def register(self):
         intro = await self.system_bus.introspect(BLUEZ, "/org/bluez")
@@ -103,6 +105,12 @@ class Pairing:
         await manager.call_register_agent(AGENT_PATH, "DisplayYesNo")
         await manager.call_request_default_agent(AGENT_PATH)
         await self._adapter(pairable=False, discoverable=False)
+        try:
+            intro = await self.system_bus.introspect(BLUEZ, ADAPTER)
+            props = self.system_bus.get_proxy_object(BLUEZ, ADAPTER, intro).get_interface("org.freedesktop.DBus.Properties")
+            self.alias = (await props.call_get("org.bluez.Adapter1", "Alias")).value
+        except Exception:
+            self.log.warning("couldn't read the jukebox's Bluetooth name")
         await self.publish({"state": "idle"})
 
     async def _adapter(self, pairable: bool, discoverable: bool):
@@ -121,7 +129,7 @@ class Pairing:
         self.open_until = time.time() + WINDOW_S
         await self._adapter(pairable=True, discoverable=True)
         self.log.info("pairing open for %ds", WINDOW_S)
-        await self.publish({"state": "waiting", "until": self.open_until})
+        await self.publish({"state": "waiting", "until": self.open_until, "jukebox": self.alias})
         if self.closer:
             self.closer.cancel()
         self.closer = asyncio.create_task(self._close_later(WINDOW_S))

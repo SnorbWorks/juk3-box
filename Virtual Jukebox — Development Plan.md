@@ -466,10 +466,10 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 
 One at a time, in this order. Each item points at the phase that holds its detail.
 
-1. **Phone management** (Phase 4, Phase 7 screens, Phase 7b Phones): pairing mode with a code on screen, the phone list (connect, forget), switching phones, the phone badge and the pairing / no-phone / syncing screens. *Started Oct 14.*
+1. **Phone management** (Phase 4, Phase 7 screens, Phase 7b Phones): pairing mode with a code on screen, the phone list (connect, forget), switching phones, the phone badge and the pairing / no-phone / syncing screens. *Built Oct 14 (pairing, list, switch, disconnect, forget, the lock; cabinet Phones menu and admin Phones page); to test with real phones.*
 2. **Pi 5 move**, when the board arrives. The hardware is **chosen in setup** (detected from the board, confirmed by the owner) and the matching drivers and settings follow from it: LEDs (rpi_ws281x doesn't run on the Pi 5; an SPI or PIO driver instead), background video (the Pi 5 decodes HEVC in hardware, not H.264), Wi-Fi power settings, memory limits.
 3. **Android go/no-go**, when an Android phone is at hand: the Phase 3 ten questions again (browse tree, play by item, metadata, art, reconnect). Android's AVRCP browsing differs from iOS's.
-4. **Security before anyone else uses it**: a Change password page in the admin (the owner password is set, but to a placeholder); the core services onto bus logins and anonymous bus access closed (Phase 8 hardening).
+4. **Security before anyone else uses it**: change the owner password from its placeholder (Account → Change password already exists); the core services onto bus logins and anonymous bus access closed (Phase 8 hardening).
 5. **First-boot setup wizard** (Phase 7b): over a Wi-Fi hotspot (Sidecar's lessons); name, Wi-Fi, time and region, hardware (item 2), sources, inputs (buttons, encoder, touch: calibrate and map keys) and the first phone, in one ordered flow.
 6. **Extensions inventory**: everything JUKE.BOX runs that isn't our code (Chromium, BlueZ, PipeWire, Mosquitto, Python packages, fonts, the bundled MQTT.js, web APIs), each with its license and what that obliges. Shown in the admin as **Extensions**, separate from modules. Web services' terms count too: Last.fm's API is non-commercial without an agreement (Weather Mix), Open-Meteo's free plan is non-commercial and needs attribution (Weather).
 7. **Hard drive / USB source** (Phase 9): found and sorted automatically, shown only while a drive is attached.
