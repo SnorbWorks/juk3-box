@@ -351,6 +351,9 @@ function watchKeyboard() {
 }
 
 async function start() {
+  // Tell the kiosk launcher the splash is on screen: it can now show this
+  // window over sway's identical one (deploy/kiosk/kiosk-chromium.sh).
+  if (!PREVIEW) requestAnimationFrame(() => setTimeout(() => fetch('/api/kiosk-painted', { method: 'POST' }).catch(() => {}), 0));
   theme = await fetchTheme();
   await applyTheme(theme);
   store.set('settings', theme.settings);
@@ -368,6 +371,37 @@ async function start() {
   goToRest();
   watchKeyboard();
   connectBus();
+  reveal();
+}
+
+// Startup: the splash (index.html) stays up while the screen fills in
+// behind it -- the library and what's playing arrive over the bus, then the
+// pictures on show load -- and fades out once, instead of the screen
+// visibly building itself piece by piece. Never more than a few seconds:
+// with no phone or no bus it shows what there is.
+const READY_WAIT_MS = 6000;
+const PICTURES_WAIT_MS = 2500;
+
+async function reveal() {
+  const splash = document.getElementById('jb-splash');
+  if (!splash) return;
+  if (PREVIEW) return splash.remove();
+  const until = (ms, ...waits) => Promise.race([Promise.all(waits), new Promise(r => setTimeout(r, ms))]);
+  const arrived = key => new Promise(resolve => {
+    if (store.get(key) !== undefined) return resolve();
+    store.watch(splash, key, v => { if (v !== undefined) resolve(); });
+  });
+  await until(READY_WAIT_MS, arrived('tracks'), arrived('nowPlaying'), arrived('phone'));
+  // Let the blocks draw with that data, then wait for what's on screen.
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 50)));
+  const onScreen = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 0 && r.top < innerHeight; };
+  const pictures = [...document.querySelectorAll('#jb-root img[src]')].filter(onScreen).map(img => img.decode().catch(() => {}));
+  const video = document.querySelector('#jb-background video');
+  if (video && video.readyState < 3) pictures.push(new Promise(r => video.addEventListener('canplay', r, { once: true })));
+  await until(PICTURES_WAIT_MS, ...pictures);
+  splash.classList.add('gone');
+  splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+  setTimeout(() => splash.remove(), 1500);
 }
 
 start().catch(e => {
@@ -376,6 +410,7 @@ start().catch(e => {
   box.id = 'jb-error';
   box.textContent = `JUKE.BOX couldn't start its screen.\n\n${e.message}`;
   document.getElementById('jb-root').replaceChildren(box);
+  document.getElementById('jb-splash')?.remove();
   // Keep trying: jb-ui may simply still be starting.
   setTimeout(() => location.reload(), 5000);
 });

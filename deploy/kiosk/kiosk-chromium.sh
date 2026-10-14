@@ -49,7 +49,13 @@ VIDEO_FEATURES="AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCop
 # The wrapper's useful ones are kept below (ANGLE on GLES, GPU raster, no
 # /dev/shm, no pings). Plus: no extensions or component extensions, no
 # background networking, and one renderer process.
-exec /usr/lib/chromium/chromium \
+# Chromium starts in the background so this script can unveil its window:
+# sway opens it see-through (sway-config) and it stays that way, showing
+# the splash wallpaper, until the page reports it has painted the same
+# splash (jb-ui /api/kiosk-painted), else after 30 s regardless. Then the
+# script waits on Chromium, so getty still restarts the kiosk if it exits.
+STARTED=$(date +%s)
+/usr/lib/chromium/chromium \
   --use-angle=gles \
   --enable-gpu-rasterization \
   --disable-dev-shm-usage \
@@ -75,4 +81,13 @@ exec /usr/lib/chromium/chromium \
   --disable-translate \
   --disable-features=TranslateUI \
   --check-for-update-interval=31536000 \
-  "$@"
+  "$@" &
+CHROMIUM=$!
+for _ in $(seq 1 120); do
+  AT=$(curl -sf "${KIOSK_URL%/}/api/kiosk-painted" | sed -n 's/.*"at": *\([0-9]*\).*/\1/p')
+  [ -n "$AT" ] && [ "$AT" -ge "$STARTED" ] && break
+  kill -0 "$CHROMIUM" 2>/dev/null || break
+  sleep 0.25
+done
+swaymsg '[app_id="^chrom"] opacity 1' >/dev/null 2>&1
+wait "$CHROMIUM"

@@ -150,3 +150,11 @@ def test_media_library_serves_plain_pictures_only(tmp_path):
             assert (await client.get("/media/..%2Fsecret.jpg")).status == 404
             assert (await client.get("/media/nope.jpg")).status == 404
     asyncio.run(go())
+
+
+def test_kiosk_reports_its_splash_painted(tmp_path):
+    async def check(client):
+        assert (await (await client.get("/api/kiosk-painted")).json())["at"] == 0
+        assert (await client.post("/api/kiosk-painted")).status == 200
+        assert (await (await client.get("/api/kiosk-painted")).json())["at"] > 0
+    run(tmp_path, check)

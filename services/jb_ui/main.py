@@ -16,6 +16,7 @@ Routes:
 
 import json
 import re
+import time
 from pathlib import Path
 
 from aiohttp import web
@@ -175,6 +176,11 @@ class App:
         self.theme_dirs = [Path(d) for d in cfg["theme_dirs"]]
         self.settings_path = Path(cfg["settings_path"])
         self.videos = media.VideoOptimizer(Path(cfg["media_cache_dir"]), log)
+        # When the kiosk page last painted its splash (epoch seconds). The
+        # kiosk launcher keeps Chromium's window see-through, showing sway's
+        # identical splash, until this is newer than its own start, so the
+        # empty window Chromium opens with is never seen.
+        self.splash_painted_at = 0.0
 
     def active_theme(self) -> tuple[themes.Theme, dict | None]:
         """The theme to show, plus details if we had to fall back."""
@@ -192,6 +198,11 @@ class App:
 
     async def index(self, request: web.Request) -> web.StreamResponse:
         return web.FileResponse(ENGINE_DIR / "index.html")
+
+    async def kiosk_painted(self, request: web.Request) -> web.Response:
+        if request.method == "POST":
+            self.splash_painted_at = time.time()
+        return web.json_response({"at": self.splash_painted_at})
 
     async def api_theme(self, request: web.Request) -> web.Response:
         theme, fallback = self.active_theme()
@@ -257,6 +268,8 @@ def build_app(cfg: dict, log) -> web.Application:
     app = web.Application(middlewares=[headers])
     app.router.add_get("/", app_state.index)
     app.router.add_get("/api/theme", app_state.api_theme)
+    app.router.add_get("/api/kiosk-painted", app_state.kiosk_painted)
+    app.router.add_post("/api/kiosk-painted", app_state.kiosk_painted)
     app.router.add_get("/themes/{theme_id}/{path:.+}", app_state.theme_file)
     app.router.add_get("/media/{name}", app_state.media_file)
     app.router.add_get("/modules/{module}/{path:.+}", app_state.module_file)

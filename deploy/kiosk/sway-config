@@ -2,11 +2,16 @@
 # Installed on the Pi as ~admin/.config/sway/config (see README.md).
 seat * hide_cursor 1
 
-output * bg #0b0b0f solid_color
+# The JUKE.BOX splash while Chromium starts (it takes ~10 s on a Pi 4); the
+# page shows the same picture until its screen is ready.
+output * bg /opt/juk3-box/services/jb_ui/engine/splash.png fill #0b0b0f
 
 # In --app mode Chromium's Wayland app_id is "chrome-<url>-Default", not
 # "chromium" -- match both.
-for_window [app_id="^chrom"] fullscreen enable, border none
+# Opacity 0: the window opens see-through, so the splash wallpaper shows
+# until the page has painted its own copy of it; the launcher then makes
+# it opaque (kiosk-chromium.sh).
+for_window [app_id="^chrom"] fullscreen enable, border none, opacity 0
 
 # Launcher resets Chromium crash state and starts in app mode (no browser UI flash).
 exec /opt/juk3-box/deploy/kiosk/kiosk-chromium.sh
