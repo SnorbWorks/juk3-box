@@ -29,7 +29,8 @@ from services.jb_admin import schema, theme_store
 from services.jb_admin.auth import Auth
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
 from services.jb_admin.media_lib import MediaLibrary
-from services.jb_admin.registry import Registry
+from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
+from services.jb_admin.registry import Registry, read_manifests
 from services.jb_ui import main as ui
 from services.jb_ui import customize, icons, media, themes
 
@@ -55,6 +56,8 @@ DEFAULTS = {
     "media_cache_dir": str(DATA / "cache" / "video"),
     "admin_dir": str(DATA / "admin"),
     "module_dirs": [str(REPO_DIR / "services"), str(DATA / "modules")],
+    "module_settings_dir": str(DATA / "module-settings"),
+    "modctl_dir": str(DATA / "modctl"),
     "default_theme": "bare",
     "max_upload_mb": 600,
 }
@@ -106,6 +109,10 @@ class Admin:
         self.media = MediaLibrary(self.media_dir, log)
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
+        dirs = [Path(d) for d in cfg["module_dirs"]]
+        self.modules = ModuleManager(
+            dirs[-1], Path(cfg["module_settings_dir"]), Path(cfg["admin_dir"]) / "module-secrets",
+            Path(cfg["modctl_dir"]), lambda: set(read_manifests(dirs[:1])), self.registry, log)
         self.videos = media.VideoOptimizer(Path(cfg["media_cache_dir"]), log)
         self.schema_blocks = json.loads((UI_DIR / "block_schema.json").read_text())
         self.live: dict[str, dict] = {}          # latest state off the bus, for the dashboard
@@ -269,7 +276,11 @@ class Admin:
     # Status ------------------------------------------------------------------
 
     async def systemd_states(self) -> dict[str, str]:
-        units = [m["id"] for m in self.registry.view()]
+        """Each module's unit state, by module id (installed modules run as
+        jbmod-<id>)."""
+        mods = self.registry.view()
+        by_unit = {unit_of(m): m["id"] for m in mods}
+        units = list(by_unit)
         if not units:
             return {}
         try:
@@ -284,7 +295,7 @@ class Admin:
             if line.startswith("Id="):
                 unit = line[3:].removesuffix(".service")
             elif line.startswith("ActiveState=") and unit:
-                states[unit] = line[len("ActiveState="):]
+                states[by_unit.get(unit, unit)] = line[len("ActiveState="):]
         return states
 
     async def status(self, request):
@@ -364,7 +375,21 @@ class Admin:
     # Layouts (the page builder) ------------------------------------------------
 
     async def blocks(self, request):
-        return web.json_response(self.schema_blocks)
+        """The engine's blocks plus the ones modules add (extensions.md)."""
+        from services.jb_ui import module_blocks
+        schema = json.loads(json.dumps(self.schema_blocks))
+        found, _ = module_blocks.module_blocks([Path(d) for d in self.cfg["module_dirs"]])
+        for name, b in found.items():
+            settings = {}
+            if b["shapes"]:
+                settings["shape"] = {"type": "enum", "label": "Layout", "default": "", "options":
+                                     [{"value": "", "label": "Auto: fits its space"}]
+                                     + [{"value": s[0], "label": s[0].replace("-", " ").capitalize()} for s in b["shapes"]]}
+            schema["blocks"][name] = {"label": b["label"], "group": b["group"] if b["group"] in
+                                      {g["id"] for g in schema["groups"]} else "content",
+                                      "icon": "module", "description": b["description"] or f"From the {b['module']} module.",
+                                      "module": b["module"], "settings": settings}
+        return web.json_response(schema)
 
     async def theme_layouts(self, request):
         theme_id = request.match_info["theme"]
@@ -441,6 +466,82 @@ class Admin:
         if field not in ("artist", "album", "genre", "playlist"):
             raise web.HTTPNotFound()
         return web.json_response({"names": self.library_names.get(field, []), "bus": self.bus is not None})
+
+    # Modules (docs/contracts/extensions.md) ---------------------------------------
+
+    def module(self, mid: str) -> dict:
+        found = next((m for m in self.registry.view() if m["id"] == mid and not m.get("undeclared")), None)
+        if not found:
+            raise web.HTTPNotFound()
+        return found
+
+    async def module_info(self, request):
+        m = self.module(request.match_info["id"])
+        states = await self.systemd_states()
+        return web.json_response({**m, "unit": unit_of(m), "state": states.get(m["id"]),
+                                  "review": module_review(m) if m.get("installed") else None,
+                                  "settings": self.modules.get_settings(m["id"], m)})
+
+    async def module_action(self, request):
+        m = self.module(request.match_info["id"])
+        action = request.match_info["action"]
+        if action not in ("start", "stop", "restart"):
+            raise web.HTTPNotFound()
+        if m["id"] == SERVICE_NAME and action == "stop":
+            raise error(400, "The admin can't turn itself off.")
+        try:
+            await self.modules.ctl("unit", action, unit_of(m))
+        except ModuleError as e:
+            raise error(400, str(e))
+        return web.json_response({"ok": True})
+
+    async def module_log(self, request):
+        m = self.module(request.match_info["id"])
+        return web.json_response({"lines": await self.modules.log_lines(unit_of(m))})
+
+    async def put_module_settings(self, request):
+        m = self.module(request.match_info["id"])
+        body = await json_body(request)
+        try:
+            saved = self.modules.save_settings(m["id"], m, body.get("values"))
+        except ModuleError as e:
+            raise error(400, str(e))
+        await self.announce(f"module:{m['id']}")
+        return web.json_response(saved)
+
+    async def upload_module(self, request):
+        tmp = await save_upload(request, Path(self.cfg["admin_dir"]) / "uploads", ".zip", 25 * 1024 * 1024)
+        try:
+            staged = await asyncio.to_thread(self.modules.stage, tmp)
+        except ModuleError as e:
+            raise error(400, str(e))
+        finally:
+            tmp.unlink(missing_ok=True)
+        return web.json_response(staged)
+
+    async def install_module(self, request):
+        body = await json_body(request)
+        try:
+            done = await self.modules.install(str(body.get("token", "")))
+        except ModuleError as e:
+            raise error(400, str(e))
+        await self.announce("modules")
+        return web.json_response(done)
+
+    async def discard_module(self, request):
+        self.modules.discard(request.match_info["token"])
+        return web.json_response({"ok": True})
+
+    async def uninstall_module(self, request):
+        m = self.module(request.match_info["id"])
+        if not m.get("installed"):
+            raise error(400, "The jukebox's own modules can't be removed.")
+        try:
+            await self.modules.uninstall(m["id"])
+        except ModuleError as e:
+            raise error(400, str(e))
+        await self.announce("modules")
+        return web.json_response({"ok": True})
 
     # Customize: a theme's global options ------------------------------------------
 
@@ -599,7 +700,12 @@ class Admin:
         settings = ui.owner_settings(self.raw_settings())
         published, draft = self.styles.get(theme_id, self.STYLE)
         style = (draft if request.query.get("drafts") != "0" and draft is not None else published)
-        return web.json_response(ui.theme_payload(theme, None, settings, folders, self.log, style))
+        return web.json_response(ui.theme_payload(theme, None, settings, folders, self.log, style,
+                                                  [Path(d) for d in self.cfg["module_dirs"]]))
+
+    async def module_file(self, request):
+        return ui.module_file_response([Path(d) for d in self.cfg["module_dirs"]],
+                                       request.match_info["module"], request.match_info["path"])
 
     async def theme_file(self, request):
         root = themes.find_theme_dir(request.match_info["theme_id"], self.theme_dirs)
@@ -723,6 +829,14 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/layouts/{theme}/{name}/revisions", admin.revisions)
     r.add_get("/api/layouts/{theme}/{name}/revisions/{rev}", admin.revision)
     r.add_get("/api/library/{field}", admin.library_list)
+    r.add_post("/api/modules/upload", admin.upload_module)
+    r.add_post("/api/modules/install", admin.install_module)
+    r.add_delete("/api/modules/staged/{token}", admin.discard_module)
+    r.add_get("/api/modules/{id}", admin.module_info)
+    r.add_post("/api/modules/{id}/{action}", admin.module_action)
+    r.add_get("/api/modules/{id}/log", admin.module_log)
+    r.add_put("/api/modules/{id}/settings", admin.put_module_settings)
+    r.add_delete("/api/modules/{id}", admin.uninstall_module)
     r.add_get("/api/customize/{theme}", admin.get_customize)
     r.add_put("/api/customize/{theme}/draft", admin.save_customize_draft)
     r.add_delete("/api/customize/{theme}/draft", admin.discard_customize_draft)
@@ -737,6 +851,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/theme", admin.preview_theme)
     r.add_get("/themes/{theme_id}/{path:.+}", admin.theme_file)
     r.add_get("/media/{name}", admin.media_file)
+    r.add_get("/modules/{module}/{path:.+}", admin.module_file)
     r.add_static("/engine/", UI_DIR / "engine")
 
     async def start_bus(app):

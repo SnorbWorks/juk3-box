@@ -170,7 +170,7 @@ export const ICONS = {
   heading: 'heading', text: 'type', image: 'image', spacer: 'move-vertical', rows: 'rows-3',
   'now-playing': 'disc-3', queue: 'list-music', board: 'grid-2x2', grid: 'layout-grid', info: 'info',
   pager: 'arrow-up-down', logo: 'sparkles', nav: 'navigation', header: 'heading', phone: 'smartphone',
-  screen: 'app-window', shortcut: 'link',
+  screen: 'app-window', shortcut: 'link', module: 'puzzle',
 };
 
 // A Featured block's heading, as the cabinet shows it ("Most Played Album").

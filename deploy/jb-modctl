@@ -1,0 +1,331 @@
+#!/usr/bin/python3
+"""jb-modctl: the one privileged step of module management
+(docs/contracts/extensions.md). It runs as root, started by systemd when
+jb-admin drops a request in REQUESTS (jb-modctl.path); it answers in
+RESPONSES. No sudo rule is involved. Everything it's asked is checked here
+again, and it only ever touches jb-* units, the modules' bus logins and
+their unit files.
+
+    jb-modctl unit start|stop|restart <unit>    a jb-* or jbmod-* service
+    jb-modctl install <module-id>               bus login + topic rules + unit, start it
+    jb-modctl remove <module-id>                stop it, remove all of that
+    jb-modctl setup                             the bus's module listener (once)
+    jb-modctl serve                             answer every waiting request
+
+Installed copy: /usr/local/sbin/jb-modctl, root-owned (deploy.sh copies it
+there; the copy in /opt is the admin user's and is never run as root).
+A request is {"verb": "unit"|"install"|"remove", "args": [...]}; its answer
+{"ok": bool, "out": str, "error": str} has the same file name.
+"""
+
+import json
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+MODULES = Path("/var/lib/juk3-box/modules")
+SETTINGS = Path("/var/lib/juk3-box/module-settings")
+SECRETS = Path("/var/lib/juk3-box/admin/module-secrets")
+CREDS = Path("/etc/juk3-box/modules")
+UNITS = Path("/etc/systemd/system")
+PASSWD = Path("/etc/mosquitto/juk3box-modules.passwd")
+ACL = Path("/etc/mosquitto/juk3box-modules.acl")
+CONF = Path("/etc/mosquitto/conf.d/juk3-box.conf")
+SOCKET_DIR = Path("/run/juk3-box-bus")
+SOCKET = SOCKET_DIR / "modules.sock"
+REQUESTS = Path("/var/lib/juk3-box/modctl/requests")
+RESPONSES = Path("/var/lib/juk3-box/modctl/responses")
+REQ_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}\.json$")
+
+ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+UNIT_RE = re.compile(r"^(jb|jbmod)-[a-z0-9]+(-[a-z0-9]+)*$")
+TOPIC_RE = re.compile(r"^[A-Za-z0-9_./+#-]+$")
+RUN_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*\.py$")
+PRIVATE = "localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10 fc00::/7 fe80::/10"
+
+CONF_TEXT = """# Written by jb-modctl setup (docs/contracts/extensions.md).
+per_listener_settings true
+
+# The open listeners: built-in modules and the cabinet's screen (until the
+# core moves to logins, Phase 8).
+listener 1883
+protocol mqtt
+allow_anonymous true
+
+listener 9001
+protocol websockets
+allow_anonymous true
+
+# Installed modules: their own logins, limited to their own topics.
+listener 0 {socket}
+allow_anonymous false
+password_file {passwd}
+acl_file {acl}
+"""
+
+
+class Refused(Exception):
+    pass
+
+
+def die(msg: str, code: int = 2):
+    raise Refused(msg)
+
+
+def run(*cmd, check=True):
+    return subprocess.run(cmd, check=check, capture_output=True, text=True)
+
+
+def manifest(mid: str) -> dict:
+    if not ID_RE.match(mid):
+        die("bad module id")
+    path = MODULES / mid / "module.json"
+    if path.is_symlink() or not path.is_file():
+        die(f"{mid} isn't installed")
+    try:
+        m = json.loads(path.read_text())
+    except ValueError:
+        die("module.json isn't valid JSON")
+    if m.get("id") != mid or m.get("contract") != 1:
+        die("module.json doesn't match")
+    if not RUN_RE.match(str(m.get("run", ""))) or not (MODULES / mid / m["run"]).is_file():
+        die("module.json's run file is missing")
+    return m
+
+
+def acl_text() -> str:
+    """Topic rules for every installed module, rebuilt from their manifests."""
+    lines = ["# Written by jb-modctl from the installed modules' manifests."]
+    for d in sorted(MODULES.iterdir()) if MODULES.is_dir() else []:
+        if not ID_RE.match(d.name) or not (d / "module.json").is_file():
+            continue
+        try:
+            m = json.loads((d / "module.json").read_text())
+        except ValueError:
+            continue
+        mid = d.name
+        lines += ["", f"user jbmod-{mid}", f"topic readwrite jukebox/{mid}/#", "topic read jukebox/jb-admin/changed"]
+        for t in m.get("subscribes", []):
+            if isinstance(t, str) and TOPIC_RE.match(t) and t.startswith("jukebox/"):
+                lines.append(f"topic read {t}")
+    return "\n".join(lines) + "\n"
+
+
+def write(path: Path, text: str, mode: int, owner: str | None = None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text)
+    os.chmod(tmp, mode)
+    if owner:
+        shutil.chown(tmp, *owner.split(":"))
+    os.replace(tmp, path)
+
+
+def reload_bus():
+    write(ACL, acl_text(), 0o640, "root:mosquitto")
+    run("systemctl", "reload", "mosquitto")
+
+
+def unit_text(mid: str, m: dict) -> str:
+    res = m.get("resources") or {}
+    cpu = max(1, min(100, int(res.get("cpu", 25)))) if isinstance(res.get("cpu", 25), (int, float)) else 25
+    mem = max(32, min(512, int(res.get("memory_mb", 128)))) if isinstance(res.get("memory_mb", 128), (int, float)) else 128
+    net = (m.get("permissions") or {}).get("network", "none")
+    if net == "internet":
+        network = f"RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\nIPAddressDeny={PRIVATE}"
+    else:
+        network = "RestrictAddressFamilies=AF_UNIX\nIPAddressDeny=any"
+    home = MODULES / mid
+    return f"""# Written by jb-modctl install (docs/contracts/extensions.md).
+[Unit]
+Description=juk3-box installed module {mid}
+After=mosquitto.service network-online.target
+Wants=mosquitto.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=juk3-box-modules/{mid}
+WorkingDirectory={home}
+Environment=PYTHONPATH=/opt/juk3-box:{home}
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=JB_MODULE_ID={mid}
+Environment=JB_SETTINGS={SETTINGS}/{mid}.json
+ExecStart=/opt/juk3-box/venv/bin/python {home}/{m["run"]}
+LoadCredential=bus:{CREDS}/{mid}/bus.json
+LoadCredential=secrets:{SECRETS}/{mid}.json
+Restart=on-failure
+RestartSec=5
+Nice=10
+CPUQuota={cpu}%
+MemoryMax={mem}M
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+{network}
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def cmd_unit(action: str, unit: str):
+    if action not in ("start", "stop", "restart") or not UNIT_RE.match(unit):
+        die("usage: unit start|stop|restart <jb-* unit>")
+    if not (UNITS / f"{unit}.service").is_file():
+        die(f"no unit {unit}")
+    run("systemctl", action, f"{unit}.service")
+
+
+def cmd_install(mid: str):
+    m = manifest(mid)
+    if not SOCKET.exists():
+        die("the bus's module listener isn't set up (jb-modctl setup)")
+    user = f"jbmod-{mid}"
+    password = secrets.token_urlsafe(24)
+    if not PASSWD.exists():
+        write(PASSWD, "", 0o640, "root:mosquitto")
+    run("mosquitto_passwd", "-b", str(PASSWD), user, password)
+    os.chmod(PASSWD, 0o640)
+    shutil.chown(PASSWD, "root", "mosquitto")
+    write(CREDS / mid / "bus.json", json.dumps({"socket": str(SOCKET), "username": user, "password": password}), 0o600)
+    for folder, owner in ((SETTINGS, "admin:admin"), (SECRETS, "admin:admin")):
+        folder.mkdir(parents=True, exist_ok=True)
+        f = folder / f"{mid}.json"
+        if not f.exists():
+            write(f, "{}\n", 0o644 if folder == SETTINGS else 0o600, owner)
+    reload_bus()
+    write(UNITS / f"jbmod-{mid}.service", unit_text(mid, m), 0o644)
+    run("systemctl", "daemon-reload")
+    run("systemctl", "enable", "--now", f"jbmod-{mid}.service")
+    run("systemctl", "restart", f"jbmod-{mid}.service")   # a reinstall runs the new files
+    print(f"installed {mid}")
+
+
+def cmd_remove(mid: str):
+    if not ID_RE.match(mid):
+        die("bad module id")
+    unit = UNITS / f"jbmod-{mid}.service"
+    if unit.exists():
+        run("systemctl", "disable", "--now", unit.name, check=False)
+        unit.unlink()
+        run("systemctl", "daemon-reload")
+    if PASSWD.exists():
+        run("mosquitto_passwd", "-D", str(PASSWD), f"jbmod-{mid}", check=False)
+    shutil.rmtree(CREDS / mid, ignore_errors=True)
+    reload_bus()
+    print(f"removed {mid}")
+
+
+def cmd_setup():
+    """Adds the private module listener to the bus, once. If the bus doesn't
+    come back with it, the old setup is restored."""
+    write(Path("/etc/tmpfiles.d/juk3-box-bus.conf"), f"d {SOCKET_DIR} 0755 mosquitto mosquitto -\n", 0o644)
+    run("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/juk3-box-bus.conf")
+    # mosquitto makes the socket owner-only; anyone may connect (a login is
+    # still required), so open it up once it exists.
+    write(Path("/etc/systemd/system/mosquitto.service.d/juk3-box.conf"),
+          "[Service]\nExecStartPost=/bin/sh -c 'for i in $(seq 50); do [ -S %s ] && chmod 666 %s && exit 0; sleep 0.1; done'\n"
+          % (SOCKET, SOCKET), 0o644)
+    if not PASSWD.exists():
+        write(PASSWD, "", 0o640, "root:mosquitto")
+    write(ACL, acl_text(), 0o640, "root:mosquitto")
+    old = CONF.read_text() if CONF.exists() else None
+    write(CONF, CONF_TEXT.format(socket=SOCKET, passwd=PASSWD, acl=ACL), 0o644)
+    run("systemctl", "daemon-reload")
+    run("systemctl", "restart", "mosquitto", check=False)
+    time.sleep(2)
+    if run("systemctl", "is-active", "mosquitto", check=False).stdout.strip() != "active" or not SOCKET.exists():
+        if old is not None:
+            write(CONF, old, 0o644)
+        run("systemctl", "restart", "mosquitto", check=False)
+        die("the bus didn't start with the module listener; restored the old setup", 1)
+    print("bus module listener ready")
+
+
+def dispatch(a: list[str]):
+    if len(a) == 3 and a[0] == "unit":
+        cmd_unit(a[1], a[2])
+    elif len(a) == 2 and a[0] == "install":
+        cmd_install(a[1])
+    elif len(a) == 2 and a[0] == "remove":
+        cmd_remove(a[1])
+    elif a == ["setup"]:
+        cmd_setup()
+    else:
+        die("unknown command")
+
+
+def serve():
+    """Answers every request waiting in REQUESTS (only install, remove and
+    unit; setup stays a by-hand step)."""
+    RESPONSES.mkdir(parents=True, exist_ok=True)
+    shutil.chown(RESPONSES, "admin", "admin")
+    for req in sorted(REQUESTS.glob("*.json")) if REQUESTS.is_dir() else []:
+        answer = {"ok": False, "out": "", "error": ""}
+        try:
+            if not REQ_NAME_RE.match(req.name) or req.is_symlink():
+                raise Refused("bad request file")
+            body = json.loads(req.read_text())
+            verb, args = body.get("verb"), body.get("args", [])
+            if verb not in ("unit", "install", "remove") or not isinstance(args, list) \
+                    or not all(isinstance(x, str) for x in args):
+                raise Refused("bad request")
+            dispatch([verb, *args])
+            answer["ok"] = True
+        except Refused as e:
+            answer["error"] = str(e)
+        except subprocess.CalledProcessError as e:
+            answer["error"] = f"{' '.join(e.cmd[:3])} failed: {(e.stderr or '').strip()[-300:]}"
+        except (ValueError, OSError) as e:
+            answer["error"] = str(e)
+        finally:
+            req.unlink(missing_ok=True)
+        if REQ_NAME_RE.match(req.name):
+            write(RESPONSES / req.name, json.dumps(answer), 0o644, "admin:admin")
+
+
+def main():
+    if os.geteuid() != 0:
+        print("jb-modctl: must run as root", file=sys.stderr)
+        sys.exit(2)
+    a = sys.argv[1:]
+    try:
+        if a == ["serve"]:
+            serve()
+        else:
+            dispatch(a)
+    except Refused as e:
+        print(f"jb-modctl: {e}", file=sys.stderr)
+        sys.exit(2)
+    except subprocess.CalledProcessError as e:
+        print(f"jb-modctl: {' '.join(e.cmd)} failed: {(e.stderr or '').strip()[-300:]}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -2,9 +2,25 @@
 
 import asyncio
 import json
+import os
 import time
+from pathlib import Path
 
 import aiomqtt
+
+
+def module_login() -> dict | None:
+    """An installed module's private bus login (docs/contracts/extensions.md,
+    Bus access): {"socket", "username", "password"}, handed over by systemd
+    as the "bus" credential. None for built-in modules."""
+    folder = os.environ.get("CREDENTIALS_DIRECTORY")
+    if not folder:
+        return None
+    try:
+        login = json.loads((Path(folder) / "bus").read_text())
+    except (OSError, ValueError):
+        return None
+    return login if isinstance(login, dict) and login.get("socket") else None
 
 
 class Bus:
@@ -17,7 +33,13 @@ class Bus:
         self._client: aiomqtt.Client | None = None
 
     async def __aenter__(self):
-        self._client = aiomqtt.Client(self.host, port=self.port)
+        login = module_login()
+        if login:
+            # An installed module: its own login, over the private socket.
+            self._client = aiomqtt.Client(login["socket"], transport="unix",
+                                          username=login.get("username"), password=login.get("password"))
+        else:
+            self._client = aiomqtt.Client(self.host, port=self.port)
         await self._client.__aenter__()
         return self
 

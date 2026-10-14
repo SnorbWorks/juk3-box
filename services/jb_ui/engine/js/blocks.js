@@ -3,6 +3,7 @@
 // Keep the names in step with KNOWN_BLOCKS in services/jb_ui/themes.py.
 
 import { bind, fromTemplate, slot } from './bind.js';
+import { watchTopic } from './bus.js';
 import { SORTS, turnPage, view } from './board.js';
 import { makeStop } from './focus.js';
 import { nowPlayingData } from './np.js';
@@ -57,8 +58,8 @@ const shapeWatch = new ResizeObserver(entries => {
   }
 });
 
-export function fitShape(el, node) {
-  const shapes = SHAPES[node.block];
+export function fitShape(el, node, own) {
+  const shapes = own?.length ? own : SHAPES[node.block];
   if (!shapes) return;
   if (shapes.some(([name]) => name === node.shape)) {
     el.dataset.shape = node.shape;
@@ -398,5 +399,22 @@ function fillConnection(el, node, ctx) {
       icon: ctx.icons.connection,
       moreIcon: ctx.icons.dropdown,
     });
+  });
+}
+
+// A block a module adds (docs/contracts/extensions.md, Blocks): its markup,
+// filled from the latest message on its topic. Icon names in the message
+// become the block's icons. Nothing until data arrives (data-empty).
+export function fillModuleBlock(el, node, ctx, def) {
+  el.append(fromTemplate(def.template));
+  el.dataset.module = def.module;
+  el.toggleAttribute('data-empty', true);
+  watchTopic(def.topic);
+  store.watch(el, `topic:${def.topic}`, data => {
+    el.toggleAttribute('data-empty', !data);
+    if (!data || typeof data !== 'object') return;
+    const icons = {};
+    for (const [k, v] of Object.entries(data)) if (typeof v === 'string' && def.icons[v]) icons[k] = def.icons[v];
+    bind(el, { ...data, ...icons });
   });
 }

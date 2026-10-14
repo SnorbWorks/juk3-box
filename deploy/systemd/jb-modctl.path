@@ -1,0 +1,8 @@
+[Unit]
+Description=juk3-box module manager requests
+
+[Path]
+DirectoryNotEmpty=/var/lib/juk3-box/modctl/requests
+
+[Install]
+WantedBy=multi-user.target

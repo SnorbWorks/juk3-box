@@ -21,7 +21,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, logging as jb_logging
-from services.jb_ui import customize, icons, markup, media, themes
+from services.jb_ui import customize, icons, markup, media, module_blocks, themes
 
 SERVICE_NAME = "jb-ui"
 HERE = Path(__file__).resolve().parent
@@ -51,6 +51,9 @@ DEFAULTS = {
     # The owner's published theme options (colors, fonts...), per theme:
     # <dir>/<theme>/custom.json (written by jb-admin).
     "owner_styles_dir": "/var/lib/juk3-box/styles",
+    # Where modules are, for the blocks they add (docs/contracts/extensions.md):
+    # the built-in ones, then the owner's installed ones.
+    "module_dirs": [str(REPO_DIR / "services"), "/var/lib/juk3-box/modules"],
 }
 
 # Themes are data only: the engine's own scripts run, nothing else does.
@@ -99,7 +102,8 @@ def media_path(folder: Path, name: str) -> Path | None:
 
 
 def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
-                  layout_folders: list, log, style: dict | None = None) -> dict:
+                  layout_folders: list, log, style: dict | None = None,
+                  module_folders: list | None = None) -> dict:
     """What /api/theme sends the engine: the theme (its manifest, layouts
     with the owner's laid over them, block markup, icons, its options with
     the owner's choices) and the owner's settings. Shared with jb-admin's
@@ -111,6 +115,9 @@ def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
     custom, style_problems = customize.resolve(theme.manifest, theme.root, style)
     for p in style_problems:
         log.warning("theme %s options: using the theme's value instead: %s", theme.id, p)
+    blocks_from_modules, block_problems = module_blocks.module_blocks(module_folders or [])
+    for p in block_problems:
+        log.warning("skipping a module block: %s", p)
     base = f"/themes/{theme.id}/"
     return {
         "id": theme.id,
@@ -127,6 +134,7 @@ def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
         "settings": settings,
         "customize": custom,
         "card_icons": icons.card_icons(),
+        "module_blocks": blocks_from_modules,
         "fonts": [{**f, "src": f"/engine/fonts/{f['src']}"} for f in customize.font_library()],
         "warnings": theme.warnings + problems + style_problems,
         "fallback": fallback,
@@ -196,7 +204,12 @@ class App:
         settings = owner_settings(read_settings(self.settings_path))
         folders = [("owner", Path(self.cfg["owner_layouts_dir"]) / theme.id)]
         style = read_settings(Path(self.cfg["owner_styles_dir"]) / theme.id / "custom.json") or None
-        return web.json_response(theme_payload(theme, fallback, settings, folders, self.log, style))
+        return web.json_response(theme_payload(theme, fallback, settings, folders, self.log, style,
+                                               [Path(d) for d in self.cfg["module_dirs"]]))
+
+    async def module_file(self, request: web.Request) -> web.StreamResponse:
+        return module_file_response([Path(d) for d in self.cfg["module_dirs"]],
+                                    request.match_info["module"], request.match_info["path"])
 
     async def media_file(self, request: web.Request) -> web.StreamResponse:
         path = media_path(Path(self.cfg["media_dir"]), request.match_info["name"])
@@ -214,6 +227,17 @@ class App:
         if self.videos.is_video(path):
             path = self.videos.served_path(path)
         return web.FileResponse(path)
+
+
+def module_file_response(folders: list[Path], module_id: str, rel: str) -> web.StreamResponse:
+    """A module's style sheet (wrapped in @scope) or picture, for its blocks."""
+    found = module_blocks.asset(folders, module_id, rel)
+    if found is None:
+        raise web.HTTPNotFound()
+    body, kind = found
+    if isinstance(body, Path):
+        return web.FileResponse(body)
+    return web.Response(body=body, content_type=kind)
 
 
 @web.middleware
@@ -235,6 +259,7 @@ def build_app(cfg: dict, log) -> web.Application:
     app.router.add_get("/api/theme", app_state.api_theme)
     app.router.add_get("/themes/{theme_id}/{path:.+}", app_state.theme_file)
     app.router.add_get("/media/{name}", app_state.media_file)
+    app.router.add_get("/modules/{module}/{path:.+}", app_state.module_file)
     app.router.add_static("/engine/", ENGINE_DIR)
     app.router.add_static("/legacy/", LEGACY_DIR)
     return app

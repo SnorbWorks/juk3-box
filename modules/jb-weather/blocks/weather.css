@@ -1,0 +1,35 @@
+/* Served inside @scope (jb-weather): these rules reach only this block.
+   Themes may restyle it (jb-weather .jbw-...). */
+:scope { display: block; min-width: 0; color: #fff; }
+:scope[data-empty] { display: none; }
+.jbw {
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  padding: 1.4vh 1.6vh;
+  border-radius: 1.6vh;
+  background: rgba(10, 14, 28, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.jbw-icon { display: flex; flex: none; font-size: 4.4vh; color: #ffd36b; }
+.jbw-icon svg { width: 1em; height: 1em; }
+.jbw-now { min-width: 0; }
+.jbw-temp { font-size: 3.6vh; font-weight: 700; line-height: 1; }
+.jbw-condition { margin-top: 0.4vh; font-size: 1.5vh; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jbw-more { margin-left: auto; text-align: right; min-width: 0; }
+.jbw-place { font-size: 1.5vh; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jbw-range { margin-top: 0.4vh; font-size: 1.4vh; opacity: 0.75; }
+
+/* Compact (a sidebar): the icon and the temperature, the place under. */
+:scope[data-shape="compact"] .jbw { flex-wrap: wrap; gap: 1vh; }
+:scope[data-shape="compact"] .jbw-icon { font-size: 3.2vh; }
+:scope[data-shape="compact"] .jbw-temp { font-size: 2.8vh; }
+:scope[data-shape="compact"] .jbw-more { flex-basis: 100%; margin: 0; text-align: left; }
+
+/* Banner (across the screen): bigger. */
+:scope[data-shape="banner"] .jbw { padding: 2.4vh 3vh; gap: 2.6vh; }
+:scope[data-shape="banner"] .jbw-icon { font-size: 7vh; }
+:scope[data-shape="banner"] .jbw-temp { font-size: 6vh; }
+:scope[data-shape="banner"] .jbw-condition { font-size: 2.2vh; }
+:scope[data-shape="banner"] .jbw-place { font-size: 2.4vh; }
+:scope[data-shape="banner"] .jbw-range { font-size: 2vh; }

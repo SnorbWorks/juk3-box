@@ -75,6 +75,7 @@ function context() {
     icons: theme.icons,
     browseImages: theme.browse_images,
     cardIcons: theme.card_icons || {},
+    moduleBlocks: theme.module_blocks || {},
     settings: theme.settings,
     actions,
   };

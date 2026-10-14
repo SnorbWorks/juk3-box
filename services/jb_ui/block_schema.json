@@ -140,7 +140,7 @@
     },
     {
       "label": "Genre shortcuts",
-      "icon": "grid",
+      "icon": "layout-grid",
       "tree": {
         "class": "jb-u-row",
         "children": [

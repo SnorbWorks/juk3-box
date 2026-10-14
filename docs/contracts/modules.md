@@ -31,7 +31,7 @@ Every module ships a manifest beside its code (`services/<package>/module.json`)
 | `name`, `description` | yes / no | For people (the admin's Modules page) |
 | `version` | yes | The module's own version |
 | `roles` | yes | One or more of `source`, `analyzer`, `input`, `output`, `service` (see Roles) |
-| `publishes`, `subscribes` | no | Topics, for the admin and for people reading it. Documentation, not enforcement (yet) |
+| `publishes`, `subscribes` | no | Topics, for the admin and for people reading it. Documentation for built-in modules; **enforced** for installed ones ([extensions.md](extensions.md)) |
 | `commands` | no | Actions its `cmd` topic accepts |
 | `settings` | no | The name of its settings file in `/etc/juk3-box/<name>.json`, if it has one |
 | `essential` | no | `true` if the jukebox can't work without it; the admin warns before restarting it |
@@ -46,6 +46,8 @@ The registry is not a running service. It is a view any module can build from tw
 So the core needs no list of modules, and a new module appears by being installed. The admin (jb-admin) builds this view for its Modules page; `services/jb_admin/registry.py` is the reference implementation.
 
 A module found on the bus with no manifest (a heartbeat from an unknown id) is shown as "undeclared": it works, but the owner can't see what it is.
+
+Installed modules (added by the owner from a zip, sandboxed, with more manifest fields: `run`, `permissions`, `resources`, `owner_settings`, `blocks`) are specified in [extensions.md](extensions.md).
 
 ## Lifecycle
 

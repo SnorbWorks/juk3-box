@@ -24,6 +24,9 @@ export async function applyTheme(theme) {
   const options = applyOptions(theme, theme.customize?.values || {});
   await Promise.all([
     ...(manifest.fonts || []).map(f => loadFont(f, base)),
+    // Module blocks' styles first, so the theme's rules win where both style
+    // the same thing (a theme may restyle a module's block).
+    ...[...new Set(Object.values(theme.module_blocks || {}).map(b => b.style).filter(Boolean))].map(loadStyle),
     ...manifest.styles.map(href => loadStyle(base + href)),
     options,
   ]);

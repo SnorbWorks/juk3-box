@@ -1,0 +1,8 @@
+# Runs jb-modctl's waiting requests as root (docs/contracts/extensions.md).
+# Started by jb-modctl.path when jb-admin drops a request.
+[Unit]
+Description=juk3-box module manager (privileged step)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jb-modctl serve

@@ -17,7 +17,7 @@ def read_manifests(folders: list[Path]) -> dict[str, dict]:
     """Every module.json under `folders` (one level down), by id. A broken
     manifest is listed with its problem rather than hidden."""
     found: dict[str, dict] = {}
-    for folder in folders:
+    for i, folder in enumerate(folders):
         if not folder.is_dir():
             continue
         for path in sorted(folder.glob("*/module.json")):
@@ -31,6 +31,9 @@ def read_manifests(folders: list[Path]) -> dict[str, dict]:
                 continue
             m = dict(m)
             m["roles"] = [r for r in m.get("roles", []) if r in ROLES]
+            # The first folder holds the built-in modules; the rest are
+            # installed (docs/contracts/extensions.md).
+            m["installed"] = i > 0
             found.setdefault(m["id"], m)
     return found
 

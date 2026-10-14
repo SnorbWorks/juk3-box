@@ -553,3 +553,10 @@ body.builder-open .content { min-height: 0; display: flex; }
 .media-progress > div { height: 100%; background: var(--accent); transition: width .4s; }
 .media-error { padding: 0 10px; font-size: 11.5px; text-align: center; color: var(--danger); }
 .picture-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.module-row .roles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.module-pane { min-height: 260px; }
+.kv { display: grid; gap: 6px; font-size: 14px; }
+.small-head { margin: 4px 0 6px; font-size: 14px; }
+.list.review li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+.list.review .icon { color: var(--accent); flex: none; margin-top: 2px; }
+.module-log { max-height: 50vh; overflow: auto; margin: 0; padding: 10px 12px; border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }

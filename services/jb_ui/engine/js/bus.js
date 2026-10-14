@@ -35,7 +35,13 @@ const HANDLERS = {
   'jukebox/jb-input/gesture': knob,
   // The owner published a change in the admin (settings, layouts, theme):
   // start again with it. A preview is reloaded by the admin instead.
-  'jukebox/jb-admin/changed': () => { if (!PREVIEW) location.reload(); },
+  // A module's own settings (what: ["module:<id>"]) are that module's
+  // business: no reload for those.
+  'jukebox/jb-admin/changed': p => {
+    const what = Array.isArray(p?.what) ? p.what : [];
+    if (what.length && what.every(w => String(w).startsWith('module:'))) return;
+    if (!PREVIEW) location.reload();
+  },
 };
 
 // The knob arrives from jb-input, which grabs the keypad exclusively, so
@@ -53,6 +59,15 @@ function activity() {
   store.set('activity', Date.now());
 }
 
+// Topics blocks from modules show (extensions.md): each message is kept
+// in the store as "topic:<topic>".
+const extra = new Set();
+export function watchTopic(topic) {
+  if (extra.has(topic) || HANDLERS[topic]) return;
+  extra.add(topic);
+  if (client?.connected) client.subscribe(topic);
+}
+
 export function publish(topic, payload) {
   if (PREVIEW) return;
   client?.publish(topic, JSON.stringify(payload));
@@ -67,7 +82,7 @@ export function connectBus() {
   client = mqtt.connect(`ws://${location.hostname || 'localhost'}:9001`, { timerVariant: 'native' });
   client.on('connect', () => {
     store.set('bus', 'connected');
-    client.subscribe(Object.keys(HANDLERS));
+    client.subscribe([...Object.keys(HANDLERS), ...extra]);
   });
   client.on('close', () => store.set('bus', 'disconnected'));
   client.on('message', (topic, payload) => {
@@ -75,7 +90,8 @@ export function connectBus() {
     // escaping here can tear down the connection. One bad message should
     // cost that message only.
     try {
-      HANDLERS[topic]?.(JSON.parse(payload.toString()));
+      if (HANDLERS[topic]) HANDLERS[topic](JSON.parse(payload.toString()));
+      else if (extra.has(topic)) store.set(`topic:${topic}`, payload.length ? JSON.parse(payload.toString()) : null);
     } catch (e) {
       console.error('bad message on', topic, e);
     }

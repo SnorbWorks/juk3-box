@@ -74,3 +74,37 @@ Oct 13, 2026
 3. **Extension points: partly real.** Discovery is real: the registry is built from installed manifests plus bus heartbeats, and a module appears by being installed. Owner layouts and settings are data with a single writer and a change event. Not yet: contract versioning checks, a plugin folder in use, per-module owner-settings schemas (waiting for a second module that needs one).
 4. **Backend configuration tool: first version built** as a view onto those contracts: jb-admin (Dashboard, Page Builder, Themes, Media, Settings, Modules, Account). It composes from data: the block schema (`services/jb_ui/block_schema.json`), the settings schema, the module manifests. It knows no specific module beyond the jukebox's own settings.
 5. **Second-case validation: not started.**
+
+## Direction: a platform of many modules
+
+Oct 13, 2026 · agreed with @shawn
+
+The jukebox's modules are the first of many. Expected kinds, beyond the four roles' audio cases: **video** (music videos, visualizers, a camera), **data providers** (weather, scores, calendar, "on this day in music"), **connectors** to a phone or the internet (a phone companion for requests and votes, Spotify, internet radio, Home Assistant, a scrobbler), and more outputs (Bluetooth speakers, multi-room, stage lights). Many will come from other people.
+
+What that demands of the platform, and therefore what every change from now on is checked against:
+
+- **Modules show up, not just run.** A module contributes to what the owner sees and edits through declared **extension points**: blocks for the page builder, (later) whole cabinet screens, and its own settings in the admin. Declarative, never code running in the kiosk page: a module's block is markup plus data off the bus, sanitized like a theme's.
+- **Every module is untrusted by default.** It declares what it needs (bus topics, network, hardware) and the owner approves that list at install, like a phone app's permissions. The platform enforces it: its own bus login limited to its declared topics, its own sandboxed process with no access it didn't ask for, CPU and memory limits.
+- **Secrets and accounts are the platform's job.** API keys and sign-ins are stored by the platform, handed to the module privately, never shown back in full.
+- **The Pi is small.** Every module has a resource budget, shown on its card; modules sleep when unused; playback, the knob and the screen always come first.
+- **Installing is safe to try.** A module that fails its health check (no heartbeat, crashing) right after install or update is turned off and the previous version comes back on its own.
+- **Contracts are versioned** so a module written for one contract version keeps working or is told plainly why not.
+- **Not yet:** a catalog/marketplace (no modules to put in it); per-module Python dependencies (until a module needs one); screens from modules (designed, built with the first module that needs a screen).
+
+The contract for all of this is [extensions.md](contracts/extensions.md).
+
+### First pass (Oct 13, 2026)
+
+1. **The extensions contract** on paper: manifest v2 fields (blocks, owner settings, permissions, resources), the install format and lifecycle.
+2. **Module management in the admin**: restart, turn off/on, the module's log, its settings from its manifest.
+3. **One real module end to end: Weather** (Open-Meteo, no key needed): an installable plugin that contributes a Weather block, has settings, needs the internet.
+4. **Installing modules**: upload a module zip, review what it asks for, install it sandboxed with its own limited bus login, health-checked with automatic removal or rollback; uninstall.
+
+Deliberately left for its own session: putting the **core** services on bus logins and closing anonymous access (Phase 8 hardening). Until then installed modules are fenced off from the open listeners by their sandbox (see extensions.md, Bus access), but anything else on the network can still publish anonymously.
+
+**Result of the first pass (Oct 13, 2026):** all four done and proven on the reference build.
+
+1. [extensions.md](contracts/extensions.md) written: manifest fields, declarative blocks, bus access, sandbox, installing.
+2. Modules page: Manage (overview, settings, log, restart, turn off/on, remove) for every module; privileged steps through `jb-modctl`, a root helper systemd runs on request (no sudo rule).
+3. **Weather** (`modules/jb-weather/`) installed from a zip through the admin: reviewed permissions, sandboxed (`jbmod-jb-weather.service`: its own throwaway user, read-only system, internet but not the local network, 10% CPU, 96 MB), its own bus login on a private socket that refuses anonymous clients, health-checked; its settings change apply live; its Weather block in the page builder fits itself (compact, card, banner). Its style sheet is served inside `@scope`, so it can't touch the rest of the screen.
+4. Next, in order: the core onto bus logins and closing anonymous access (Phase 8); a second real module to test the contract (a phone companion would exercise a module serving its own page); then per-module Python packages and module screens when a module needs them.
