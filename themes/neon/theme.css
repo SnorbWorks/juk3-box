@@ -377,6 +377,7 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
   --c1: var(--jb-art-1, #4f6dff);
   --c2: var(--jb-art-2, #9b7bff);
   --cd: var(--jb-art-dark, #050812);
+  --cm: var(--jb-art-main, #3b4f9a);
   transition: transform 420ms var(--ease);
   will-change: transform;
 }
@@ -430,7 +431,7 @@ jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6,
     radial-gradient(circle at 100% 100%, color-mix(in srgb, color-mix(in srgb, var(--c1) 60%, #e4ebff) 34%, transparent), transparent 26vh);
   box-shadow:
     inset 0 0 2.2vh rgba(205, 218, 255, 0.22),
-    inset 0 0 5vh 0.8vh color-mix(in srgb, var(--cd) 70%, transparent);
+    inset 0 0 5vh 0.8vh color-mix(in srgb, var(--cd) 45%, transparent);
 }
 .jb-card { --lift: 1.055; }
 /* Browse cards are small: they stay noticeably larger while focused. */
@@ -488,18 +489,20 @@ jb-section[type="new"] .jb-card-song::after { bottom: 0; border-radius: var(--ra
 }
 
 /* Feature cards (New, Featured Artist): the art on the right, a blurred
-   copy of it behind the text on the left. */
+   copy of it behind the text on the left, over the art's own dominant
+   color at a mid-light tone (so the card takes the cover's color, light
+   or dark). */
 .feature {
   position: relative;
   height: 41vh;
   overflow: hidden;
   border-radius: inherit;
-  background: var(--navy-1);
+  background: var(--cm);
 }
 /* The soft backdrop is the engine's tiny 24px copy of the art, stretched:
    it looks blurred with no filter. (A live blur filter here stalled the
    video every time the card scaled on focus.) Darkened by opacity over the
-   card's navy, not by a brightness filter. */
+   card's color, not by a brightness filter. */
 .feature-backdrop {
   position: absolute;
   inset: 0;
@@ -531,7 +534,8 @@ jb-section[type="new"] .jb-card-song::after { bottom: 0; border-radius: var(--ra
   width: 48%;
   padding: 0 0 4vh 2.2vw;
   box-sizing: border-box;
-  background: linear-gradient(90deg, rgba(6, 10, 23, 0.7), rgba(6, 10, 23, 0.25) 75%, transparent);
+  /* Just enough shade for white words over a light color. */
+  background: linear-gradient(90deg, rgba(6, 10, 23, 0.42), rgba(6, 10, 23, 0.14) 75%, transparent);
 }
 .feature-kicker { font-size: 1.3vh; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-soft); }
 .feature-title {

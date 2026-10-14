@@ -4,6 +4,8 @@
 //   --jb-art-1     the picture's most vivid color (glows)
 //   --jb-art-2     a second vivid color, different in hue (gradient edges)
 //   --jb-art-dark  the darkened average of its edges (vignettes)
+//   --jb-art-main  its dominant color (the hue covering most of it), at a
+//                  mid-light tone, so any cover gives a usable surface
 // They're set on the closest [data-art-scope] around the image, or the
 // image's parent.
 
@@ -26,6 +28,7 @@ function apply(img) {
   scope.style.setProperty('--jb-art-1', colors.one);
   scope.style.setProperty('--jb-art-2', colors.two);
   scope.style.setProperty('--jb-art-dark', colors.dark);
+  scope.style.setProperty('--jb-art-main', colors.main);
 }
 
 function colorsOf(img) {
@@ -43,10 +46,19 @@ function colorsOf(img) {
 
   const pixels = [];
   let er = 0, eg = 0, eb = 0, en = 0;
+  let ar = 0, ag = 0, ab = 0;
+  // Hue buckets of 30 degrees, weighted by saturation: the fullest is the
+  // dominant color. Greys and near-blacks don't vote.
+  const buckets = Array.from({ length: 12 }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
   for (let i = 0; i < SIZE * SIZE; i++) {
     const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
     const [h, s, v] = hsv(r, g, b);
     pixels.push({ r, g, b, h, score: s * v * (v > 0.15 ? 1 : 0) });
+    ar += r; ag += g; ab += b;
+    if (s > 0.1 && v > 0.12) {
+      const k = buckets[Math.floor(h / 30) % 12];
+      k.w += s; k.r += r * s; k.g += g * s; k.b += b * s;
+    }
     const x = i % SIZE, y = Math.floor(i / SIZE);
     if (x < 3 || y < 3 || x >= SIZE - 3 || y >= SIZE - 3) {
       er += r; eg += g; eb += b; en++;
@@ -62,6 +74,7 @@ function colorsOf(img) {
     one: rgb(boost(one)),
     two: two ? rgb(boost(two)) : `rgb(${lift(one.r)}, ${lift(one.g)}, ${lift(one.b)})`,
     dark: `rgb(${Math.round(er / en * 0.35)}, ${Math.round(eg / en * 0.35)}, ${Math.round(eb / en * 0.35)})`,
+    main: mainColor(buckets, ar / (SIZE * SIZE), ag / (SIZE * SIZE), ab / (SIZE * SIZE)),
   };
   cache.set(url, colors);
   return colors;
@@ -72,6 +85,29 @@ function boost({ r, g, b }) {
   const max = Math.max(r, g, b, 1);
   const k = Math.min(2.2, 235 / max);
   return { r: Math.round(r * k), g: Math.round(g * k), b: Math.round(b * k) };
+}
+
+// The dominant hue's average color (or, for a cover with almost no color,
+// its overall average), brought to a mid-light tone: lightness 0.5-0.62,
+// saturation lifted a little (muted covers still read as a color) to 0.3-0.7.
+function mainColor(buckets, r0, g0, b0) {
+  const top = buckets.reduce((a, k) => (k.w > a.w ? k : a));
+  const colorful = top.w > SIZE * SIZE * 0.015;
+  const [h, s, l] = hsl(colorful ? top.r / top.w : r0, colorful ? top.g / top.w : g0, colorful ? top.b / top.w : b0);
+  const sat = colorful ? Math.min(0.7, Math.max(0.3, s * 1.4)) : Math.min(0.12, s);
+  return `hsl(${Math.round(h)} ${Math.round(sat * 100)}% ${Math.round(Math.min(0.62, Math.max(0.5, l)) * 100)}%)`;
+}
+
+function hsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h;
+  if (max === r) h = 60 * (((g - b) / d) % 6);
+  else if (max === g) h = 60 * ((b - r) / d + 2);
+  else h = 60 * ((r - g) / d + 4);
+  return [(h + 360) % 360, s, l];
 }
 
 function rgb({ r, g, b }) {
