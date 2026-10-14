@@ -137,6 +137,64 @@
           }
         ]
       }
+    },
+    {
+      "label": "Genre shortcuts",
+      "icon": "grid",
+      "tree": {
+        "class": "jb-u-row",
+        "children": [
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "Rock",
+            "label": "Rock",
+            "tint": "#c0392b",
+            "icon": "guitar"
+          },
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "Pop",
+            "label": "Pop",
+            "tint": "#d35400",
+            "icon": "star"
+          },
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "Alternative",
+            "label": "Alternative",
+            "tint": "#16839a",
+            "icon": "zap"
+          },
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "Country",
+            "label": "Country",
+            "tint": "#4f8a3c",
+            "icon": "mic-vocal"
+          },
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "R&B/Soul",
+            "label": "R&B",
+            "tint": "#7b3fa0",
+            "icon": "disc-3"
+          },
+          {
+            "block": "shortcut",
+            "opens": "genre",
+            "which": "Hip-Hop/Rap",
+            "label": "Hip-Hop",
+            "tint": "#c9a227",
+            "icon": "headphones"
+          }
+        ]
+      },
+      "detail": "Six tinted cards that open genres"
     }
   ],
   "container": {
@@ -944,6 +1002,174 @@
         "frame"
       ],
       "unique": true
+    },
+    "shortcut": {
+      "label": "Shortcut",
+      "group": "navigation",
+      "icon": "shortcut",
+      "description": "One card that opens a genre, artist, album, playlist or list. Put several side by side in a row.",
+      "settings": {
+        "opens": {
+          "type": "enum",
+          "label": "Opens",
+          "default": "genre",
+          "required": true,
+          "options": [
+            {
+              "value": "genre",
+              "label": "A genre"
+            },
+            {
+              "value": "artist",
+              "label": "An artist"
+            },
+            {
+              "value": "album",
+              "label": "An album"
+            },
+            {
+              "value": "playlist",
+              "label": "A playlist"
+            },
+            {
+              "value": "list",
+              "label": "A list"
+            }
+          ]
+        },
+        "which": {
+          "type": "library",
+          "label": "Which",
+          "field_from": "opens",
+          "only_when": {
+            "opens": [
+              "genre",
+              "artist",
+              "album",
+              "playlist"
+            ]
+          },
+          "help": "Start typing to pick from your library."
+        },
+        "list": {
+          "type": "enum",
+          "label": "List",
+          "default": "title",
+          "only_when": {
+            "opens": "list"
+          },
+          "options": [
+            {
+              "value": "title",
+              "label": "All Songs"
+            },
+            {
+              "value": "artist",
+              "label": "Artists"
+            },
+            {
+              "value": "album",
+              "label": "Albums"
+            },
+            {
+              "value": "genre",
+              "label": "Genres"
+            },
+            {
+              "value": "playlist",
+              "label": "Playlists"
+            },
+            {
+              "value": "top-100",
+              "label": "Top 100"
+            },
+            {
+              "value": "most-played",
+              "label": "Most Played"
+            }
+          ]
+        },
+        "label": {
+          "type": "text",
+          "label": "Label",
+          "help": "Leave empty to use the name of what it opens."
+        },
+        "picture-from": {
+          "type": "enum",
+          "label": "Picture",
+          "default": "cover",
+          "options": [
+            {
+              "value": "cover",
+              "label": "Cover art"
+            },
+            {
+              "value": "picture",
+              "label": "My picture"
+            }
+          ],
+          "help": "Cover art: a cover from what it opens, changing every half hour."
+        },
+        "picture": {
+          "type": "picture",
+          "label": "My picture",
+          "only_when": {
+            "picture-from": "picture"
+          }
+        },
+        "tint": {
+          "type": "color",
+          "label": "Tint",
+          "help": "A color washed over the picture. Empty for none."
+        },
+        "tint-strength": {
+          "type": "enum",
+          "label": "Tint strength",
+          "default": "medium",
+          "options": [
+            {
+              "value": "light",
+              "label": "Light"
+            },
+            {
+              "value": "medium",
+              "label": "Medium"
+            },
+            {
+              "value": "strong",
+              "label": "Strong"
+            }
+          ]
+        },
+        "icon": {
+          "type": "icon",
+          "label": "Icon",
+          "options": [
+            "guitar",
+            "drum",
+            "piano",
+            "mic-vocal",
+            "disc-3",
+            "music",
+            "music-2",
+            "headphones",
+            "radio",
+            "audio-lines",
+            "star",
+            "heart",
+            "flame",
+            "sparkles",
+            "zap",
+            "moon",
+            "sun",
+            "crown",
+            "palmtree",
+            "party-popper",
+            "list-music",
+            "library"
+          ]
+        }
+      }
     }
   }
 }

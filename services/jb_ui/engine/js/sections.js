@@ -26,23 +26,21 @@ const BROWSE_DESCRIPTIONS = {
   'most-played': 'Played most here',
 };
 
-// A Browse card with no picture from the theme shows a random cover from
-// its own songs. Kept for half an hour (the "featured" tick), so cards
-// don't change on every re-render.
-const browseCovers = new Map();
-let coversFeatured;
+// One of a list, the same for the same key all through each half hour --
+// across re-renders and reloads -- and a different one the next. For
+// pictures that change on their own (Browse and Shortcut covers).
+export function steadyPick(list, key) {
+  if (!list.length) return undefined;
+  const text = `${key}|${Math.floor(Date.now() / 1800000)}`;
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return list[(h >>> 0) % list.length];
+}
 
+// A Browse card with no picture from the theme shows a cover from its own
+// songs, changing every half hour.
 function randomCover(sort) {
-  const featured = store.get('featured');
-  if (featured !== coversFeatured) {
-    browseCovers.clear();
-    coversFeatured = featured;
-  }
-  const pool = coversFor(sort);
-  if (!browseCovers.has(sort) || !pool.includes(browseCovers.get(sort))) {
-    browseCovers.set(sort, pool[Math.floor(Math.random() * pool.length)] || '');
-  }
-  return browseCovers.get(sort);
+  return steadyPick(coversFor(sort), `browse:${sort}`) || '';
 }
 
 function browseCard(sort, ctx) {
@@ -238,4 +236,48 @@ export function fillCollection(el, node, ctx) {
   store.watch(el, 'collection', render);
   store.watch(el, 'tracks', render);
   store.watch(el, 'playlists', render);
+}
+
+// Shortcut: one card that opens a genre, artist, album or playlist, or a
+// list (All Songs, Artists, Top 100...). Its picture is a cover from what
+// it opens (changing every half hour) or the owner's own; a tint, an icon
+// and a label go over it. Settings: opens, which, list, label,
+// picture-from (cover | picture), picture, tint, tint-strength, icon.
+const LIST_LABELS = { title: 'All Songs', artist: 'Artists', album: 'Albums', genre: 'Genres', playlist: 'Playlists', 'top-100': 'Top 100', 'most-played': 'Most Played' };
+
+export function fillShortcut(el, node, ctx) {
+  const card = document.createElement('div');
+  card.className = 'jb-card jb-card-shortcut';
+  card.dataset.artScope = '';
+  card.append(fromTemplate(ctx.blocks.shortcut));
+  el.replaceChildren(card);
+  if (node.tint) el.style.setProperty('--jb-tint', node.tint);
+  const opens = ['genre', 'artist', 'album', 'playlist', 'list'].includes(node.opens) ? node.opens : 'genre';
+  const which = String(node.which || '');
+  const list = LIST_LABELS[node.list] ? node.list : 'title';
+  const open = () => (opens === 'list' ? ctx.actions.openSort(list) : which && ctx.actions.openFilter(opens, which));
+  makeStop(card, `shortcut:${opens}:${opens === 'list' ? list : which}`, open);
+
+  let shown = null;
+  const render = () => {
+    let image = '';
+    if (node['picture-from'] === 'picture' && node.picture) {
+      image = String(node.picture).startsWith('/media/') ? String(node.picture) : ctx.base + node.picture;
+    } else {
+      const tracks = store.get('tracks') || [];
+      const songs = opens === 'list' ? null
+        : opens === 'playlist' ? playlistSongs(tracks, which) : tracks.filter(t => t[opens] === which);
+      const covers = songs ? [...new Set(songs.map(t => t.artwork_url).filter(Boolean))] : coversFor(list);
+      image = sized(steadyPick(covers, `shortcut:${opens}:${which || list}`) || '', 600);
+    }
+    const label = node.label || (opens === 'list' ? LIST_LABELS[list] : which);
+    const sig = image + '|' + label;
+    if (sig === shown) return;
+    shown = sig;
+    const icon = ctx.cardIcons?.[node.icon];
+    bind(card, { image, label, icon, hasIcon: !!icon, openIcon: ctx.icons['card-open'] });
+  };
+  store.watch(el, 'tracks', render);
+  store.watch(el, 'playlists', render);
+  store.watch(el, 'featured', render);
 }

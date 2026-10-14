@@ -20,7 +20,7 @@ REQUIRED_LAYOUTS = ("frame", "home", "all-songs")
 KNOWN_BLOCKS = {
     "screen", "logo", "nav", "now-playing", "up-next", "board",
     "section", "page-info", "pager", "header", "connection", "collection",
-    "heading", "text", "image", "spacer",
+    "heading", "text", "image", "spacer", "shortcut",
 }
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

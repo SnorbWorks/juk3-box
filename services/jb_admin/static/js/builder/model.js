@@ -156,6 +156,9 @@ function describeNode(schema, node) {
     detail = String(node.text ?? '').slice(0, 40);
   } else if (node.block === 'image' || node.block === 'logo') {
     detail = node.src ? String(node.src).split('/').pop() : '';
+  } else if (node.block === 'shortcut') {
+    const list = def.settings.list.options.find(o => o.value === (node.list || 'title'))?.label;
+    detail = node.label || (node.opens === 'list' ? list : node.which) || '';
   } else if (node.block === 'up-next' && node.limit) {
     detail = `${node.limit} songs`;
   }
@@ -167,7 +170,7 @@ export const ICONS = {
   heading: 'heading', text: 'type', image: 'image', spacer: 'move-vertical', rows: 'rows-3',
   'now-playing': 'disc-3', queue: 'list-music', board: 'grid-2x2', grid: 'layout-grid', info: 'info',
   pager: 'arrow-up-down', logo: 'sparkles', nav: 'navigation', header: 'heading', phone: 'smartphone',
-  screen: 'app-window',
+  screen: 'app-window', shortcut: 'link',
 };
 
 // A Featured block's heading, as the cabinet shows it ("Most Played Album").

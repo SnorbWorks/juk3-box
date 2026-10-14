@@ -44,6 +44,24 @@ DEFAULT_ICONS = {
 }
 
 
+# Icons an owner can put on a Shortcut card (the page builder offers these).
+CARD_ICONS = (
+    "guitar", "drum", "piano", "mic-vocal", "disc-3", "music", "music-2", "headphones", "radio",
+    "audio-lines", "star", "heart", "flame", "sparkles", "zap", "moon", "sun", "crown",
+    "palmtree", "party-popper", "list-music", "library",
+)
+
+
+def card_icons() -> dict[str, dict]:
+    """The Shortcut card icons, as the engine draws icons: {name: {"svg"}}."""
+    out = {}
+    for name in CARD_ICONS:
+        s = svg(f"lucide:{name}")
+        if s:
+            out[name] = {"svg": s}
+    return out
+
+
 @lru_cache(maxsize=None)
 def _load_set(prefix: str) -> dict | None:
     if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", prefix):

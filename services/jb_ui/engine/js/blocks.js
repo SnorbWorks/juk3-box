@@ -6,7 +6,7 @@ import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, turnPage, view } from './board.js';
 import { makeStop } from './focus.js';
 import { nowPlayingData } from './np.js';
-import { fillCollection, fillSection } from './sections.js';
+import { fillCollection, fillSection, fillShortcut } from './sections.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
 
@@ -29,6 +29,7 @@ export const BLOCKS = {
   text: fillText('p'),
   image: fillImage,
   spacer: () => {},
+  shortcut: fillShortcut,
 };
 
 // Blocks that fit themselves to the space they're given

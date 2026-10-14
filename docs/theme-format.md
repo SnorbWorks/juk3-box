@@ -205,6 +205,7 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `text` | A paragraph the owner writes (line breaks kept) | `text`, `align` |
 | `image` | A picture from the owner's media library or the theme | `src`, `alt`, `width` (`small`, `medium`, `large`, `full`), `align`, `fit` (`contain`, `cover`) |
 | `spacer` | Empty space | `size` (`small`, `medium`, `large`) |
+| `shortcut` | One card that opens a genre, artist, album, playlist or list; several share a row | `opens` (`genre`, `artist`, `album`, `playlist`, `list`), `which`, `list` (`title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played`), `label`, `picture-from` (`cover`: a cover from what it opens, changing every half hour; `picture`), `picture`, `tint` (a color; also `--jb-tint`), `tint-strength`, `icon`. Markup: `shortcut.html`, classes `.jb-shortcut-*`, inside a `.jb-card` |
 
 The last four are owner content: what the page builder offers for words and pictures of the owner's own. The engine gives them a plain look (`jb-heading > h2`, `jb-text > p`, `jb-image > img`) that suits a dark theme; style them in your CSS like any block. Each takes a full line inside a flex container, like a paragraph.
 

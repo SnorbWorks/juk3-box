@@ -541,3 +541,7 @@ body.builder-open .content { min-height: 0; display: flex; }
 .builder > .cz-body { flex: 1 1 0; }
 .cz-body .bld-center { grid-area: auto; }
 .cz-body { grid-template-rows: minmax(0, 1fr); }
+.icon-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px; }
+.icon-choice { display: flex; align-items: center; justify-content: center; height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-2); cursor: pointer; }
+.icon-choice svg { width: 20px; height: 20px; }
+.icon-choice[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--accent); }

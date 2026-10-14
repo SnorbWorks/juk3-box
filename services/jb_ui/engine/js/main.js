@@ -74,6 +74,7 @@ function context() {
     blocks: theme.blocks,
     icons: theme.icons,
     browseImages: theme.browse_images,
+    cardIcons: theme.card_icons || {},
     settings: theme.settings,
     actions,
   };

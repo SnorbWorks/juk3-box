@@ -63,7 +63,10 @@ export function createInspector(b) {
     if (!def) return null;
     const fields = [];
     for (const [key, spec] of Object.entries(def.settings)) {
-      if (spec.only_when && !Object.entries(spec.only_when).every(([k, v]) => node[k] === v)) continue;
+      if (spec.only_when && !Object.entries(spec.only_when).every(([k, v]) => {
+        const now = node[k] ?? def.settings[k]?.default;
+        return Array.isArray(v) ? v.includes(now) : now === v;
+      })) continue;
       fields.push(control(node, path, key, spec));
     }
     if (!fields.length) fields.push(h('p.muted', 'This block has no settings. Your theme decides how it looks.'));
@@ -165,6 +168,24 @@ export function createInspector(b) {
         }));
         return field(spec.label, chips, help || 'Cards show in the order you pick them.');
       }
+      case 'color': {
+        // A color, or none (empty).
+        const pick = h('input.cz-color', { type: 'color', value: value || '#888888', 'aria-label': spec.label,
+          oninput: () => set(pick.value, `${key}:${path}`, true) });
+        return field(spec.label, h('div.cz-color-row', pick,
+          value ? button('No tint', { variant: 'small ghost', onclick: () => set(undefined) }) : h('span.muted', 'None')), help);
+      }
+      case 'icon': {
+        // One of a few icons, shown as buttons.
+        const grid = h('div.icon-choices', { role: 'group' },
+          h('button.icon-choice', { type: 'button', 'aria-pressed': String(!value), title: 'No icon', onclick: () => set(undefined) }, '—'),
+          spec.options.map(name => {
+            const b2 = h('button.icon-choice', { type: 'button', 'aria-pressed': String(value === name), title: name, onclick: () => set(name) });
+            iconSvgs().then(all => { if (all[name]) b2.innerHTML = all[name]; });
+            return b2;
+          }));
+        return field(spec.label, grid, help);
+      }
       case 'library': {
         // A name from the library (an artist, album...), typed with
         // suggestions. Which list depends on another setting (field_from).
@@ -207,4 +228,11 @@ function segmented(options, current, onPick) {
 
 function shortLabel(label) {
   return label.replace('Grid, ', 'Grid ').replace(' across', '').replace(' gap', '').replace(' padding', '');
+}
+
+// The icons a Shortcut can show, fetched once.
+let iconCache = null;
+function iconSvgs() {
+  iconCache ||= get('/api/icons?names=guitar,drum,piano,mic-vocal,disc-3,music,music-2,headphones,radio,audio-lines,star,heart,flame,sparkles,zap,moon,sun,crown,palmtree,party-popper,list-music,library').catch(() => ({}));
+  return iconCache;
 }
