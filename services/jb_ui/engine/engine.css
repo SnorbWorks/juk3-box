@@ -286,3 +286,68 @@ jb-now-playing[data-shape="banner"] .jb-np-tagline {
   transform: rotate(-14deg);
   opacity: 0.9;
 }
+
+/* Up Next. Compact: the theme's list. Strip: a row of song cards, as many
+   as fit. */
+jb-up-next[data-shape="strip"] { display: block; min-width: 0; overflow: hidden; }
+jb-up-next[data-shape="strip"] .jb-up-next-cards {
+  display: flex;
+  flex-direction: row;
+  gap: 1.6vh;
+  overflow: hidden;
+}
+jb-up-next[data-shape="strip"] .jb-queue-item { flex: 0 0 15vh; min-width: 0; }
+jb-up-next[data-shape="strip"] .jb-queue-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9vh;
+}
+jb-up-next[data-shape="strip"] .jb-queue-cover {
+  order: 0;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 1vh;
+}
+jb-up-next[data-shape="strip"] .jb-queue-position {
+  order: 0;
+  position: absolute;
+  top: 0.7vh;
+  left: 0.7vh;
+  z-index: 1;
+  min-width: 2.4vh;
+  padding: 0.3vh 0.6vh;
+  border-radius: 0.6vh;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 1.3vh;
+  text-align: center;
+}
+jb-up-next[data-shape="strip"] .jb-queue-text { order: 1; min-width: 0; }
+jb-up-next[data-shape="strip"] .jb-queue-title { font-size: 1.6vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+jb-up-next[data-shape="strip"] .jb-queue-artist { font-size: 1.35vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Navigation. Compact: the theme's stacked buttons. Bar: side by side. */
+jb-nav[data-shape="bar"] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8vh 1vh;
+}
+jb-nav[data-shape="bar"] .jb-nav-item { flex: 0 0 auto; }
+
+/* Card rows. Wide: the theme's design. Medium and narrow: fewer cards
+   across, so they keep a usable size -- only inside the page builder's rows,
+   columns and grids; in the theme's own containers its design stands. */
+:is(.jb-u-row, .jb-u-column, .jb-u-grid-2, .jb-u-grid-3, .jb-u-grid-4) > jb-section:is([data-shape="narrow"], [data-shape="medium"]) .jb-section-cards {
+  display: grid;
+  grid-template-columns: repeat(var(--jb-section-across), minmax(0, 1fr));
+}
+jb-section[data-shape="medium"] { --jb-section-across: 4; }
+jb-section[data-shape="medium"][type="new"] { --jb-section-across: 2; }
+jb-section[data-shape="narrow"] { --jb-section-across: 2; }
+jb-section:is([data-shape="narrow"], [data-shape="medium"])[type="featured-artist"],
+jb-section[data-shape="narrow"][type="new"] { --jb-section-across: 1; }

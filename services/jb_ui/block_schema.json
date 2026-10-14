@@ -475,7 +475,7 @@
       "label": "Card row",
       "group": "music",
       "icon": "rows",
-      "description": "A row of song or link cards. Song cards play when clicked; link cards open the board.",
+      "description": "A row of song or link cards. Song cards play when clicked; link cards open the board. Fewer cards across in a narrow space.",
       "presets": [
         {
           "label": "New songs",
@@ -599,6 +599,30 @@
           "type": "bool",
           "label": "Show this row",
           "default": true
+        },
+        "shape": {
+          "type": "enum",
+          "label": "Layout",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Auto: fits its space"
+            },
+            {
+              "value": "narrow",
+              "label": "Narrow"
+            },
+            {
+              "value": "medium",
+              "label": "Medium"
+            },
+            {
+              "value": "wide",
+              "label": "Wide"
+            }
+          ],
+          "help": "Auto picks for you from the space it has: fewer cards across in a narrow space."
         }
       }
     },
@@ -670,7 +694,7 @@
       "label": "Up Next",
       "group": "music",
       "icon": "queue",
-      "description": "The queue.",
+      "description": "The queue. A list in a sidebar; across a wider space, a strip of song cards.",
       "settings": {
         "limit": {
           "type": "int",
@@ -678,6 +702,26 @@
           "min": 1,
           "max": 20,
           "default": 5
+        },
+        "shape": {
+          "type": "enum",
+          "label": "Layout",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Auto: fits its space"
+            },
+            {
+              "value": "compact",
+              "label": "List"
+            },
+            {
+              "value": "strip",
+              "label": "Strip of cards"
+            }
+          ],
+          "help": "Auto picks for you: a list in a sidebar, a strip of cards across a wider space."
         }
       }
     },
@@ -738,8 +782,29 @@
       "label": "Navigation",
       "group": "navigation",
       "icon": "nav",
-      "description": "The buttons you chose in Settings: Home, Volume, Shuffle...",
-      "settings": {}
+      "description": "The buttons you chose in Settings (Home, Volume, Shuffle...). Stacked in a sidebar; a bar across a wider space.",
+      "settings": {
+        "shape": {
+          "type": "enum",
+          "label": "Layout",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Auto: fits its space"
+            },
+            {
+              "value": "compact",
+              "label": "Stacked"
+            },
+            {
+              "value": "bar",
+              "label": "Bar"
+            }
+          ],
+          "help": "Auto picks for you: stacked in a sidebar, a bar across a wider space."
+        }
+      }
     },
     "header": {
       "label": "Screen title",

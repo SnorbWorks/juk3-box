@@ -38,6 +38,9 @@ export const BLOCKS = {
 // its "shape" setting can fix one instead.
 export const SHAPES = {
   'now-playing': [['compact', 0], ['card', 0.42], ['banner', 0.95]],
+  'up-next': [['compact', 0], ['strip', 0.6]],
+  nav: [['compact', 0], ['bar', 0.6]],
+  section: [['narrow', 0], ['medium', 0.7], ['wide', 1.15]],
 };
 
 const shapeWatch = new ResizeObserver(entries => {

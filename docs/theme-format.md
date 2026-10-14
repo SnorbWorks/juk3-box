@@ -207,8 +207,11 @@ Some blocks fit themselves to the space they're given. The engine measures the b
 | Block | Shapes, narrowest first |
 | --- | --- |
 | `now-playing` | `compact` (under 0.42 × screen height): your sidebar design. `card` (from 0.42): cover left, words right. `banner` (from 0.95): words left, cover right, a background and the owner's tagline |
+| `up-next` | `compact`: your sidebar list. `strip` (from 0.6): a row of song cards, as many as fit |
+| `nav` | `compact`: your stacked buttons. `bar` (from 0.6): side by side |
+| `section` | `narrow`, `medium` (from 0.7), `wide` (from 1.15): your design. Narrow and medium show fewer cards across (`--jb-section-across`), and only inside the page builder's rows, columns and grids; in your own containers your design stands |
 
-The narrowest shape is your theme's own design and gets nothing from the engine. For the wider ones the engine has working defaults in `engine.css`; restyle them with the same selectors, e.g. `jb-now-playing[data-shape="banner"] .jb-np-card { ... }`. Now Playing's template has two elements only those shapes show: `.jb-np-backdrop` (the blurred cover, or the owner's picture, with `data-kind` = `cover`, `picture` or `none`) and `.jb-np-tagline`.
+The shape a block was designed for (the sidebar's, or a card row's full width) is your theme's own design and gets nothing from the engine. For the wider ones the engine has working defaults in `engine.css`; restyle them with the same selectors, e.g. `jb-now-playing[data-shape="banner"] .jb-np-card { ... }`. Now Playing's template has two elements only those shapes show: `.jb-np-backdrop` (the blurred cover, or the owner's picture, with `data-kind` = `cover`, `picture` or `none`) and `.jb-np-tagline`.
 
 ### Nav buttons
 
