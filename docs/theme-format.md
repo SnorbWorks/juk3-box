@@ -285,6 +285,7 @@ The engine samples every picture a template shows through `data-src` and sets th
 | `--jb-art-1` | The picture's most vivid color |
 | `--jb-art-2` | A second vivid color, different in hue (or a lighter first color) |
 | `--jb-art-dark` | Its edges' average color, darkened |
+| `--jb-art-main` | Its dominant color (the hue covering most of it), at a mid-light tone: a surface that takes the cover's color, light or dark |
 
 Use them for glows, gradient edges and vignettes that match whatever art a card shows, with a fallback for while it loads: `var(--jb-art-1, #4f6dff)`. Cards, board slots, the Now Playing block and Up Next items are scopes already.
 
