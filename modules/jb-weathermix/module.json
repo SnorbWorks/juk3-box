@@ -3,7 +3,7 @@
   "id": "jb-weathermix",
   "name": "Weather Mix",
   "description": "A mood playlist for the weather, from the songs on the connected phone: Rainy Day Records, Sunny Tunes, Night Drive... It changes with the weather, the time of day and the season.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "roles": [
     "source"
   ],

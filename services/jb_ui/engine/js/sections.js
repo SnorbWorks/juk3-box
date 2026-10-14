@@ -54,14 +54,14 @@ function browseCard(sort, ctx) {
     return {
       label: d?.hook || ctx.moduleBlocks[sort].label,
       description: d?.subtitle || '',
-      image: sized(cover, 600),
+      image: sized(cover, 400),
       open: () => ctx.actions.openList(sort),
     };
   }
   return {
     label: SORTS[sort]?.label || sort,
     description: BROWSE_DESCRIPTIONS[sort] || '',
-    image: ctx.browseImages[sort] || sized(randomCover(sort), 600),
+    image: ctx.browseImages[sort] || sized(randomCover(sort), 400),
     open: () => ctx.actions.openSort(sort),
   };
 }
@@ -176,7 +176,11 @@ function makeCard(item, type, def, template, ctx) {
     const track = toTrack(item);
     // backdrop: a tiny copy that looks blurred when stretched, so themes
     // needn't use a filter (a blur filter on a moving card stalls the Pi).
-    bind(card, { ...track, cover: sized(track.cover, 600), backdrop: sized(track.cover, 24), playIcon: ctx.icons.play });
+    // Covers at the size they're shown: the big New cards 600px, song
+    // tiles (Recents, See All) 300px -- a decoded 600px cover is ~1.4 MB,
+    // and the Pi has 1 GB for everything.
+    const px = type === 'new' ? 600 : 300;
+    bind(card, { ...track, cover: sized(track.cover, px), backdrop: sized(track.cover, 24), playIcon: ctx.icons.play });
     makeStop(card, `card:${type}:${item.title}`, () => ctx.actions.pick(item));
   } else {
     bind(card, { ...item, openIcon: ctx.icons['card-open'] });
@@ -290,7 +294,7 @@ export function fillShortcut(el, node, ctx) {
       const songs = opens === 'list' ? null
         : opens === 'playlist' ? playlistSongs(tracks, which) : tracks.filter(t => t[opens] === which);
       const covers = songs ? [...new Set(songs.map(t => t.artwork_url).filter(Boolean))] : coversFor(list);
-      image = sized(steadyPick(covers, `shortcut:${opens}:${which || list}`) || '', 600);
+      image = sized(steadyPick(covers, `shortcut:${opens}:${which || list}`) || '', 300);
     }
     const label = node.label || (opens === 'list' ? LIST_LABELS[list] : which);
     const sig = image + '|' + label;

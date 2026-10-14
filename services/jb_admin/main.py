@@ -140,7 +140,9 @@ class Admin:
         if not isinstance(payload, dict):
             return
         if topic.endswith("/tracks"):
-            self._library_tracks = [t for t in payload.get("tracks") or [] if isinstance(t, dict)]
+            # Names only: the full snapshot is big, and the Pi short of memory.
+            self._library_tracks = [{k: t.get(k) for k in ("artist", "album", "genre")}
+                                    for t in payload.get("tracks") or [] if isinstance(t, dict)]
         else:
             self._library_playlists = [p for p in payload.get("playlists") or [] if isinstance(p, dict)]
         names = {}

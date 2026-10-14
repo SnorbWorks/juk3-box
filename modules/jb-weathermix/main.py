@@ -190,7 +190,11 @@ async def run():
                             mixer.weather = payload
                             wake.set()
                         elif topic.endswith("jb-library/tracks"):
-                            mixer.library = [t for t in payload.get("tracks") or [] if isinstance(t, dict) and t.get("title")]
+                            # Only what a mix needs (the whole snapshot is ~1,000
+                            # songs with a dozen fields; the Pi is short of memory).
+                            mixer.library = [{"title": t["title"], "artist": t.get("artist"), "genre": t.get("genre")}
+                                             for t in payload.get("tracks") or [] if isinstance(t, dict) and t.get("title")]
+                            del payload
                             wake.set()
                         elif f"module:{MODULE}" in (payload.get("what") or []):
                             rebuild["force"] = True       # its settings changed

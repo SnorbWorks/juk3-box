@@ -775,8 +775,10 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
 /* ---------------------------------------------------------------- Popups */
 
 #jb-popup-layer {
-  background: hsl(from var(--opt-panel) calc(h + 0.556) calc(s * 1.178) calc(l - 6.471) / 0.55);
-  backdrop-filter: blur(2.2vh) saturate(1.2);
+  background: hsl(from var(--opt-panel) calc(h + 0.556) calc(s * 1.178) calc(l - 6.471) / 0.8);
+  /* No live blur: blurring the whole screen behind a popup made the Pi
+     crawl while it was open (every knob turn repainted it) and its extra
+     buffers ran it out of memory (2026-10-14). A deeper dim instead. */
 }
 .jb-popup {
   min-width: 26vw;
