@@ -604,6 +604,11 @@ jb-section[type="new"] .jb-card-song > :first-child::after { bottom: 0; border-r
 
 /* Browse cards: picture above, frosted caption band below. */
 .jb-card-link { flex: 1 1 0; }
+/* New's song cards are feature cards: everything inside is layered, so
+   they share the row's width like link cards. */
+jb-section[type="new"] .jb-card-song { flex: 1 1 0; }
+/* They're narrower than Featured Artist's card: the words get its width. */
+jb-section[type="new"] .feature-text { width: 100%; padding-right: 1.2vw; }
 .jb-link-card {
   position: relative;
   height: 19vh;
