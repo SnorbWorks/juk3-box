@@ -14,18 +14,11 @@
   transition: opacity 700ms ease-out, transform 700ms cubic-bezier(0.4, 0, 0.2, 1); }
 #jb-splash.gone { opacity: 0; transform: scale(0.82); }
 #jb-splash > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-/* The live splash fades in over the still one (identical at first): glows
-   in the logo's colors drift behind it and its bars bounce. Only transform
-   and opacity move, on the GPU, so it keeps going while the page loads. */
+/* The live splash fades in over the still one (identical at first) and the
+   logo's bars bounce. Only transform moves, on the GPU. (Drifting glows
+   behind it delayed the reveal by ~9 s on the Pi 4, so they went.) */
 #jb-splash .live { position: absolute; inset: 0; background: #7a3db0; opacity: 0; transition: opacity 900ms ease; }
 #jb-splash.live-on .live { opacity: 1; }
-#jb-splash .glow { position: absolute; width: 75vmax; height: 75vmax; margin: -37.5vmax 0 0 -37.5vmax; border-radius: 50%; will-change: transform;
-  animation: jb-drift 17s ease-in-out infinite alternate; }
-#jb-splash .g1 { left: 18%; top: 22%; background: radial-gradient(closest-side, rgba(34, 231, 212, 0.42), rgba(34, 231, 212, 0)); }
-#jb-splash .g2 { left: 84%; top: 78%; background: radial-gradient(closest-side, rgba(255, 33, 152, 0.45), rgba(255, 33, 152, 0)); animation-duration: 21s; animation-direction: alternate-reverse; }
-#jb-splash .g3 { left: 22%; top: 88%; background: radial-gradient(closest-side, rgba(255, 153, 89, 0.38), rgba(255, 153, 89, 0)); animation-duration: 19s; animation-delay: -6s; }
-#jb-splash .g4 { left: 80%; top: 12%; background: radial-gradient(closest-side, rgba(0, 104, 166, 0.45), rgba(0, 104, 166, 0)); animation-duration: 23s; animation-delay: -11s; animation-direction: alternate-reverse; }
-@keyframes jb-drift { from { transform: translate(-8vw, -6vh) scale(0.9); } to { transform: translate(9vw, 7vh) scale(1.2); } }
 /* The logo at 576 px wide, as in splash.png: lettering over its bars. */
 #jb-splash .logo { position: absolute; left: 50%; top: 50%; width: 435px; height: 299px; transform: translate(-50%, -50%) scale(1.32414); }
 #jb-splash .logo img { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -60,7 +53,7 @@
 </head>
 <body>
 <div id="jb-splash"><img src="/engine/splash.png" alt="">
-<div class="live"><i class="glow g1"></i><i class="glow g2"></i><i class="glow g3"></i><i class="glow g4"></i>
+<div class="live">
 <div class="logo"><b class="b0" style="left: 83px; color: #22e7d4"></b><b class="b1" style="left: 127px; color: #009da4"></b><b class="b2" style="left: 172px; color: #0068a6"></b><b class="b3" style="left: 217px; color: #4f007e"></b><b class="b4" style="left: 262px; color: #ff2198"></b><b class="b5" style="left: 306px; color: #ff63d5"></b><b class="b6" style="left: 351px; color: #ff9959"></b><img src="/engine/splash-logo.png" alt=""></div></div>
 </div>
 <div id="jb-background"></div>
