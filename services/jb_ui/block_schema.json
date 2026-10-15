@@ -910,7 +910,15 @@
       "group": "music",
       "icon": "grid",
       "description": "All of a row's cards, for the See All screen.",
-      "settings": {},
+      "settings": {
+        "columns": {
+          "type": "int",
+          "label": "Cards per row",
+          "min": 2,
+          "max": 10,
+          "help": "Fewer makes each card bigger. Leave empty for the theme's usual number."
+        }
+      },
       "only_in": [
         "collection"
       ]

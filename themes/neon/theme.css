@@ -373,9 +373,10 @@ jb-section[type="new"][data-empty] + jb-section[type="featured-artist"] .jb-sect
 .jb-see-all[data-pressed] { transform: scale(1.05); }
 
 .jb-section-cards { display: flex; gap: 1.3vw; }
-jb-section[type="recents"] .jb-section-cards,
+jb-section[type="recents"] .jb-section-cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2.6vh 1.3vw; }
+/* See All: --jb-cols is the owner's "Cards per row" (Page Builder, See All cards). */
 jb-collection[data-type="recents"],
-jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2.6vh 1.3vw; }
+jb-collection[data-type="new"] { display: grid; grid-template-columns: repeat(var(--jb-cols, 6), minmax(0, 1fr)); gap: 2.6vh 1.3vw; align-content: start; }
 
 /* ---------------------------------------------------------------- Cards */
 
@@ -579,6 +580,15 @@ jb-section[type="new"] .jb-card-song > :first-child::after { bottom: 0; border-r
 jb-section[type="new"] .jb-card-song { flex: 1 1 0; }
 /* They're narrower than Featured Artist's card: the words get its width. */
 jb-section[type="new"] .feature-text { width: 100%; padding-right: 1.2vw; }
+/* See All's New: the same cards, but square, with everything on them sized
+   to the card (cqi = 1% of its width), so any number per row fits. */
+jb-collection[data-type="new"] .jb-card { container-type: inline-size; }
+jb-collection[data-type="new"] .feature { height: auto; aspect-ratio: 1; }
+jb-collection[data-type="new"] .feature-text { width: 100%; padding: 0 7cqi 8cqi 8cqi; }
+jb-collection[data-type="new"] .feature-kicker { font-size: min(5.5cqi, 1.6vh); }
+jb-collection[data-type="new"] .feature-title { margin-top: 2cqi; font-size: min(12.5cqi, 5.4vh); -webkit-line-clamp: 2; }
+jb-collection[data-type="new"] .feature-sub { margin-top: 3cqi; font-size: min(5.5cqi, 1.7vh); letter-spacing: 0.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+jb-collection[data-type="new"] .feature-play { width: min(17cqi, 6vh); height: min(17cqi, 6vh); margin-top: 5cqi; font-size: min(7.5cqi, 2.6vh); }
 .jb-link-card {
   position: relative;
   height: 19vh;
@@ -750,7 +760,7 @@ jb-collection {
   scrollbar-width: none;
 }
 jb-collection::-webkit-scrollbar { display: none; }
-jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3vh 1.3vw; align-content: start; }
+jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat(var(--jb-cols, 3), minmax(0, 1fr)); gap: 3vh 1.3vw; align-content: start; }
 
 /* ---------------------------------------------------------------- Popups */
 

@@ -249,6 +249,9 @@ export function sectionView(type, ctx) {
 }
 
 export function fillCollection(el, node, ctx) {
+  // The owner's "Cards per row" (the Page Builder): themes size the grid by --jb-cols.
+  const cols = Number(node.columns);
+  if (Number.isInteger(cols) && cols >= 2 && cols <= 10) el.style.setProperty('--jb-cols', String(cols));
   const render = () => {
     const c = store.get('collection');
     const def = SECTIONS[c?.type];
