@@ -30,6 +30,7 @@ from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
 from services.jb_admin.media_lib import MediaLibrary
+from services.jb_admin.drive_import import DriveImport
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
 from services.jb_admin.registry import Registry, read_manifests
 from services.jb_ui import main as ui
@@ -61,6 +62,9 @@ DEFAULTS = {
     "modctl_dir": str(DATA / "modctl"),
     "default_theme": "bare",
     "max_upload_mb": 600,
+    # Pictures and videos imported from USB drives stop once the media
+    # library is this big (drive_import.py); music is never copied.
+    "drive_media_cap_mb": 2048,
 }
 
 COOKIE = "jbadmin"
@@ -108,6 +112,9 @@ class Admin:
         self.styles = Layouts(Path(cfg["owner_styles_dir"]), Path(cfg["style_drafts_dir"]), Path(cfg["style_revisions_dir"]))
         self.media_dir = Path(cfg["media_dir"])
         self.media = MediaLibrary(self.media_dir, log)
+        self.drive_import = DriveImport(self.media, Path(cfg["admin_dir"]) / "drive-imports.json", log,
+                                        cfg["drive_media_cap_mb"], cfg["max_upload_mb"])
+        self._import_task = None
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.extensions = Extensions(REPO_DIR / "deploy" / "extensions.json")
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
@@ -143,6 +150,7 @@ class Admin:
     PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
+    DRIVES_TOPIC = "jukebox/jb-source-local/library"
 
     def heard_library(self, topic: str, payload) -> None:
         """Keeps only the names out of jb-library's snapshots."""
@@ -170,7 +178,7 @@ class Admin:
                     heartbeat = asyncio.create_task(bus.run_heartbeat())
                     try:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
-                                      *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
+                                      self.DRIVES_TOPIC, *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
                             await bus._client.subscribe(topic)
                         messages = bus._iter_messages()
                         async for topic, payload in messages:
@@ -178,6 +186,8 @@ class Admin:
                                 self.live[self.LIVE_TOPICS[topic]] = payload
                             elif topic in self.LIBRARY_TOPICS:
                                 self.heard_library(topic, payload)
+                            elif topic == self.DRIVES_TOPIC:
+                                self.drive_import.heard(payload)
                             else:
                                 self.registry.heard(topic, payload)
                     finally:
@@ -930,10 +940,13 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
         admin.media.resume()
         if bus_enabled:
             admin._bus_task = asyncio.create_task(admin.run_bus())
+            admin._import_task = asyncio.create_task(admin.drive_import.run())
 
     async def stop_bus(app):
         if admin._bus_task:
             admin._bus_task.cancel()
+        if admin._import_task:
+            admin._import_task.cancel()
 
     app.on_startup.append(start_bus)
     app.on_cleanup.append(stop_bus)
