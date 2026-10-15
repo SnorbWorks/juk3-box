@@ -1,7 +1,7 @@
 // Modules: what's installed and running (the platform's module registry),
 // managing each one (restart, turn off/on, its log and settings), and adding
 // modules from a zip: checked, reviewed, installed in a sandbox
-// (docs/contracts/extensions.md).
+// (docs/contracts/installed-modules.md).
 
 import { del, get, post, put, upload } from '../api.js';
 import { button, clear, confirmDialog, field, h, icon, modal, pageHeader, showError, switchControl, toast } from '../ui.js';

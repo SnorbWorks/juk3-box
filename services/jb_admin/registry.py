@@ -32,7 +32,7 @@ def read_manifests(folders: list[Path]) -> dict[str, dict]:
             m = dict(m)
             m["roles"] = [r for r in m.get("roles", []) if r in ROLES]
             # The first folder holds the built-in modules; the rest are
-            # installed (docs/contracts/extensions.md).
+            # installed (docs/contracts/installed-modules.md).
             m["installed"] = i > 0
             found.setdefault(m["id"], m)
     return found

@@ -2,7 +2,7 @@
 
 Everything JUKE.BOX runs or ships that isn't its own code: other people's software, fonts, icons, web services and pictures. The list itself is [deploy/extensions.json](../deploy/extensions.json); the admin's **Extensions** page shows it with the versions installed on the jukebox. Add an entry whenever something new comes in.
 
-*Extensions* here are not *modules*. A module is JUKE.BOX's own kind of add-on (Weather, Weather Mix), described in [contracts/extensions.md](contracts/extensions.md), the contract for how modules extend the platform. That file's name predates this meaning of "extensions" (see Open questions).
+*Extensions* here are not *modules*. A module is an add-on people write and install to give JUKE.BOX new features or new ways to use it (Weather, Weather Mix); its contracts are [contracts/modules.md](contracts/modules.md) and [contracts/installed-modules.md](contracts/installed-modules.md). An extension is someone else's software the system needs at a deeper level, with a license that asks something of us.
 
 Inventory taken Oct 14, 2026, from the reference Pi 4 (Raspberry Pi OS, Debian 13) and the repo. Not legal advice: a lawyer should look over the "before selling" items.
 
@@ -32,7 +32,3 @@ Inventory taken Oct 14, 2026, from the reference Pi 4 (Raspberry Pi OS, Debian 1
 - **Development only:** pytest and grim are listed as *dev*; nothing in the running jukebox needs them.
 - **Keypad firmware:** CircuitPython and Adafruit's HID library (MIT) run on the keypad's Pico; the same notice duty applies if the keypad ships.
 - **Not listed:** Raspberry Pi OS packages JUKE.BOX doesn't use directly (the inventory lists what it relies on). An SD image would ship the whole OS: the "offer source" duty then covers every GPL package in it, which the Raspberry Pi OS source archive answers.
-
-## Open questions
-
-- **The word "extensions."** docs/contracts/extensions.md uses it for how modules extend the platform (blocks, settings, permissions). Renaming that contract (to modules-extending or platform-extensions) would leave "extensions" meaning only third-party software, as on the admin page. Not done: it's referenced from the plan and the code's comments.

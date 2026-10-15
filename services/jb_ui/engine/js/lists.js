@@ -1,4 +1,4 @@
-// Playlists that modules provide (docs/contracts/extensions.md, playlist
+// Playlists that modules provide (docs/contracts/installed-modules.md, playlist
 // blocks): the module publishes {hook, subtitle, icon, songs: [{title,
 // artist}], autoplay_after} on its topic; songs are matched to the library,
 // so only songs the jukebox can play are shown or queued. Opened on the

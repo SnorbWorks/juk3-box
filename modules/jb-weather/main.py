@@ -1,5 +1,5 @@
 """Weather: the weather where the jukebox is, from Open-Meteo (free, no
-account). An installed module (docs/contracts/extensions.md): it runs in
+account). An installed module (docs/contracts/installed-modules.md): it runs in
 its sandbox with only the internet and its own bus login, publishes
 jukebox/jb-weather/current (retained) for its Weather block, and fetches
 again when its settings change or every few minutes.

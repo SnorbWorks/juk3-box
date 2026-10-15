@@ -63,7 +63,7 @@ function activity() {
   store.set('activity', Date.now());
 }
 
-// Topics blocks from modules show (extensions.md): each message is kept
+// Topics blocks from modules show (installed-modules.md): each message is kept
 // in the store as "topic:<topic>".
 const extra = new Set();
 export function watchTopic(topic) {

@@ -1,5 +1,5 @@
 """What an installed module needs from the platform besides the bus
-(docs/contracts/extensions.md): who it is, its owner's settings and
+(docs/contracts/installed-modules.md): who it is, its owner's settings and
 secrets, where to keep its own files.
 
     from shared.module_sdk import module_id, settings, state_dir

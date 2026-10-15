@@ -1,4 +1,4 @@
-"""Finding a place for a "location" setting (docs/contracts/extensions.md,
+"""Finding a place for a "location" setting (docs/contracts/installed-modules.md,
 owner_settings): a ZIP code, or a town with or without its state or
 country, looked up with Open-Meteo's free geocoding. The owner picks one
 of the matches, and exactly that (name, state, coordinates) is saved, so a

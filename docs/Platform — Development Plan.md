@@ -91,7 +91,7 @@ What that demands of the platform, and therefore what every change from now on i
 - **Contracts are versioned** so a module written for one contract version keeps working or is told plainly why not.
 - **Not yet:** a catalog/marketplace (no modules to put in it); per-module Python dependencies (until a module needs one); screens from modules (designed, built with the first module that needs a screen).
 
-The contract for all of this is [extensions.md](contracts/extensions.md).
+The contract for all of this is [installed-modules.md](contracts/installed-modules.md).
 
 ### First pass (Oct 13, 2026)
 
@@ -100,11 +100,11 @@ The contract for all of this is [extensions.md](contracts/extensions.md).
 3. **One real module end to end: Weather** (Open-Meteo, no key needed): an installable plugin that contributes a Weather block, has settings, needs the internet.
 4. **Installing modules**: upload a module zip, review what it asks for, install it sandboxed with its own limited bus login, health-checked with automatic removal or rollback; uninstall.
 
-Deliberately left for its own session: putting the **core** services on bus logins and closing anonymous access (Phase 8 hardening). Until then installed modules are fenced off from the open listeners by their sandbox (see extensions.md, Bus access), but anything else on the network can still publish anonymously.
+Deliberately left for its own session: putting the **core** services on bus logins and closing anonymous access (Phase 8 hardening). Until then installed modules are fenced off from the open listeners by their sandbox (see installed-modules.md, Bus access), but anything else on the network can still publish anonymously.
 
 **Result of the first pass (Oct 13, 2026):** all four done and proven on the reference build.
 
-1. [extensions.md](contracts/extensions.md) written: manifest fields, declarative blocks, bus access, sandbox, installing.
+1. [installed-modules.md](contracts/installed-modules.md) written: manifest fields, declarative blocks, bus access, sandbox, installing.
 2. Modules page: Manage (overview, settings, log, restart, turn off/on, remove) for every module; privileged steps through `jb-modctl`, a root helper systemd runs on request (no sudo rule).
 3. **Weather** (`modules/jb-weather/`) installed from a zip through the admin: reviewed permissions, sandboxed (`jbmod-jb-weather.service`: its own throwaway user, read-only system, internet but not the local network, 10% CPU, 96 MB), its own bus login on a private socket that refuses anonymous clients, health-checked; its settings change apply live; its Weather block in the page builder fits itself (compact, card, banner). Its style sheet is served inside `@scope`, so it can't touch the rest of the screen.
 4. Next, in order: the core onto bus logins and closing anonymous access (Phase 8); a second real module to test the contract (a phone companion would exercise a module serving its own page); then per-module Python packages and module screens when a module needs them.

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """jb-modctl: the one privileged step of module management
-(docs/contracts/extensions.md). It runs as root, started by systemd when
+(docs/contracts/installed-modules.md). It runs as root, started by systemd when
 jb-admin drops a request in REQUESTS (jb-modctl.path); it answers in
 RESPONSES. No sudo rule is involved. Everything it's asked is checked here
 again, and it only ever touches jb-* units, the modules' bus logins and
@@ -48,7 +48,7 @@ TOPIC_RE = re.compile(r"^[A-Za-z0-9_./+#-]+$")
 RUN_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*\.py$")
 PRIVATE = "localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.64.0.0/10 fc00::/7 fe80::/10"
 
-CONF_TEXT = """# Written by jb-modctl setup (docs/contracts/extensions.md).
+CONF_TEXT = """# Written by jb-modctl setup (docs/contracts/installed-modules.md).
 per_listener_settings true
 
 # The open listeners: built-in modules and the cabinet's screen (until the
@@ -141,7 +141,7 @@ def unit_text(mid: str, m: dict) -> str:
     else:
         network = "RestrictAddressFamilies=AF_UNIX\nIPAddressDeny=any"
     home = MODULES / mid
-    return f"""# Written by jb-modctl install (docs/contracts/extensions.md).
+    return f"""# Written by jb-modctl install (docs/contracts/installed-modules.md).
 [Unit]
 Description=juk3-box installed module {mid}
 After=mosquitto.service network-online.target

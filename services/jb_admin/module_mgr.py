@@ -1,4 +1,4 @@
-"""Managing modules from the admin (docs/contracts/extensions.md): turning
+"""Managing modules from the admin (docs/contracts/installed-modules.md): turning
 them on and off, their logs and settings, and installing modules from a
 zip -- checked, reviewed by the owner, sandboxed, health-checked, rolled
 back if they fail.

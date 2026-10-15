@@ -10,7 +10,7 @@ import aiomqtt
 
 
 def module_login() -> dict | None:
-    """An installed module's private bus login (docs/contracts/extensions.md,
+    """An installed module's private bus login (docs/contracts/installed-modules.md,
     Bus access): {"socket", "username", "password"}, handed over by systemd
     as the "bus" credential. None for built-in modules."""
     folder = os.environ.get("CREDENTIALS_DIRECTORY")

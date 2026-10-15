@@ -1,5 +1,5 @@
 """Weather Mix: a mood playlist for the weather, from the songs on the
-connected phone (docs/contracts/extensions.md, playlist blocks).
+connected phone (docs/contracts/installed-modules.md, playlist blocks).
 
 It listens to Weather and the library. When the mood changes (the weather,
 the time of day or the season; checked at most hourly), or once a day so

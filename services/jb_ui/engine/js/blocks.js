@@ -431,7 +431,7 @@ function fillConnection(el, node, ctx) {
   });
 }
 
-// A block a module adds (docs/contracts/extensions.md, Blocks): its markup,
+// A block a module adds (docs/contracts/installed-modules.md, Blocks): its markup,
 // filled from the latest message on its topic. Icon names in the message
 // become the block's icons. Nothing until data arrives (data-empty).
 export function fillModuleBlock(el, node, ctx, def) {

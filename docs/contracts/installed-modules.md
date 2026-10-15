@@ -1,4 +1,4 @@
-# Contract: extensions (installed modules, blocks, settings, permissions)
+# Contract: installed modules (blocks, settings, permissions)
 
 Version 1 · **Draft, proven against one module (Weather)** · Oct 13, 2026
 

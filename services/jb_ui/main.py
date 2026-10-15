@@ -52,7 +52,7 @@ DEFAULTS = {
     # The owner's published theme options (colors, fonts...), per theme:
     # <dir>/<theme>/custom.json (written by jb-admin).
     "owner_styles_dir": "/var/lib/juk3-box/styles",
-    # Where modules are, for the blocks they add (docs/contracts/extensions.md):
+    # Where modules are, for the blocks they add (docs/contracts/installed-modules.md):
     # the built-in ones, then the owner's installed ones.
     "module_dirs": [str(REPO_DIR / "services"), "/var/lib/juk3-box/modules"],
 }

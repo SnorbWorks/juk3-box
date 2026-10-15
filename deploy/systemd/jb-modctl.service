@@ -1,4 +1,4 @@
-# Runs jb-modctl's waiting requests as root (docs/contracts/extensions.md).
+# Runs jb-modctl's waiting requests as root (docs/contracts/installed-modules.md).
 # Started by jb-modctl.path when jb-admin drops a request.
 [Unit]
 Description=juk3-box module manager (privileged step)

@@ -423,7 +423,7 @@ class Admin:
     # Layouts (the page builder) ------------------------------------------------
 
     async def blocks(self, request):
-        """The engine's blocks plus the ones modules add (extensions.md)."""
+        """The engine's blocks plus the ones modules add (installed-modules.md)."""
         from services.jb_ui import module_blocks
         schema = json.loads(json.dumps(self.schema_blocks))
         found, _ = module_blocks.module_blocks([Path(d) for d in self.cfg["module_dirs"]])
@@ -520,7 +520,7 @@ class Admin:
             raise web.HTTPNotFound()
         return web.json_response({"names": self.library_names.get(field, []), "bus": self.bus is not None})
 
-    # Modules (docs/contracts/extensions.md) ---------------------------------------
+    # Modules (docs/contracts/installed-modules.md) ---------------------------------------
 
     def module(self, mid: str) -> dict:
         found = next((m for m in self.registry.view() if m["id"] == mid and not m.get("undeclared")), None)

@@ -1,4 +1,4 @@
-"""Blocks that modules add to the page builder (docs/contracts/extensions.md,
+"""Blocks that modules add to the page builder (docs/contracts/installed-modules.md,
 Blocks): markup and style files plus data off the bus. No module code runs
 in the cabinet's page: the markup is sanitized like a theme's, and the
 style is served inside an @scope of the module's own blocks, so it can't

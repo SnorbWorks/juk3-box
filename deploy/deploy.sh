@@ -41,7 +41,7 @@ rsync -az --delete \
 
 ssh_pi "cd $REMOTE_DIR && python3 -m venv --system-site-packages venv 2>/dev/null; venv/bin/pip install -q -r deploy/requirements.txt"
 
-# The module manager's privileged step (docs/contracts/extensions.md): a
+# The module manager's privileged step (docs/contracts/installed-modules.md): a
 # root-owned copy of jb-modctl, run by systemd when jb-admin drops a request
 # in its own private folder. No sudo rule involved.
 ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/local/sbin/jb-modctl && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-modctl.service $REMOTE_DIR/deploy/systemd/jb-modctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/modctl $DATA_DIR/modctl/requests && systemctl daemon-reload && systemctl enable --now jb-modctl.path >/dev/null 2>&1"
