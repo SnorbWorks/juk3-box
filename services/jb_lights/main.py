@@ -26,11 +26,22 @@ import traceback
 from services.jb_lights import accent_lights, levelbar
 from services.jb_lights.audio_feed import AudioFeed
 from services.jb_lights.themes import buttons_theme1
+from shared import hardware
 
 BAR_THEME = 0   # idle white; while music plays the analyzer's mood picks the look
 
 
 def main():
+    # rpi_ws281x can't drive a Pi 5's LEDs (its I/O goes through the RP1
+    # chip). Until the Pi 5 driver is in (docs/pi5-move.md), stay idle
+    # rather than fail and be restarted over and over.
+    board = hardware.board()
+    if board["family"] == "pi5":
+        print(f"jb-lights: {board['model']} needs the Pi 5 LED driver, not built yet; lights stay off", flush=True)
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+        threading.Event().wait()
+        return
+
     failed = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(1 if failed.is_set() else 0))
 
