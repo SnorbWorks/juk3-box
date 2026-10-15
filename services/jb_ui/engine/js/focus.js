@@ -31,20 +31,22 @@ export function makeStop(el, key, onClick) {
 // changes the order: everything in a scrolling area moves together.)
 let cachedRing = null;
 let watching = false;
+let observer = null;
+const drop = () => { cachedRing = null; };
+// Text changing (the song's elapsed time, twice a second) moves no stop:
+// only elements coming or going, or the attributes above, count.
+const elementsOnly = records => {
+  for (const r of records) {
+    if (r.type === 'attributes') return drop();
+    for (const n of [...r.addedNodes, ...r.removedNodes]) if (n.nodeType === 1) return drop();
+  }
+};
 
 function watchForChanges() {
   if (watching) return;
   watching = true;
-  const drop = () => { cachedRing = null; };
-  // Text changing (the song's elapsed time, twice a second) moves no stop:
-  // only elements coming or going, or the attributes above, count.
-  const elementsOnly = records => {
-    for (const r of records) {
-      if (r.type === 'attributes') return drop();
-      for (const n of [...r.addedNodes, ...r.removedNodes]) if (n.nodeType === 1) return drop();
-    }
-  };
-  new MutationObserver(elementsOnly).observe(document.body, {
+  observer = new MutationObserver(elementsOnly);
+  observer.observe(document.body, {
     childList: true, subtree: true, attributes: true,
     attributeFilter: ['hidden', 'data-empty', 'data-shape', 'data-focus-stop', 'data-modal', 'data-cards', 'data-parked'],
   });
@@ -53,6 +55,9 @@ function watchForChanges() {
 
 export function ring() {
   watchForChanges();
+  // Changes made just now (a popup's buttons, a moment ago in this same
+  // task) haven't been reported yet: collect them before trusting the cache.
+  elementsOnly(observer.takeRecords());
   if (cachedRing && (!cachedRing.stops.length || cachedRing.stops[0].isConnected)) return cachedRing;
   cachedRing = workOutRing();
   return cachedRing;
@@ -99,7 +104,8 @@ function workOutOrder() {
 }
 
 function stopsIn(group) {
-  const stops = [...group.querySelectorAll('[data-focus-stop]')]
+  // A group can itself be the stop (the phone badge: one block, one stop).
+  const stops = [...(group.matches('[data-focus-stop]') ? [group] : []), ...group.querySelectorAll('[data-focus-stop]')]
     .map(el => ({ el, r: el.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && r.height > 0);
   // Reading order: rows top to bottom, left to right within a row. Two

@@ -1,16 +1,17 @@
-// Phones: the phones paired with the jukebox, which one has it, and pairing
-// a new one. Same actions as the cabinet's Phones menu; jb-source-phone
-// does the work. One phone has the jukebox at a time.
+// Bluetooth: on or off, the phones paired with the jukebox, which one has
+// it, and pairing a new one. The same as the cabinet's Settings >
+// Bluetooth; jb-source-phone does the work. One phone has the jukebox at a
+// time.
 
 import { get, post } from '../api.js';
-import { button, clear, confirmDialog, emptyState, h, icon, pageHeader, showError, toast } from '../ui.js';
+import { button, clear, confirmDialog, emptyState, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
 
 let timer = null;
 let body = null;
 
 export async function show(main) {
   body = h('div.stack');
-  clear(main, pageHeader('Phones', 'Phones paired with the jukebox. One has the jukebox at a time; switch or pair here or on the cabinet.'), body);
+  clear(main, pageHeader('Bluetooth', 'Phones paired with the jukebox. One has the jukebox at a time; switch or pair here or on the cabinet.'), body);
   await refresh();
   timer = setInterval(refresh, 1500);
 }
@@ -101,12 +102,32 @@ function pairingCard(s) {
   return h('div.card', head, h('div.card-pad.stack', content));
 }
 
+function powerCard(on, phones) {
+  const toggle = switchControl(on, async value => {
+    const connected = phones.find(p => p.connected);
+    if (!value && connected && !await confirmDialog('Turn Bluetooth off?',
+      `${connected.name} disconnects and the music stops. No phone can connect until it's back on.`,
+      { confirm: 'Turn off', danger: true })) {
+      toggle.querySelector('input').checked = true;
+      return;
+    }
+    act('bluetooth', { on: value }, value ? 'Bluetooth is on.' : 'Bluetooth is off.');
+  }, on ? 'On' : 'Off');
+  return h('div.card.card-pad.phone-row',
+    h('div.stat-icon', icon('bluetooth')),
+    h('div.phone-text', h('div.stat-value', 'Bluetooth'),
+      h('div.stat-sub', on ? 'Phones can connect and pair.' : 'Off: the jukebox is invisible and no phone can connect.')),
+    toggle);
+}
+
 function render(data) {
+  const on = data.bluetooth?.on !== false;
   clear(body,
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
-    data.phones.length
+    powerCard(on, data.phones),
+    !on ? null : data.phones.length
       ? h('div.stack', data.phones.map(phoneRow))
       : emptyState('smartphone', 'No phones paired yet', 'Pair one below.'),
-    pairingCard(data.pairing || { state: 'idle' }));
+    on ? pairingCard(data.pairing || { state: 'idle' }) : null);
 }

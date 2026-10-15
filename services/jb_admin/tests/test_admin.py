@@ -483,11 +483,13 @@ def test_phones_page_sends_only_phone_commands(tmp_path):
         assert (await client.post("/api/phones/pair_confirm", json={"ok": True}, headers=H)).status == 200
         assert (await client.post("/api/phones/forget", json={"mac": "88:51:f2:56:4b:2b"}, headers=H)).status == 200
         assert (await client.post("/api/phones/forget", json={"mac": "nope"}, headers=H)).status == 400
+        assert (await client.post("/api/phones/bluetooth", json={"on": False}, headers=H)).status == 200
         assert (await client.post("/api/phones/reboot", json={}, headers=H)).status == 404
         assert admin.bus.sent == [
             ("jukebox/jb-source-phone/cmd", {"action": "pair_start"}),
             ("jukebox/jb-source-phone/cmd", {"action": "pair_confirm", "ok": True}),
             ("jukebox/jb-source-phone/cmd", {"action": "forget", "mac": "88:51:F2:56:4B:2B"}),
+            ("jukebox/jb-source-phone/cmd", {"action": "bluetooth", "on": False}),
         ]
     run(tmp_path, check)
 

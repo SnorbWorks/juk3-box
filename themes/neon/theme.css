@@ -271,7 +271,7 @@ jb-up-next { flex: 1; min-height: 0; overflow: hidden; }
 
 .main { position: relative; min-height: 0; }
 .main jb-screen { display: block; height: 100%; }
-.home, .all-songs, .collection { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.home, .all-songs, .collection, .jb-settings-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 /* The connection badge, top right. */
 jb-connection {
@@ -929,3 +929,32 @@ jb-board[data-cards] .jb-slot[data-entry] .jb-album-cover {
   transform: translateY(-0.4vh);
 }
 jb-board[data-cards] .jb-slot[data-entry] .jb-album-code { background: hsl(from var(--opt-button) calc(h + 0.086) calc(s * 1.042) calc(l + 2.941) / 0.9); }
+
+/* ---------------------------------------------------------------- Settings */
+
+/* The cabinet's Settings screen (engine layout): sections of rows, each row
+   a knob stop that lights up like the nav's pill. */
+.jb-settings-sections { flex: 1; min-height: 0; overflow-y: auto; padding: 1vh 2vw 6vh 2.6vw; scrollbar-width: none; }
+.jb-settings-sections::-webkit-scrollbar { display: none; }
+.jb-settings-section { max-width: 110vh; }
+.jb-settings-heading { margin: 0 0 1.6vh; font-size: 2.6vh; font-weight: 650; color: var(--ink); }
+.jb-settings-subheading { margin: 3vh 0 1.2vh; font-size: 1.5vh; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); }
+.jb-settings-list { display: flex; flex-direction: column; gap: 0.8vh; margin-bottom: 0.8vh; }
+.jb-settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 2vw;
+  padding: 1.6vh 1.6vw;
+  border-radius: calc(1.3vh * var(--opt-roundness));
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: transform 180ms var(--ease);
+}
+.jb-settings-label { font-size: 2.1vh; font-weight: 600; color: var(--ink); }
+.jb-settings-value { font-size: 1.9vh; color: var(--ink-soft); }
+.jb-settings-note { margin: 1vh 0.4vw 0; font-size: 1.6vh; color: var(--ink-faint); }
+.jb-settings-row[data-focused] {
+  background: linear-gradient(90deg, var(--pill-a), var(--pill-b) 55%, var(--pill-c));
+  box-shadow: inset 0 0 1.4vh hsl(from var(--opt-highlight) calc(h - 4.159) s calc(l - 4.902) / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 2.2vh hsl(from var(--opt-button) calc(h + 0.086) calc(s * 1.294) calc(l + 10.784) / 0.55);
+}
+.jb-settings-row[data-focused] .jb-settings-value { color: rgba(255, 255, 255, 0.9); }
+.jb-settings-row[data-pressed], .jb-settings-list .jb-phone-row[data-pressed] { transform: scale(0.98); }

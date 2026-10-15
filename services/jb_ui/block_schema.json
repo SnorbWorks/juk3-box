@@ -990,6 +990,13 @@
       "description": "Which phone is connected.",
       "settings": {}
     },
+    "bluetooth": {
+      "label": "Bluetooth settings",
+      "group": "navigation",
+      "icon": "bluetooth",
+      "description": "Bluetooth on/off, the paired phones and pairing a new one. On the Settings screen by default.",
+      "settings": {}
+    },
     "screen": {
       "label": "Screen",
       "group": "structure",

@@ -1,7 +1,10 @@
 import asyncio
+import json
+import os
 import time
+from pathlib import Path
 
-from dbus_next import BusType
+from dbus_next import BusType, Variant
 from dbus_next.aio import MessageBus
 from dbus_next.errors import DBusError, InterfaceNotFoundError
 
@@ -18,6 +21,24 @@ BLUEZ = "org.bluez"
 # object and standing up a new one), the browsing channel can still be
 # settling and answers with a transient "Device or resource busy" -- retry
 # rather than leaving the caller (jb-library's crawl) with a stale result.
+# Bluetooth on/off (the cabinet's Settings, the admin): remembered across
+# restarts. Off, the jukebox is invisible and no phone can connect.
+BLUETOOTH_STATE = Path("/var/lib/juk3-box/bluetooth.json")
+
+
+def bluetooth_wanted() -> bool:
+    try:
+        return bool(json.loads(BLUETOOTH_STATE.read_text()).get("on", True))
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def remember_bluetooth(on: bool) -> None:
+    tmp = BLUETOOTH_STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"on": on}))
+    os.replace(tmp, BLUETOOTH_STATE)
+
+
 DBUS_RETRY_ATTEMPTS = 5
 DBUS_RETRY_DELAY_S = 0.5
 BUSY_WAIT_S = 60
@@ -469,7 +490,13 @@ async def main() -> None:
                 asyncio.create_task(end_lease(bus, "released"))
             return
         # Managing phones (the jukebox's Phones menu and the admin).
+        if action == "bluetooth":
+            await set_bluetooth(bus, bool(cmd.get("on")))
+            return
         if action == "pair_start":
+            if not bt["on"]:
+                log.info("pairing asked for with Bluetooth off; ignored")
+                return
             await pairing.start()
             return
         if action == "pair_stop":
@@ -654,6 +681,40 @@ async def main() -> None:
         await bus.publish(f"jukebox/{SERVICE_NAME}/forgotten", {"mac": mac, "name": target[2] if target else None})
         log.info("forgot %s (%s)", target[2] if target else "phone", mac)
 
+    bt = {"on": True}
+
+    async def power_adapter(on: bool):
+        intro = await system_bus.introspect(BLUEZ, rc.ADAPTER)
+        props = system_bus.get_proxy_object(BLUEZ, rc.ADAPTER, intro).get_interface("org.freedesktop.DBus.Properties")
+        await props.call_set("org.bluez.Adapter1", "Powered", Variant("b", on))
+
+    async def set_bluetooth(bus: Bus, on: bool, startup: bool = False):
+        """Turn the jukebox's Bluetooth on or off. Off: pause and let go of
+        the phone, stop reconnecting and pairing, power the radio down. On:
+        power up and call the phones as at boot."""
+        nonlocal reconnect_until
+        if not startup and on == bt["on"]:
+            return
+        bt["on"] = on
+        if not on:
+            reconnect_until = 0.0
+            if phone is not None:
+                await pause_if_playing(phone.mac)
+                leaving[phone.mac] = now() + 30
+            lock.release()
+            if pairing.is_open():
+                await pairing.stop("Bluetooth turned off")
+        try:
+            await power_adapter(on)
+        except Exception:
+            log.exception("couldn't turn Bluetooth %s", "on" if on else "off")
+        if not startup:
+            remember_bluetooth(on)
+            log.info("Bluetooth turned %s", "on" if on else "off")
+        await bus.publish(f"jukebox/{SERVICE_NAME}/bluetooth", {"on": on}, retain=True)
+        if on and not startup:
+            start_reconnect(bus, "boot")
+
     async def on_paired(mac: str, name: str):
         """A new phone was paired at the jukebox: it gets the jukebox, once
         BlueZ lists it as a phone that can send audio."""
@@ -689,6 +750,8 @@ async def main() -> None:
         log.info("reconnecting (%s), for up to %.0fs", event, reconnect_until - started)
         try:
             while now() < reconnect_until:
+                if not bt["on"]:
+                    return
                 if lease:
                     await publish_reconnect(bus, "paused", reason=f"{lease['holder']} holds the browse lease")
                 elif not await rc.speaker_ready(system_bus):
@@ -730,7 +793,7 @@ async def main() -> None:
                 paired = await rc.phones(system_bus)
                 connected = [d[0] for d in paired if d[3]]
                 info = {d[0]: d for d in paired}
-                if was is None and not connected:
+                if was is None and not connected and bt["on"]:
                     start_reconnect(bus, "boot")
                 elif was is not None and lock.owner in was and lock.owner not in connected:
                     mac = lock.owner
@@ -842,6 +905,8 @@ async def main() -> None:
         await publish_lease(bus)
 
         bus_ref["bus"] = bus
+        # Bluetooth as the owner left it (on unless turned off).
+        await set_bluetooth(bus, bluetooth_wanted(), startup=True)
         async def publish_pairing(state: dict):
             await bus.publish(f"jukebox/{SERVICE_NAME}/pairing", state, retain=True)
         pairing.publish = publish_pairing

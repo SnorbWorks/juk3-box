@@ -9,7 +9,7 @@ import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refo
 import { renderLayout } from './layout.js';
 import { nowPlayingData, playingLibraryTrack } from './np.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
-import { initPhones, openPhones } from './phones.js';
+import { initPhones, openSwitcher } from './phones.js';
 import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
@@ -24,6 +24,14 @@ const OVERLAY_TICK_MS = 1000;
 const DEFAULT_COLLECTION_LAYOUT = {
   class: 'jb-collection-screen',
   children: [{ block: 'header' }, { block: 'collection', focus: 'collection' }],
+};
+// The cabinet's Settings, unless the theme lays it out itself.
+const DEFAULT_SETTINGS_LAYOUT = {
+  class: 'jb-settings-screen',
+  children: [
+    { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
+    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'bluetooth' }] },
+  ],
 };
 
 let theme = null;
@@ -113,7 +121,8 @@ function showScreen(name, { remember = true } = {}) {
   } else {
     showing?.remove();
   }
-  const layout = theme.layouts[name] || (name === 'collection' ? DEFAULT_COLLECTION_LAYOUT : null);
+  const layout = theme.layouts[name]
+    || { collection: DEFAULT_COLLECTION_LAYOUT, settings: DEFAULT_SETTINGS_LAYOUT }[name] || null;
   const kept = parked.get(name);
   if (kept) {
     parked.delete(name);
@@ -267,9 +276,9 @@ function watchPower() {
   });
 }
 
-// The phone badge opens the Phones menu (phones.js).
+// The phone badge: switch between paired phones (phones.js).
 function phones() {
-  openPhones(currentStopKey());
+  openSwitcher();
 }
 
 function watchSystem() {
@@ -367,7 +376,13 @@ async function start() {
   await applyTheme(theme);
   store.set('settings', theme.settings);
   initPopups(theme.blocks);
-  initPhones(theme.blocks, html);
+  initPhones(theme.blocks, html, {
+    // "Add a phone" on the badge: Settings, at its Bluetooth section.
+    openSettings: key => {
+      showScreen('settings');
+      focusKey(key);
+    },
+  });
   watchSystem();
   watchPower();
   watchAlbumPlay();

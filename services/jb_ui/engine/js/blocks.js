@@ -11,6 +11,7 @@ import { nowPlayingData } from './np.js';
 import { fillCollection, fillSection, fillShortcut } from './sections.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
+import { fillBluetooth } from './phones.js';
 
 export const BLOCKS = {
   // The engine puts the current screen into this element itself.
@@ -26,6 +27,7 @@ export const BLOCKS = {
   pager: fillPager,
   header: fillHeader,
   connection: fillConnection,
+  bluetooth: el => fillBluetooth(el),
   // Content the owner places with the page builder.
   heading: fillText('h2'),
   text: fillText('p'),
@@ -399,6 +401,8 @@ function fillHeader(el, node, ctx) {
       const c = store.get('collection');
       title = c?.title || '';
       subtitle = c?.subtitle || '';
+    } else if (screen === 'settings') {
+      title = 'Settings';
     }
     bind(el, { title, subtitle, canGoBack: screen !== 'home', backIcon: ctx.icons.back });
   };

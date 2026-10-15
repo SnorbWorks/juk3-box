@@ -234,3 +234,13 @@ jb-section[data-empty] { display: none; }
 /* The knob highlight. Last in the file so it wins over each item's own
    (transparent) outline. */
 [data-focused] { outline-color: #ffd54f; }
+
+/* Settings */
+.jb-settings-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 2vmin; }
+.jb-settings-sections { flex: 1; min-height: 0; overflow-y: auto; }
+.jb-settings-heading { font-size: 2.6vmin; margin: 0 0 1.4vmin; }
+.jb-settings-subheading { font-size: 1.6vmin; opacity: 0.6; text-transform: uppercase; margin: 2.4vmin 0 1vmin; }
+.jb-settings-list { display: flex; flex-direction: column; gap: 0.6vmin; margin-bottom: 0.6vmin; }
+.jb-settings-row { display: flex; justify-content: space-between; padding: 1.2vmin 1.4vmin; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; font-size: 2vmin; }
+.jb-settings-note { opacity: 0.6; font-size: 1.6vmin; margin-top: 0.8vmin; }
+.jb-settings-row[data-focused] { background: rgba(255, 213, 79, 0.25); border-color: #ffd54f; }

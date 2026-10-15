@@ -134,10 +134,11 @@ class Admin:
         "jukebox/jb-source-phone/phones": "phones",
         "jukebox/jb-source-phone/pairing": "pairing",
         "jukebox/jb-source-phone/switch": "phone_switch",
+        "jukebox/jb-source-phone/bluetooth": "bluetooth",
     }
 
     # What the Phones page may ask jb-source-phone to do.
-    PHONE_ACTIONS = {"pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
+    PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
 
@@ -322,6 +323,7 @@ class Admin:
             "phones": (self.live.get("phones") or {}).get("phones") or [],
             "pairing": self.live.get("pairing") or {"state": "idle"},
             "switch": self.live.get("phone_switch") or {"state": "idle"},
+            "bluetooth": self.live.get("bluetooth") or {"on": True},
             "bus": self.bus is not None,
         })
 
@@ -338,6 +340,8 @@ class Admin:
             cmd["mac"] = mac.upper()
         if action == "pair_confirm":
             cmd["ok"] = bool(body.get("ok"))
+        if action == "bluetooth":
+            cmd["on"] = bool(body.get("on"))
         if self.bus is None:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
         await self.bus.publish("jukebox/jb-source-phone/cmd", cmd)
