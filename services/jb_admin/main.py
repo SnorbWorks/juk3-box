@@ -27,6 +27,7 @@ from aiohttp import web
 from shared import config, logging as jb_logging
 from services.jb_admin import schema, theme_store
 from services.jb_admin.auth import Auth
+from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
 from services.jb_admin.media_lib import MediaLibrary
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
@@ -108,6 +109,7 @@ class Admin:
         self.media_dir = Path(cfg["media_dir"])
         self.media = MediaLibrary(self.media_dir, log)
         self.auth = Auth(Path(cfg["admin_dir"]))
+        self.extensions = Extensions(REPO_DIR / "deploy" / "extensions.json")
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
         dirs = [Path(d) for d in cfg["module_dirs"]]
         self.modules = ModuleManager(
@@ -315,6 +317,11 @@ class Admin:
             "theme": self.active_theme(),
             "theme_name": self.theme_name(self.active_theme()),
         })
+
+    # Extensions ---------------------------------------------------------------
+
+    async def get_extensions(self, request):
+        return web.json_response(await self.extensions.view())
 
     # Phones -------------------------------------------------------------------
 
@@ -874,6 +881,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/status", admin.status)
     r.add_get("/api/settings", admin.get_settings)
     r.add_get("/api/phones", admin.get_phones)
+    r.add_get("/api/extensions", admin.get_extensions)
     r.add_post("/api/phones/{action}", admin.phone_action)
     r.add_put("/api/settings", admin.put_settings)
     r.add_get("/api/themes", admin.list_themes)

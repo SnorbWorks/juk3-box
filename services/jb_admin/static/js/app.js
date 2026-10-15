@@ -13,6 +13,7 @@ const PAGES = [
   { id: 'media', label: 'Media', icon: 'image', load: () => import('./pages/media.js') },
   { id: 'settings', label: 'Settings', icon: 'settings', load: () => import('./pages/settings.js') },
   { id: 'modules', label: 'Modules', icon: 'boxes', load: () => import('./pages/modules.js') },
+  { id: 'extensions', label: 'Extensions', icon: 'scroll-text', load: () => import('./pages/extensions.js') },
   { id: 'account', label: 'Account', icon: 'user', load: () => import('./pages/account.js') },
 ];
 

@@ -499,3 +499,17 @@ def test_phones_page_needs_the_owner(tmp_path):
         assert (await client.get("/api/phones", headers=H)).status == 401
         assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 401
     run(tmp_path, check, login=False)
+
+
+def test_extensions_lists_the_inventory_with_licenses(tmp_path):
+    async def check(client, admin):
+        data = await (await client.get("/api/extensions", headers=H)).json()
+        ids = {i["id"] for i in data["items"]}
+        assert {"bluez", "mosquitto", "mqtt-js", "lastfm", "neon-media"} <= ids
+        for item in data["items"]:
+            assert item["license"] and item["kind"] in data["kinds"] and item["duty"] in data["duties"], item["id"]
+            if item.get("license_file"):
+                assert (Path(main.REPO_DIR) / item["license_file"]).is_file(), item["license_file"]
+        # Versions come from this machine: the venv's own packages are found.
+        assert next(i for i in data["items"] if i["id"] == "aiohttp")["installed"]
+    run(tmp_path, check)
