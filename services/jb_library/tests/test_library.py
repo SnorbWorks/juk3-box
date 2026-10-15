@@ -289,3 +289,13 @@ def test_the_last_phone_used_is_never_a_drive(db):
     lib.store_drive(db, "6AD0", drive_songs("B"))
     db.execute("UPDATE tracks SET last_played_at = 100 WHERE phone_mac = 'drive:6AD0'")
     assert lib.latest_phone(db) == MAC
+
+
+def test_a_drive_song_with_no_artist_isnt_guessed(db):
+    songs = drive_songs("After Hours")
+    songs[0]["artist"] = None
+    lib.store_drive(db, "6AD0", songs)
+    db.execute("UPDATE tracks SET artist = 'The Weeknd', artwork_url = 'x', enriched = 0")  # an earlier guess
+    lib.store_drive(db, "6AD0", songs)
+    assert db.execute("SELECT artist, artwork_url, enriched, popularity_checked FROM tracks").fetchone() == (
+        None, None, 1, 1)

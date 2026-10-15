@@ -365,6 +365,14 @@ def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None)
         [(t.get("artist"), t.get("album"), t.get("genre"), t.get("album_track"), t.get("artist"),
           key, title, dup) for (title, dup), t in by_key.items()],
     )
+    # No artist tag: a lookup by title alone is a guess (a jazz "After Hours"
+    # came back as The Weeknd). Better a plain cover than a wrong one.
+    conn.execute(
+        """
+        UPDATE tracks SET enriched = 1, popularity_checked = 1, artist = NULL, album = NULL, genre = NULL,
+               artwork_url = NULL, lastfm_listeners = NULL
+        WHERE phone_mac = ? AND phone_artist IS NULL
+        """, (key,))
     conn.commit()
     return removed
 
