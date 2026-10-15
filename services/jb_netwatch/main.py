@@ -14,12 +14,12 @@ deploy/systemd/jb-netwatch.service.
 
 import json
 import logging
-import os
 import subprocess
 import time
 from pathlib import Path
 
 from services.jb_netwatch import policy
+from shared.files import write_atomic
 
 CHECK_EVERY_S = 30
 STATE_DIR = Path("/var/lib/juk3-box/netwatch")
@@ -99,9 +99,7 @@ def load_reboots() -> list[float]:
 
 
 def save_reboots(reboots: list[float]) -> None:
-    tmp = REBOOTS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(reboots))
-    os.replace(tmp, REBOOTS_FILE)
+    write_atomic(REBOOTS_FILE, json.dumps(reboots))
 
 
 def record(event: str, **details) -> None:
@@ -109,7 +107,7 @@ def record(event: str, **details) -> None:
     try:
         lines = EVENTS_FILE.read_text().splitlines()[-(KEEP_EVENTS - 1):] if EVENTS_FILE.exists() else []
         lines.append(json.dumps({"at": time.time(), "event": event, **details}))
-        EVENTS_FILE.write_text("\n".join(lines) + "\n")
+        write_atomic(EVENTS_FILE, "\n".join(lines) + "\n")
     except OSError as e:
         log.error("can't write %s: %s", EVENTS_FILE, e)
 

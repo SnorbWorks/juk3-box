@@ -15,8 +15,9 @@ per phone (name, last connected), overwritten each time.
 
 import asyncio
 import json
-import os
 from pathlib import Path
+
+from shared.files import write_atomic
 
 BLUEZ = "org.bluez"
 BOOK_PATH = Path("/var/lib/juk3-box/phones.json")
@@ -51,15 +52,11 @@ class PhoneBook:
 
     def touch(self, mac: str, name: str, now: float):
         self.phones[mac] = {"name": name, "last_connected": now}
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.phones, indent=1))
-        os.replace(tmp, self.path)
+        write_atomic(self.path, json.dumps(self.phones, indent=1))
 
     def forget(self, mac: str):
         if self.phones.pop(mac, None) is not None:
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.phones, indent=1))
-            os.replace(tmp, self.path)
+            write_atomic(self.path, json.dumps(self.phones, indent=1))
 
     def order(self, macs: list) -> list:
         """Most recently connected first; phones never seen last."""

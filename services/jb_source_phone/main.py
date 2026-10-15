@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import time
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from dbus_next.errors import DBusError, InterfaceNotFoundError
 
 from shared import config, logging as jb_logging
 from shared.bus import Bus
+from shared.files import write_atomic
 from services.jb_source_phone import phones as ph
 from services.jb_source_phone import reconnect as rc
 from services.jb_source_phone.pairing import Pairing
@@ -34,9 +34,7 @@ def bluetooth_wanted() -> bool:
 
 
 def remember_bluetooth(on: bool) -> None:
-    tmp = BLUETOOTH_STATE.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"on": on}))
-    os.replace(tmp, BLUETOOTH_STATE)
+    write_atomic(BLUETOOTH_STATE, json.dumps({"on": on}))
 
 
 DBUS_RETRY_ATTEMPTS = 5

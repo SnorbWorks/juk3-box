@@ -18,10 +18,11 @@ load()/save().
 """
 
 import json
-import os
 import time
 from datetime import datetime
 from pathlib import Path
+
+from shared.files import write_atomic
 
 STATE_PATH = Path("/var/lib/juk3-box/crawl-state.json")
 # album_index = the phone's album names + newest-first order (cheap, no
@@ -107,6 +108,4 @@ def load(path: Path = STATE_PATH) -> dict:
 
 def save(state: dict, path: Path = STATE_PATH) -> None:
     """Atomic replace, so a crash or power cut mid-write can't corrupt it."""
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=1))
-    os.replace(tmp, path)
+    write_atomic(path, json.dumps(state, indent=1))

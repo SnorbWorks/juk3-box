@@ -443,6 +443,7 @@ It behaves like a machine, not a computer.
 
 - [ ] Boot order, auto-restart, watchdog. Partly there: every service restarts on failure, publish-only services exit when a task dies, and a clock jump at boot is survived (mosquitto drops clients when NTP jumps the clock; the kiosk uses native timers). The hardware watchdog is the Pi OS default (1 min)
 - [ ] Phone leaves range mid-song; power cut during a sync
+- [x] Power-loss-safe writes (Oct 14): every state file goes through shared/files.py (temp file, fsync, rename, fsync of the folder): phone book, Bluetooth on/off, crawl progress, jb-netwatch history, mood-tag cache, Weather Mix names; the optimized background video is synced before it counts as done. The admin's files already were; the library is SQLite (journaled, power-safe by default)
 - [ ] Log rotation; read-only or overlay root filesystem
 - [ ] Cold boot to a working jukebox in under a minute
 - [x] Stays online on its own: jb-netwatch (Oct 14) reconnects the Wi-Fi, turns it off and on, and as a last resort reboots (at once for the Pi 4's hung brcmfmac driver, seen Oct 8, 13/14 and 14). Spaced-out reboots, never in a loop, waits for the song

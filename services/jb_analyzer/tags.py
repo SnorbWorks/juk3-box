@@ -18,6 +18,8 @@ from pathlib import Path
 
 import aiohttp
 
+from shared.files import write_atomic
+
 API = "https://ws.audioscrobbler.com/2.0/"
 CACHE_PATH = Path("/var/lib/juk3-box/lastfm-tags.json")
 MAX_TAGS = 6
@@ -103,10 +105,7 @@ class TagLookup:
 
     def _save(self):
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.cache))
-            tmp.replace(self.path)
+            write_atomic(self.path, json.dumps(self.cache))
         except OSError:
             log.warning("couldn't save the tag cache at %s", self.path)
 

@@ -22,6 +22,7 @@ import aiohttp
 
 import moods
 from shared.bus import Bus
+from shared.files import write_atomic
 from shared.module_sdk import module_id, settings, state_dir
 
 MODULE = module_id() or "jb-weathermix"
@@ -118,7 +119,7 @@ class Mixer:
 
     def remember(self, name: str):
         try:
-            self.state.write_text(json.dumps(([name] + self.recent())[:8]))
+            write_atomic(self.state, json.dumps(([name] + self.recent())[:8]))
         except OSError:
             pass
 

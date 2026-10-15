@@ -21,6 +21,8 @@ import logging
 import shutil
 from pathlib import Path
 
+from shared.files import replace_synced
+
 VIDEO_SUFFIXES = {".mp4", ".m4v", ".mov", ".webm", ".mkv"}
 
 # Bump when the encoding below changes, so every copy is remade.
@@ -88,7 +90,9 @@ class VideoOptimizer:
             _, err = await proc.communicate()
             if proc.returncode != 0:
                 raise RuntimeError(err.decode(errors="replace").strip()[-400:] or f"ffmpeg exited {proc.returncode}")
-            tmp.replace(dest)
+            # On the card before it's taken as done: a power cut right after
+            # must not leave a broken video the kiosk keeps playing.
+            replace_synced(tmp, dest)
             # Older copies of the same video are no longer needed.
             prefix = dest.name.split("-")[0] + "-"
             for old in self.cache_dir.glob(prefix + "*.mp4"):
