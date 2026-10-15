@@ -61,7 +61,7 @@ I said earlier that the Pi 5's Wi-Fi might not have the Pi 4's driver hangs. Tha
    SPI-only libraries (`rpi5-ws2812`, `Pi5Neo`) exist too, but use GPIO10 (the level bar's) — a rewiring, so the fallback.
    jb-lights already isolates the hardware (`pwm_chains.py` gives each chain a PixelStrip-like view): the Pi 5 driver is a second implementation of that view, picked by `shared/hardware.board()["led_driver"]`.
 2. **Background video.** Try the H.264 720p30 copy as is (software decode). If the CPU cost is high, add an HEVC profile to `services/jb_ui/media.py` for the Pi 5 and check whether Chromium uses the HEVC hardware (the stateless V4L2 HEVC decoder is upstream; Chromium's use of it on the Pi isn't confirmed). The kiosk's `AcceleratedVideoDecodeLinux*` flags are for the Pi 4's H.264 block.
-3. **Hardware in setup.** The first-boot wizard (roadmap item 5) shows `board()`'s answer for the owner to confirm; the services read it for their settings.
+3. **Hardware in setup.** The first-boot wizard (roadmap item 5) shows `board()`'s answer for the owner to confirm, then applies that board's settings itself (boot config, LED driver, video profile); the services read it for their settings. A new owner has no one to do this by hand, so every step this guide does manually must end up in the wizard's code.
 4. **Undo the Pi 4 squeezes** once the Pi 5 is the reference: CMA, the zram size, the decision notes in the Neon theme ("measured on the Pi 4").
 
 ## Sources

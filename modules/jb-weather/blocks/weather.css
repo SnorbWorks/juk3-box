@@ -19,6 +19,8 @@
 .jbw-more { margin-left: auto; text-align: right; min-width: 0; }
 .jbw-place { font-size: 1.5vh; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .jbw-range { margin-top: 0.4vh; font-size: 1.4vh; opacity: 0.75; }
+/* Open-Meteo's license (CC BY 4.0) asks for this credit wherever its data shows. */
+.jbw-credit { margin-top: 0.4vh; font-size: 1.1vh; opacity: 0.5; white-space: nowrap; }
 
 /* Compact (a sidebar): the icon and the temperature, the place under. */
 :scope[data-shape="compact"] .jbw { flex-wrap: wrap; gap: 1vh; }
@@ -33,3 +35,4 @@
 :scope[data-shape="banner"] .jbw-condition { font-size: 2.2vh; }
 :scope[data-shape="banner"] .jbw-place { font-size: 2.4vh; }
 :scope[data-shape="banner"] .jbw-range { font-size: 2vh; }
+:scope[data-shape="banner"] .jbw-credit { font-size: 1.4vh; }

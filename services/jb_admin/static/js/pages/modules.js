@@ -210,6 +210,7 @@ function locationField(spec, value, set) {
       }, icon('map-pin'), h('span', p.label)))));
     } catch (e) { clear(results, h('span.muted', e.message)); }
   };
-  return field(spec.label, h('div.stack.location-field', current, h('div.location-search', input, button('Find', { variant: 'small', onclick: search }, 'search')), results),
+  return field(spec.label, h('div.stack.location-field', current, h('div.location-search', input, button('Find', { variant: 'small', onclick: search }, 'search')), results,
+    h('span.muted', 'Place search by Open-Meteo.com')),
     spec.help);
 }
