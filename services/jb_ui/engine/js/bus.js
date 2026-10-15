@@ -18,6 +18,7 @@ export const PREVIEW = new URLSearchParams(location.search).has('preview');
 const HANDLERS = {
   'jukebox/jb-source-phone/now-playing': np => nowPlayingFrom('phone', np),
   'jukebox/jb-source-local/now-playing': np => nowPlayingFrom('local', np),
+  'jukebox/jb-source-local/event': e => store.set('driveEvent', { ...e, at: Date.now() }),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
   'jukebox/jb-core/queue': q => store.set('queue', q),
   'jukebox/jb-library/tracks': lib => {

@@ -18,6 +18,7 @@ Music is never copied off the drive; only the scan results are kept, in
 
 import asyncio
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -54,6 +55,9 @@ class Source:
         self.drives: dict = {}        # id -> description, as mounted
         self.scans: dict = {}         # id -> scan result
         self.scanning: set = set()
+        self.ejected: dict = {}       # id -> {device, label}: ejected from the admin, still plugged in
+        self.announce: set = set()    # drives plugged in while running: say so on the screen when read
+        self.started = False
         self.song: dict | None = None  # the song playing (or paused)
         self.player = Player(log, self.changed)
 
@@ -80,7 +84,12 @@ class Source:
         for d in new:
             self.log.info("drive added: %s (%s)", d, now[d].get("label") or "no label")
             self.scanning.add(d)
-        if gone or new:
+            self.ejected.pop(d, None)
+            if self.started:
+                self.announce.add(d)
+        self.started = True
+        pulled = any(not Path(f"/dev/{v['device']}").exists() for v in self.ejected.values())
+        if gone or new or pulled:
             await self.publish_library()
         for d in new:
             asyncio.create_task(self.scan(d))
@@ -113,21 +122,35 @@ class Source:
             await asyncio.to_thread(write_atomic, cache, json.dumps({"files": result["files"]}))
         except OSError:
             self.log.warning("couldn't save the scan of %s", drive_id)
+        if drive_id in self.announce:
+            self.announce.discard(drive_id)
+            await self.bus.publish(f"{TOPIC}/event", {"type": "drive_added", "id": drive_id,
+                                                       "label": drive.get("label") or "",
+                                                       "songs": len(result["songs"])})
         await self.publish_library()
 
     async def publish_library(self) -> None:
         drives, songs = [], []
         for d, info in self.drives.items():
             result = self.scans.get(d) or {}
+            try:
+                usage = shutil.disk_usage(info["path"])
+                space = {"total": usage.total, "used": usage.used, "free": usage.free}
+            except OSError:
+                space = {}
             drives.append({
                 "id": d, "label": info.get("label") or "", "fstype": info.get("fstype"),
-                "size": info.get("size"), "scanning": d in self.scanning,
+                "device": info.get("device"), "size": info.get("size"), **space, "scanning": d in self.scanning,
                 "songs": len(result.get("songs", [])),
                 "images": result.get("images", []), "videos": result.get("videos", []),
                 "skipped": result.get("skipped", []),
             })
             songs.extend(result.get("songs", []))
-        await self.bus.publish(f"{TOPIC}/library", {"v": 1, "drives": drives, "tracks": songs}, retain=True)
+        # An ejected drive that has since been pulled out is gone for good.
+        self.ejected = {k: v for k, v in self.ejected.items() if Path(f"/dev/{v['device']}").exists()}
+        ejected = [{"id": k, **v} for k, v in self.ejected.items()]
+        await self.bus.publish(f"{TOPIC}/library", {"v": 1, "drives": drives, "tracks": songs, "ejected": ejected},
+                               retain=True)
 
     def file_for(self, item_path: str) -> Path | None:
         if not isinstance(item_path, str) or not item_path.startswith("drive:"):
@@ -148,6 +171,40 @@ class Source:
             if s["item_path"] == item_path:
                 return s
         return None
+
+    async def eject_or_mount(self, action: str, drive_id) -> None:
+        """Eject: stop any of its songs that's playing and unmount it (it
+        stays plugged in, listed as ejected). Mount: the reverse. Through
+        jb-drive@<device>.service (deploy/polkit/51-juk3-box-drives.rules).
+        Pulling a drive out is safe anyway: it's mounted read-only."""
+        if action == "eject":
+            drive = self.drives.get(drive_id)
+            if not drive or not drive.get("device"):
+                return
+            if self.song and self.song["item_path"].startswith(f"drive:{drive_id}/"):
+                await self.player.stop()
+                self.song = None
+            device = drive["device"]
+            self.ejected[drive_id] = {"device": device, "label": drive.get("label") or ""}
+            verb = "stop"
+        else:
+            gone = self.ejected.get(drive_id)
+            if not gone:
+                return
+            device = gone["device"]
+            verb = "start"
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", "--no-ask-password", verb, f"jb-drive@{device}.service",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+        _, err = await proc.communicate()
+        if proc.returncode:
+            self.log.warning("%s %s failed: %s", action, drive_id, err.decode().strip())
+            if action == "eject":
+                self.ejected.pop(drive_id, None)
+        else:
+            self.log.info("%s: %s (%s)", "ejected" if action == "eject" else "mounted again", drive_id, device)
+        await self.check_drives()
+        await self.publish_library()
 
     # -- playing --------------------------------------------------------
 
@@ -204,6 +261,8 @@ class Source:
         elif action == "stop":
             await self.player.stop()
             self.song = None
+        elif action in ("eject", "mount"):
+            await self.eject_or_mount(action, cmd.get("id"))
         elif action == "rescan":
             for d in list(self.drives):
                 self.scanning.add(d)

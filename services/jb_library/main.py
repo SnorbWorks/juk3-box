@@ -41,6 +41,8 @@ MIGRATIONS = {
     "phone_album": "TEXT",
     "phone_genre": "TEXT",
     "album_track": "INTEGER",   # 1-based position in phone_album
+    # A USB drive song: when the jukebox first found it (the Drives page's New).
+    "first_seen": "REAL",
 }
 
 # Deep-crawl tables (jb-crawl). Stored by title, never by play path: play
@@ -83,12 +85,30 @@ DEEP_SCHEMA = """
         uid TEXT NOT NULL,
         PRIMARY KEY (phone_mac, album, position)
     );
+    -- USB drives: the owner's edits to a drive song's info (the drive is
+    -- read-only, so they live here, on top of the file's tags; NULL = the tag),
+    -- and each drive seen, for the Drives page's history.
+    CREATE TABLE IF NOT EXISTS drive_edits (
+        drive TEXT NOT NULL,
+        path TEXT NOT NULL,
+        title TEXT, artist TEXT, album TEXT, genre TEXT, album_track INTEGER,
+        updated_at REAL,
+        PRIMARY KEY (drive, path)
+    );
+    CREATE TABLE IF NOT EXISTS drive_info (
+        drive TEXT PRIMARY KEY,
+        label TEXT,
+        last_seen REAL
+    );
 """
 
 
 # A sync smaller than this fraction of the stored library is treated as a
 # glitch (e.g. Bluetooth dropping mid-crawl) and doesn't remove anything.
 PRUNE_MIN_FRACTION = 0.5
+# A drive plugged in for the first time puts only this many of its newest
+# songs in the screen's New row (later additions to it all count).
+NEW_FROM_A_NEW_DRIVE = 20
 
 TRACKS_SCHEMA = """
     CREATE TABLE IF NOT EXISTS {name} (
@@ -268,6 +288,88 @@ def read_albums(conn: sqlite3.Connection, mac: str | None = None) -> dict:
     return {"albums": albums, "contents": contents}
 
 
+
+def add_drive_albums(conn: sqlite3.Connection, albums: dict, drives: list[str]) -> dict:
+    """read_albums' result with the albums on the drives plugged in.
+
+    A drive's tags already give each album's songs in order, so its albums
+    come with their contents (each song by item_path); nothing to fetch. An
+    album the phone has too is listed once: its drive songs are known at
+    once and play from the drive; the phone fills in the rest when it's
+    opened ("partial" lists those still to fetch). Songs with no album tag
+    stay out of Albums. Drive-only albums go in alphabetically among the
+    phone's."""
+    if not drives:
+        return albums
+    rows = conn.execute(
+        """
+        SELECT phone_album, title, item_path, album_track FROM tracks
+        WHERE phone_mac IN (SELECT value FROM json_each(?)) AND phone_album IS NOT NULL
+        ORDER BY phone_album COLLATE NOCASE, COALESCE(album_track, 1e9), title COLLATE NOCASE
+        """, (json.dumps(drives),)).fetchall()
+    found: dict[str, dict] = {}
+    for album, title, item_path, _ in rows:
+        a = found.setdefault(album.casefold(), {"title": album, "songs": []})
+        a["songs"].append({"title": title, "item_path": item_path})
+    if not found:
+        return albums
+    listed = list(albums.get("albums", []))
+    contents = dict(albums.get("contents", {}))
+    partial = list(albums.get("partial", []))
+    by_title = {a["title"].casefold(): a for a in listed if a.get("nth", 0) == 0}
+    for fold, drive_album in found.items():
+        phone_album = by_title.get(fold)
+        if phone_album:
+            key = phone_album["name"]
+            phone_songs = contents.get(key)
+            if phone_songs is None:
+                contents[key] = drive_album["songs"]
+                partial.append(key)
+                continue
+            # The phone's list, with each song the drive has playing from the drive.
+            on_drive = {s["title"].casefold(): s for s in drive_album["songs"]}
+            merged, used = [], set()
+            for s in phone_songs:
+                d = on_drive.get(str(s.get("title", "")).casefold())
+                merged.append({**s, "item_path": d["item_path"]} if d else s)
+                if d:
+                    used.add(d["item_path"])
+            merged += [s for s in drive_album["songs"] if s["item_path"] not in used]
+            contents[key] = merged
+        else:
+            key = drive_album["title"]
+            entry = {"name": key, "title": key, "nth": 0, "rank": None, "drive": True}
+            at = next((i for i, a in enumerate(listed) if a["title"].casefold() > fold), len(listed))
+            listed.insert(at, entry)
+            contents[key] = drive_album["songs"]
+    return {**albums, "albums": listed, "contents": contents, "partial": partial}
+
+
+def read_drives(conn: sqlite3.Connection, attached: list[str]) -> dict:
+    """Every drive the jukebox has seen, newest first, for the admin's
+    Drives page: the ones plugged in with their songs (as shown, edits
+    included), the others as history."""
+    edited = {(d, p) for d, p in conn.execute("SELECT drive, path FROM drive_edits")}
+    out = []
+    for drive, label, last_seen in conn.execute("SELECT drive, label, last_seen FROM drive_info ORDER BY last_seen DESC"):
+        key = f"drive:{drive}"
+        count, plays = conn.execute("SELECT COUNT(*), COALESCE(SUM(play_count), 0) FROM tracks WHERE phone_mac = ?",
+                                    (key,)).fetchone()
+        d = {"id": drive, "label": label, "last_seen": last_seen, "attached": key in attached,
+             "song_count": count, "plays": plays}
+        if d["attached"]:
+            prefix = len(key) + 1
+            d["songs"] = [
+                {"item_path": r[0], "path": r[0][prefix:], "title": r[1], "artist": r[2], "album": r[3],
+                 "genre": r[4], "album_track": r[5], "cover": r[6], "play_count": r[7] or 0, "first_seen": r[8],
+                 "edited": (drive, r[0][prefix:]) in edited}
+                for r in conn.execute(
+                    "SELECT item_path, title, phone_artist, phone_album, phone_genre, album_track, artwork_url,"
+                    " play_count, first_seen FROM tracks WHERE phone_mac = ? ORDER BY title COLLATE NOCASE", (key,))
+            ]
+        out.append(d)
+    return {"drives": out}
+
 def read_playlists(conn: sqlite3.Connection, mac: str | None = None) -> list:
     """[{name, titles}] for one phone (or every phone), in the phone's playlist order."""
     out = {}
@@ -346,14 +448,19 @@ def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None, no
     return removed
 
 
-def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None) -> int:
+def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None,
+                label: str | None = None, now: float | None = None) -> int:
     """Stores a USB drive's songs (jb-source-local) under phone_mac
     "drive:<id>". Its tags are exact, so they go where a phone's deep crawl
     puts what the phone says (phone_artist/album/genre, album_track): they
-    win over the iTunes guesses, which still bring the covers. Returns how
-    many songs were removed (no longer on the drive)."""
+    win over the iTunes guesses, which still bring the covers. The owner's
+    edits (drive_edits, from the admin's Drives page) win over the tags.
+    Returns how many songs were removed (no longer on the drive)."""
+    now = now if now is not None else time.time()
     key = f"drive:{drive_id}"
-    removed = upsert_tracks(conn, key, tracks, log)
+    tracks = apply_drive_edits(conn, drive_id, tracks)
+    first_scan = conn.execute("SELECT 1 FROM tracks WHERE phone_mac=? LIMIT 1", (key,)).fetchone() is None
+    removed = upsert_tracks(conn, key, tracks, log, now=now)
     numbered = number_duplicates(tracks)
     by_key = {(t["title"], dup): t for t, (_, dup, _) in zip(tracks, numbered)}
     conn.executemany(
@@ -373,8 +480,83 @@ def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None)
                artwork_url = NULL, lastfm_listeners = NULL
         WHERE phone_mac = ? AND phone_artist IS NULL
         """, (key,))
+    # When the jukebox first found each song (the Drives page's New list).
+    conn.execute("UPDATE tracks SET first_seen = ? WHERE phone_mac = ? AND first_seen IS NULL", (now, key))
+    if first_scan:
+        # A drive's first time: only its newest songs (by file date) count as
+        # New on the screen, not a whole drive's worth.
+        newest = sorted(tracks, key=lambda t: t.get("mtime") or 0, reverse=True)[:NEW_FROM_A_NEW_DRIVE]
+        conn.executemany("UPDATE tracks SET added_at = ? WHERE phone_mac = ? AND item_path = ?",
+                         [(now, key, t["item_path"]) for t in newest])
+    conn.execute("INSERT INTO drive_info (drive, label, last_seen) VALUES (?, ?, ?)"
+                 " ON CONFLICT(drive) DO UPDATE SET label = COALESCE(excluded.label, label), last_seen = excluded.last_seen",
+                 (drive_id, label, now))
     conn.commit()
     return removed
+
+
+EDIT_FIELDS = ("title", "artist", "album", "genre", "album_track")
+
+
+def apply_drive_edits(conn: sqlite3.Connection, drive_id: str, tracks: list) -> list:
+    """The drive's songs with the owner's edits on top of their tags."""
+    edits = {row[0]: dict(zip(EDIT_FIELDS, row[1:])) for row in conn.execute(
+        f"SELECT path, {', '.join(EDIT_FIELDS)} FROM drive_edits WHERE drive = ?", (drive_id,))}
+    if not edits:
+        return tracks
+    prefix = f"drive:{drive_id}/"
+    out = []
+    for t in tracks:
+        e = edits.get(str(t.get("item_path", ""))[len(prefix):])
+        out.append({**t, **{k: v for k, v in e.items() if v not in (None, "")}} if e else t)
+    return out
+
+
+def edit_drive_song(conn: sqlite3.Connection, item_path: str, fields: dict, file_title: str | None = None) -> bool:
+    """Saves the owner's edit of a drive song (empty = use the file's tag;
+    all empty = no edit). A changed title keeps the song's play count (its
+    row is renamed, to the file's own title when the edit is undone)."""
+    if not isinstance(item_path, str) or not item_path.startswith("drive:"):
+        return False
+    drive_id, _, path = item_path[len("drive:"):].partition("/")
+    clean = {}
+    for k in EDIT_FIELDS:
+        v = fields.get(k)
+        if k == "album_track":
+            try:
+                v = int(v) if v not in (None, "") else None
+            except (TypeError, ValueError):
+                v = None
+        else:
+            v = str(v).strip()[:300] if v not in (None, "") else None
+        clean[k] = v
+    new_title = clean["title"] or file_title
+    if new_title:
+        try:
+            conn.execute("UPDATE tracks SET title = ? WHERE phone_mac = ? AND item_path = ?",
+                         (new_title, f"drive:{drive_id}", item_path))
+        except sqlite3.IntegrityError:
+            pass        # another copy has that title: the next store renumbers
+    if all(v is None for v in clean.values()):
+        conn.execute("DELETE FROM drive_edits WHERE drive = ? AND path = ?", (drive_id, path))
+        conn.commit()
+        return True
+    conn.execute(
+        f"INSERT INTO drive_edits (drive, path, {', '.join(EDIT_FIELDS)}, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        f" ON CONFLICT(drive, path) DO UPDATE SET {', '.join(f'{k} = excluded.{k}' for k in EDIT_FIELDS)},"
+        " updated_at = excluded.updated_at",
+        (drive_id, path, *[clean[k] for k in EDIT_FIELDS], time.time()))
+    conn.commit()
+    return True
+
+
+def forget_drive(conn: sqlite3.Connection, drive_id: str) -> int:
+    """Removes everything stored about a drive: its songs, play counts and edits."""
+    n = conn.execute("DELETE FROM tracks WHERE phone_mac = ?", (f"drive:{drive_id}",)).rowcount
+    conn.execute("DELETE FROM drive_edits WHERE drive = ?", (drive_id,))
+    conn.execute("DELETE FROM drive_info WHERE drive = ?", (drive_id,))
+    conn.commit()
+    return n
 
 
 async def lookup_itunes(session: aiohttp.ClientSession, title: str, artist: str | None = None) -> dict | None:
@@ -456,6 +638,7 @@ class Snapshots:
         self._last_payload: str | None = None
         self._last_playlists: str | None = None
         self._last_albums: str | None = None
+        self._last_drives: str | None = None
         # Whose music: the connected phone's, else the last one in use.
         # Only one phone's library at a time -- another phone's songs
         # can't be played on this one.
@@ -509,12 +692,17 @@ class Snapshots:
             await self.bus.publish("jukebox/jb-library/playlists", playlists, retain=True)
             self._last_playlists = serialized
             self.log.info("published %d playlists", len(playlists["playlists"]))
-        albums = read_albums(self.conn, self.mac)
+        albums = add_drive_albums(self.conn, read_albums(self.conn, self.mac), self.drives)
         serialized = json.dumps(albums)
         if serialized != self._last_albums:
             await self.bus.publish("jukebox/jb-library/albums", albums, retain=True)
             self._last_albums = serialized
             self.log.info("published %d albums (%d opened)", len(albums["albums"]), len(albums["contents"]))
+        drives = read_drives(self.conn, self.drives)
+        serialized = json.dumps(drives)
+        if serialized != self._last_drives:
+            await self.bus.publish("jukebox/jb-library/drives", drives, retain=True)
+            self._last_drives = serialized
 
 
 async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:
@@ -725,9 +913,31 @@ async def main() -> None:
         asyncio.create_task(enrichment_loop(snapshots, wake, cfg.get("lastfm_api_key"), log))
         plays = PlayTracker(conn, log)
         drive_plays = PlayTracker(conn, log)   # its mac follows the song playing
+        last_drives: dict = {}
 
         async for topic, payload in messages:
             if topic.endswith("/cmd"):
+                if payload.get("action") == "edit_drive_song":
+                    item_path = payload.get("item_path")
+                    file_title = next((t.get("title") for t in last_drives.get("tracks") or []
+                                       if t.get("item_path") == item_path), None)
+                    if edit_drive_song(conn, item_path, payload.get("fields") or {}, file_title):
+                        drive_id = item_path[len("drive:"):].partition("/")[0]
+                        songs = [t for t in last_drives.get("tracks") or []
+                                 if str(t.get("item_path", "")).startswith(f"drive:{drive_id}/")]
+                        if songs:
+                            store_drive(conn, drive_id, songs, log)
+                        log.info("edited %s", item_path)
+                        await snapshots.publish()
+                        wake.set()   # a new artist: look its cover up again
+                    continue
+                if payload.get("action") == "forget_drive" and payload.get("id"):
+                    if f"drive:{payload['id']}" in snapshots.drives:
+                        log.warning("not forgetting drive %s: it's plugged in", payload["id"])
+                    else:
+                        log.info("forgot drive %s: %d songs", payload["id"], forget_drive(conn, payload["id"]))
+                        await snapshots.publish()
+                    continue
                 if payload.get("action") == "favorite" and payload.get("title"):
                     n = set_favorite(conn, payload["title"], payload.get("artist"), bool(payload.get("value")))
                     log.info("favorite %s: %s (%d rows)", "on" if payload.get("value") else "off", payload["title"], n)
@@ -750,6 +960,7 @@ async def main() -> None:
                     await snapshots.publish()
                 continue
             if topic == "jukebox/jb-source-local/library":
+                last_drives = payload    # for re-storing a drive after an edit
                 attached = []
                 for drive in payload.get("drives") or []:
                     if not drive.get("id"):
@@ -759,7 +970,7 @@ async def main() -> None:
                         continue
                     songs = [t for t in payload.get("tracks") or []
                              if t.get("title") and str(t.get("item_path", "")).startswith(f"drive:{drive['id']}/")]
-                    removed = store_drive(conn, drive["id"], songs, log)
+                    removed = store_drive(conn, drive["id"], songs, log, label=drive.get("label") or None)
                     attached.append(f"drive:{drive['id']}")
                     log.info("drive %s: %d songs (removed %d no longer on it)", drive["id"], len(songs), removed)
                 if attached != snapshots.drives:

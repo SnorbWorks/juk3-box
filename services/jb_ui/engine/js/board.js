@@ -45,19 +45,25 @@ export function playlistSongs(tracks, name) {
 const phoneAlbums = () => store.get('albums')?.albums || [];
 
 // An opened album's songs in album order, matched to the library by the
-// phone's song ID (the end of each song's play path), not by title.
+// phone's song ID (the end of each song's play path), not by title. A USB
+// drive's songs (jb-library's add_drive_albums) come with their play path.
 export function albumSongs(tracks, name) {
   const list = store.get('albums')?.contents?.[name];
   if (!list) return null;
   const byUid = new Map(tracks.map(t => [String(t.item_path || '').split('/item').pop(), t]));
-  return list.map(s => byUid.get(String(s.uid))).filter(Boolean);
+  const byPath = new Map(tracks.map(t => [t.item_path, t]));
+  return list.map(s => (s.item_path ? byPath.get(s.item_path) : byUid.get(String(s.uid)))).filter(Boolean);
 }
+
+// Whether an album's songs are all known. An album on both the phone and a
+// drive starts with just the drive's ("partial") until the phone's are fetched.
+const albumKnown = name => !!store.get('albums')?.contents?.[name] && !store.get('albums')?.partial?.includes(name);
 
 // Ask for an album's songs if they aren't known yet (jb-crawl fetches them).
 // name is the album's key; title + nth tell jb-crawl which folder it is
 // (names repeat: the second "Greatest Hits" is "Greatest Hits (2)").
 function requestAlbum(name) {
-  if (!phoneAlbums().length || store.get('albums')?.contents?.[name]) return;
+  if (!phoneAlbums().length || albumKnown(name)) return;
   const st = store.get('albumFetch');
   if (st?.name === name && (st.state === 'loading' || st.state === 'waiting')) return;
   const a = phoneAlbums().find(x => x.name === name);

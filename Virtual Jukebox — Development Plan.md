@@ -463,6 +463,8 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 - **Pictures and videos are imported** into the admin's media library (resized / re-encoded for the Pi as uploads are), under a size cap for what one drive may import.
 - **Formats:** MP3, AAC/M4A (incl. iTunes purchases), ALAC, FLAC, WAV; Apple Music subscription downloads are DRM-locked and are skipped with a note. Tags via tinytag (MIT), not mutagen (GPL) — see docs/extensions-inventory.md.
 - **First step is the shared source interface** (core, library and UI talk to "a source", not jb-source-phone), then jb-source-local.
+- **Built Oct 14, 2026** (8b67678, 5c2d2a8, 8590d8e and the Drives page commit): jb-drive mounts read-only on plug-in; jb-source-local scans and plays (mpv); jb-library merges; jb-core routes by item_path; pictures/videos imported (2 GB media cap). Drive albums join Browse > Albums with their songs in tag order (an album on the phone too is listed once and plays the drive's copies). A new drive puts only its 20 newest songs in New. Songs with no artist tag get no online guess. Admin **Drives** page: each drive (space, counts, skipped with reasons, Eject / Mount again, Forget for ones not plugged in), import settings, a **New** tab (songs by when they were found) and a **Songs** tab with "needs info" filter and editing. Edits live on the jukebox (drive_edits), on top of the tags; the drive is never written. The cabinet shows "Music drive connected" when one is plugged in.
+- Open: write edits back into the files (would need a read-write mount); a drive's own cover art (embedded pictures or cover.jpg) instead of the online lookup.
 
 ## Phase 10+: Features
 

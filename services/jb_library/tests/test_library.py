@@ -299,3 +299,60 @@ def test_a_drive_song_with_no_artist_isnt_guessed(db):
     lib.store_drive(db, "6AD0", songs)
     assert db.execute("SELECT artist, artwork_url, enriched, popularity_checked FROM tracks").fetchone() == (
         None, None, 1, 1)
+
+
+def test_drive_albums_come_with_their_songs_in_order(db):
+    db.executemany("INSERT INTO album_index (phone_mac, position, name) VALUES (?, ?, ?)",
+                   [(MAC, 0, "Abbey Road"), (MAC, 1, "Thriller")])
+    songs = drive_songs("Second", "First")
+    songs[0].update(album="Moonlight", album_track=2)
+    songs[1].update(album="Moonlight", album_track=1)
+    lib.store_drive(db, "6AD0", songs)
+    albums = lib.add_drive_albums(db, lib.read_albums(db, MAC), ["drive:6AD0"])
+    assert [a["name"] for a in albums["albums"]] == ["Abbey Road", "Moonlight", "Thriller"]
+    assert [s["title"] for s in albums["contents"]["Moonlight"]] == ["First", "Second"]
+    assert albums["contents"]["Moonlight"][0]["item_path"] == "drive:6AD0/Music/First.mp3"
+    assert albums["partial"] == []
+
+
+def test_an_album_on_the_phone_and_a_drive_is_listed_once(db):
+    db.execute("INSERT INTO album_index (phone_mac, position, name) VALUES (?, 0, 'LP')", (MAC,))
+    lib.store_drive(db, "6AD0", drive_songs("Track A"))          # album "LP"
+    albums = lib.add_drive_albums(db, lib.read_albums(db, MAC), ["drive:6AD0"])
+    assert [a["name"] for a in albums["albums"]] == ["LP"]
+    assert albums["partial"] == ["LP"]                          # the phone's songs still to fetch
+    db.executemany("INSERT INTO album_tracks (phone_mac, album, position, title, uid) VALUES (?, 'LP', ?, ?, ?)",
+                   [(MAC, 0, "Track A", "11"), (MAC, 1, "Track B", "12")])
+    albums = lib.add_drive_albums(db, lib.read_albums(db, MAC), ["drive:6AD0"])
+    assert albums["contents"]["LP"] == [
+        {"title": "Track A", "uid": "11", "item_path": "drive:6AD0/Music/Track A.mp3"},   # plays from the drive
+        {"title": "Track B", "uid": "12"}]
+    assert albums["partial"] == []
+
+
+def test_edits_win_over_tags_and_undoing_them_keeps_the_play_count(db):
+    songs = drive_songs("track01")
+    songs[0].update(artist=None, album=None)
+    lib.store_drive(db, "6AD0", songs)
+    db.execute("UPDATE tracks SET play_count = 4")
+    path = songs[0]["item_path"]
+    lib.edit_drive_song(db, path, {"title": "Moon River", "artist": "Andy Williams", "album": ""}, "track01")
+    lib.store_drive(db, "6AD0", songs)
+    assert db.execute("SELECT title, phone_artist, phone_album, play_count FROM tracks").fetchone() == (
+        "Moon River", "Andy Williams", None, 4)
+    lib.edit_drive_song(db, path, {}, "track01")                 # back to the file's info
+    lib.store_drive(db, "6AD0", songs)
+    assert db.execute("SELECT title, phone_artist, play_count FROM tracks").fetchone() == ("track01", None, 4)
+    assert db.execute("SELECT COUNT(*) FROM drive_edits").fetchone()[0] == 0
+
+
+def test_a_new_drive_puts_only_its_newest_songs_in_new(db):
+    songs = drive_songs(*[f"Song {i:02}" for i in range(30)])
+    for i, s in enumerate(songs):
+        s["mtime"] = i
+    lib.store_drive(db, "6AD0", songs, now=1000)
+    stamped = [r[0] for r in db.execute("SELECT title FROM tracks WHERE added_at = 1000 ORDER BY title")]
+    assert stamped == [f"Song {i:02}" for i in range(10, 30)]
+    assert db.execute("SELECT COUNT(*) FROM tracks WHERE first_seen = 1000").fetchone()[0] == 30
+    lib.store_drive(db, "6AD0", songs + drive_songs("Fresh"), now=2000)   # added later: New
+    assert db.execute("SELECT added_at FROM tracks WHERE title = 'Fresh'").fetchone()[0] == 2000

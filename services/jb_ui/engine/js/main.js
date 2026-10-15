@@ -300,6 +300,15 @@ function watchSystem() {
     setTimeout(() => closePopup('notice'), NOTICE_MS);
   });
 
+  // A USB drive was plugged in and read (jb-source-local): its songs are
+  // now in the library, alongside the phone's.
+  store.watch(html, 'driveEvent', e => {
+    if (e?.type !== 'drive_added' || currentMode() !== 'select' || popupOpen()) return;
+    const songs = e.songs === 1 ? '1 song' : `${e.songs} songs`;
+    openPopup('notice', { title: 'Music drive connected', message: `${e.label || 'USB drive'}: ${songs} ready to play.` });
+    setTimeout(() => closePopup('notice'), NOTICE_MS);
+  });
+
   // A pick the phone couldn't play. Usually another app (an audiobook, a
   // video) has the phone's audio: the jukebox can only browse and play
   // from the Music app.

@@ -49,7 +49,7 @@ ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/l
 # USB drives (jb-source-local): mounted read-only by a root-owned helper that
 # udev has systemd start when one is plugged in. The trigger mounts any
 # drive that's already there.
-ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-drive /usr/local/sbin/jb-drive && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-drive@.service /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/udev/99-jb-drive.rules /etc/udev/rules.d/ && systemctl daemon-reload && udevadm control --reload && udevadm trigger --action=add --subsystem-match=block --property-match=ID_BUS=usb"
+ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-drive /usr/local/sbin/jb-drive && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-drive@.service /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/udev/99-jb-drive.rules /etc/udev/rules.d/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/polkit/51-juk3-box-drives.rules /etc/polkit-1/rules.d/ && systemctl daemon-reload && udevadm control --reload && udevadm trigger --action=add --subsystem-match=block --property-match=ID_BUS=usb"
 
 UNIT_NAME="$(echo "$SERVICE_NAME" | tr '_' '-')"
 RENDERED_UNIT="$(mktemp)"

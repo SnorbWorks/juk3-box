@@ -513,3 +513,43 @@ def test_extensions_lists_the_inventory_with_licenses(tmp_path):
         # Versions come from this machine: the venv's own packages are found.
         assert next(i for i in data["items"] if i["id"] == "aiohttp")["installed"]
     run(tmp_path, check)
+
+
+def test_drives_page_combines_the_drive_and_the_library_and_sends_only_drive_commands(tmp_path):
+    async def check(client, admin):
+        admin.live["drives_local"] = {
+            "drives": [{"id": "6AD0", "label": "juk3box HD", "fstype": "exfat", "total": 1000, "used": 250,
+                        "free": 750, "images": [{"path": "a.png", "size": 1}], "videos": [],
+                        "skipped": [{"path": "x.m4p", "reason": "protected"}]}],
+            "tracks": [{"item_path": "drive:6AD0/t.wav", "title": "track01", "artist": None}],
+            "ejected": [],
+        }
+        admin.live["drives_library"] = {"drives": [
+            {"id": "6AD0", "label": "juk3box HD", "attached": True, "song_count": 1, "plays": 2,
+             "songs": [{"item_path": "drive:6AD0/t.wav", "path": "t.wav", "title": "Moon River", "edited": True}]},
+            {"id": "OLD1", "label": "Old stick", "attached": False, "song_count": 9, "plays": 0},
+        ]}
+        data = await (await client.get("/api/drives", headers=H)).json()
+        here, old = data["drives"]
+        assert here["state"] == "plugged in" and here["used"] == 250 and here["pictures"] == 1
+        assert here["songs"][0]["title"] == "Moon River" and here["songs"][0]["tags"]["title"] == "track01"
+        assert old["state"] == "not plugged in" and "songs" not in old
+        assert data["settings"] == {"auto": True, "cap_mb": 2048}
+        assert (await client.post("/api/drives/eject", json={"id": "6AD0"}, headers=H)).status == 503
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/drives/eject", json={"id": "6AD0"}, headers=H)).status == 200
+        assert (await client.post("/api/drives/eject", json={"id": "../x"}, headers=H)).status == 400
+        assert (await client.post("/api/drives/edit", json={"item_path": "drive:6AD0/t.wav",
+                                                              "fields": {"artist": "Andy Williams"}}, headers=H)).status == 200
+        assert (await client.post("/api/drives/edit", json={"item_path": "/etc/passwd"}, headers=H)).status == 400
+        assert (await client.post("/api/drives/forget", json={"id": "OLD1"}, headers=H)).status == 200
+        assert (await client.post("/api/drives/format", json={}, headers=H)).status == 404
+        assert (await client.post("/api/drives/settings", json={"auto": False, "cap_mb": 512}, headers=H)).status == 200
+        assert (await (await client.get("/api/drives", headers=H)).json())["settings"] == {"auto": False, "cap_mb": 512}
+        assert admin.bus.sent == [
+            ("jukebox/jb-source-local/cmd", {"action": "eject", "id": "6AD0"}),
+            ("jukebox/jb-library/cmd", {"action": "edit_drive_song", "item_path": "drive:6AD0/t.wav",
+                                        "fields": {"artist": "Andy Williams"}}),
+            ("jukebox/jb-library/cmd", {"action": "forget_drive", "id": "OLD1"}),
+        ]
+    run(tmp_path, check)

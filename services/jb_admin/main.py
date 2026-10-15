@@ -178,7 +178,7 @@ class Admin:
                     heartbeat = asyncio.create_task(bus.run_heartbeat())
                     try:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
-                                      self.DRIVES_TOPIC, *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
+                                      self.DRIVES_TOPIC, "jukebox/jb-library/drives", *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
                             await bus._client.subscribe(topic)
                         messages = bus._iter_messages()
                         async for topic, payload in messages:
@@ -187,7 +187,10 @@ class Admin:
                             elif topic in self.LIBRARY_TOPICS:
                                 self.heard_library(topic, payload)
                             elif topic == self.DRIVES_TOPIC:
+                                self.live["drives_local"] = payload
                                 self.drive_import.heard(payload)
+                            elif topic == "jukebox/jb-library/drives":
+                                self.live["drives_library"] = payload
                             else:
                                 self.registry.heard(topic, payload)
                     finally:
@@ -363,6 +366,82 @@ class Admin:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
         await self.bus.publish("jukebox/jb-source-phone/cmd", cmd)
         self.log.info("phones: %s %s", action, cmd.get("mac", ""))
+        return web.json_response({"ok": True})
+
+    # USB drives -----------------------------------------------------------------
+
+    DRIVE_ACTIONS = {"rescan", "eject", "mount", "forget", "edit", "settings", "reimport"}
+
+    async def get_drives(self, request):
+        """Everything the Drives page shows: each drive (plugged in, ejected or
+        seen before) with its space, songs (as shown, edits included, with the
+        file's own tags beside them), what was skipped, and the picture/video
+        import; plus the import settings."""
+        local = self.live.get("drives_local") or {}
+        library = (self.live.get("drives_library") or {}).get("drives") or []
+        tags = {t.get("item_path"): {k: t.get(k) for k in ("title", "artist", "album", "genre", "album_track")}
+                for t in local.get("tracks") or [] if isinstance(t, dict)}
+        mounted = {d.get("id"): d for d in local.get("drives") or [] if isinstance(d, dict)}
+        ejected = {d.get("id"): d for d in local.get("ejected") or [] if isinstance(d, dict)}
+        out, seen = [], set()
+        for d in library:
+            out.append(self._drive_view(d, mounted.get(d["id"]), ejected.get(d["id"]), tags))
+            seen.add(d["id"])
+        for drive_id, m in mounted.items():
+            if drive_id not in seen:           # just plugged in: not in the library yet
+                out.insert(0, self._drive_view({"id": drive_id, "label": m.get("label"), "attached": True,
+                                                "songs": []}, m, None, tags))
+        return web.json_response({"drives": out, "settings": self.drive_import.settings(),
+                                  "bus": self.bus is not None})
+
+    def _drive_view(self, d: dict, mounted: dict | None, ejected: dict | None, tags: dict) -> dict:
+        view = {k: d.get(k) for k in ("id", "label", "last_seen", "song_count", "plays")}
+        view["state"] = "plugged in" if mounted else ("ejected" if ejected else "not plugged in")
+        if mounted:
+            view["label"] = mounted.get("label") or view["label"]
+            view.update({k: mounted.get(k) for k in ("fstype", "total", "used", "free", "scanning")})
+            view["skipped"] = mounted.get("skipped") or []
+            view["pictures"] = len(mounted.get("images") or [])
+            view["videos"] = len(mounted.get("videos") or [])
+            view["songs"] = [{**s, "tags": tags.get(s.get("item_path"))} for s in d.get("songs") or []]
+            view["import"] = self.drive_import.status.get(d["id"])
+        elif ejected:
+            view["label"] = ejected.get("label") or view["label"]
+        return view
+
+    async def drive_action(self, request):
+        action = request.match_info["action"]
+        if action not in self.DRIVE_ACTIONS:
+            raise web.HTTPNotFound()
+        body = await json_body(request)
+        if action == "settings":
+            try:
+                cap = int(body.get("cap_mb"))
+            except (TypeError, ValueError):
+                raise error(400, "The size limit should be a number of MB.")
+            return web.json_response(self.drive_import.save_settings(bool(body.get("auto")), cap))
+        drive_id = body.get("id")
+        if action in ("eject", "mount", "forget", "reimport") and (
+                not isinstance(drive_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", drive_id)):
+            raise error(400, "Which drive?")
+        if action == "reimport":
+            if not self.drive_import.reimport(drive_id, str(body.get("path") or "")):
+                raise error(400, "That file isn't on a drive that's plugged in.")
+            return web.json_response({"ok": True})
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        if action in ("rescan", "eject", "mount"):
+            await self.bus.publish("jukebox/jb-source-local/cmd", {"action": action, "id": drive_id})
+        elif action == "forget":
+            await self.bus.publish("jukebox/jb-library/cmd", {"action": "forget_drive", "id": drive_id})
+        elif action == "edit":
+            item_path = body.get("item_path")
+            if not isinstance(item_path, str) or not item_path.startswith("drive:"):
+                raise error(400, "Which song?")
+            fields = body.get("fields") if isinstance(body.get("fields"), dict) else {}
+            await self.bus.publish("jukebox/jb-library/cmd", {"action": "edit_drive_song", "item_path": item_path,
+                                                              "fields": fields})
+        self.log.info("drives: %s %s", action, drive_id or body.get("item_path") or "")
         return web.json_response({"ok": True})
 
     def theme_name(self, theme_id: str) -> str:
@@ -893,6 +972,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/phones", admin.get_phones)
     r.add_get("/api/extensions", admin.get_extensions)
     r.add_post("/api/phones/{action}", admin.phone_action)
+    r.add_get("/api/drives", admin.get_drives)
+    r.add_post("/api/drives/{action}", admin.drive_action)
     r.add_put("/api/settings", admin.put_settings)
     r.add_get("/api/themes", admin.list_themes)
     r.add_post("/api/themes/activate", admin.activate_theme)

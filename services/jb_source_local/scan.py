@@ -87,7 +87,7 @@ def scan(root: Path, drive_id: str, known: dict | None = None) -> dict:
                 song = read_song(root / rel)
             files[rel] = [size, mtime, song]
             if song:
-                songs.append({**song, "item_path": f"drive:{drive_id}/{rel}"})
+                songs.append({**song, "item_path": f"drive:{drive_id}/{rel}", "mtime": mtime})
             else:
                 skipped.append({"path": rel, "reason": "unreadable"})
     return {"songs": songs, "images": images, "videos": videos, "skipped": skipped, "files": files}

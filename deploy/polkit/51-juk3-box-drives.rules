@@ -1,0 +1,13 @@
+// JUKE.BOX: lets the jukebox's own user (admin, which runs jb-source-local)
+// eject a USB drive and mount it again -- stop or start a jb-drive@<device>
+// unit (deploy/jb-drive), and nothing else. Used by the admin's Drives page.
+// Installed by deploy.sh to /etc/polkit-1/rules.d/ (root, 0644).
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && subject.user == "admin") {
+        var unit = action.lookup("unit") || "";
+        var verb = action.lookup("verb") || "";
+        if (/^jb-drive@sd[a-z]{1,2}[0-9]{0,3}\.service$/.test(unit) && (verb == "start" || verb == "stop")) {
+            return polkit.Result.YES;
+        }
+    }
+});
