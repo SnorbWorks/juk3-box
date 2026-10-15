@@ -243,10 +243,11 @@ Output: a findings note plus the caching, queue and artwork strategies. As decid
 
 Pairing, multiple phones, and switching between them, built on the Phase 3 findings.
 
-- [ ] Pairing mode from the menu: discoverable for 2 minutes under a fixed name, 6-digit code on screen, confirm on the jukebox; invisible otherwise
-- [ ] Phone registry: name, last seen; connect, disconnect, forget
-- [ ] Switch sequence: pause current phone, disconnect, connect new phone, load its cached library
-- [ ] Connection policy (takeover vs. locked; recommendation: locked)
+- [x] Pairing mode from the menu: discoverable for 2 minutes under a fixed name, 6-digit code on screen, confirm on the jukebox; invisible otherwise (Oct 14; pairing.py, our own BlueZ agent; tested with a MacBook, confirmed from the admin)
+- [x] Phone registry: name, last seen; connect, disconnect, forget (Oct 14; forget also deletes the phone's library; tested with a MacBook)
+- [x] Switch sequence: pause current phone, disconnect, connect new phone, load its cached library (Oct 14; Mac -> iPhone in 5.5 s, its 910 songs back at once)
+- [x] Connection policy: locked (Oct 14, phones.py): a mid-song drop holds the place for the reconnect window, an idle drop frees it, switching from the jukebox always works. Tested: pairing the Mac turned the iPhone away. A device connected for audio only (a laptop) counts as connected, with no song list
+- [ ] Still to test: a second phone with its own library (pair, switch both ways, forget with a real library); Android (roadmap item 3)
 - [x] Auto-reconnect on boot: last active phone, then others by most recent use (Oct 12; `reconnect.py`). Policy (user's option C): at boot try for 10 min; after a drop **mid-song** try for 3 min; a drop while idle is left alone (it may have been the owner's choice, and calling the phone would pull its audio away). Connects the A2DP profile, which forces classic Bluetooth -- a plain Connect let BlueZ wait for the iPhone on LE forever. Verified: reconnected 25 s into boot, first try
 - [x] Publish the connected phone's name (`jukebox/jb-source-phone/connected`, retained: `{connected, name, mac}`)
 - [ ] Implement the common source interface: browse, play item, transport, now-playing, artwork. Built for the phone (crawl, `play_item`, play/pause/next/previous, now-playing; artwork comes from jb-library), but not yet as a shared interface other sources plug into
@@ -466,7 +467,7 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 
 One at a time, in this order. Each item points at the phase that holds its detail.
 
-1. **Phone management** (Phase 4, Phase 7 screens, Phase 7b Phones): pairing mode with a code on screen, the phone list (connect, forget), switching phones, the phone badge and the pairing / no-phone / syncing screens. *Built Oct 14 (pairing, list, switch, disconnect, forget, the lock; cabinet Phones menu and admin Phones page); to test with real phones.*
+1. **Phone management** (Phase 4, Phase 7 screens, Phase 7b Phones): pairing mode with a code on screen, the phone list (connect, forget), switching phones, the phone badge and the pairing / no-phone / syncing screens. *Built Oct 14: Settings > Bluetooth on the cabinet (on/off, phones, pairing; the user's design), the badge as a quick switcher, the admin's Bluetooth page. Tested with the MacBook: pairing, the lock, switching, forgetting. Left: a second phone with a library.*
 2. **Pi 5 move**, when the board arrives. The hardware is **chosen in setup** (detected from the board, confirmed by the owner) and the matching drivers and settings follow from it: LEDs (rpi_ws281x doesn't run on the Pi 5; an SPI or PIO driver instead), background video (the Pi 5 decodes HEVC in hardware, not H.264), Wi-Fi power settings, memory limits.
 3. **Android go/no-go**, when an Android phone is at hand: the Phase 3 ten questions again (browse tree, play by item, metadata, art, reconnect). Android's AVRCP browsing differs from iOS's.
 4. **Security before anyone else uses it**: change the owner password from its placeholder (Account → Change password already exists); the core services onto bus logins and anonymous bus access closed (Phase 8 hardening).
