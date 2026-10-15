@@ -377,7 +377,16 @@ async def main() -> None:
         if not found:
             phone = None
             synced_player_path = None
-            await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
+            # Connected for audio but offering no remote control (a laptop
+            # playing a video): still connected, just no songs to show.
+            audio = [d for d in await rc.phones(system_bus) if d[3]]
+            pick = next((d for d in audio if d[0] == lock.owner), audio[0] if audio else None)
+            if pick:
+                log.info("%s is connected for audio only (no song list or controls)", pick[2])
+                await bus.publish(f"jukebox/{SERVICE_NAME}/connected",
+                                  {"connected": True, "name": pick[2], "mac": pick[0], "controls": False}, retain=True)
+            else:
+                await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
             # Drop the retained crawl too, so a restarting jb-library (or a
             # reboot, since the broker persists retained messages) never
             # ingests item_paths from a player that no longer exists.
@@ -815,6 +824,10 @@ async def main() -> None:
                         owner = info.get(lock.owner)
                         await bus.publish("jukebox/jb-core/notice", {
                             "type": "phone_turned_away", "name": name, "owner": owner[2] if owner else None})
+                if was is not None and set(connected) != was:
+                    # Something came or went: what "connected" says follows
+                    # (a device with no remote control raises no player events).
+                    asyncio.create_task(connect_current_phone(bus))
                 was = set(connected)
                 listing = ph.phone_list(paired, book.phones, lock.owner)
                 if listing != last_phone_list:

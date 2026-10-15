@@ -142,6 +142,9 @@ class Pairing:
 
     async def stop(self, why: str, state: str = "idle", **extra):
         self.open_until = 0.0
+        if self.closer and self.closer is not asyncio.current_task():
+            self.closer.cancel()
+        self.closer = None
         if self.answer and not self.answer.done():
             self.answer.set_result(False)
         try:
