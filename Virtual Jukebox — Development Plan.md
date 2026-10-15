@@ -456,6 +456,14 @@ Done when: 10 pull-the-plug tests pass in a row.
 
 A second adapter: local files on USB or SD with tags and embedded art, played through the same PipeWire output. Cheap to build, exact metadata and play counts, and a fallback if iOS disappoints in Phase 3.
 
+**Decided Oct 14, 2026 (with the owner):**
+
+- **Always merged, not either/or.** A drive isn't a device you switch to: its songs join whatever phone's library is showing (and are there with no phone at all).
+- **Music plays from the drive; nothing is copied.** The Pi keeps only the index (tags, durations, play counts) and small cover thumbnails, capped. A USB stick reads far faster than audio needs, and decoding costs the same wherever the file is, so the SD card stays free for other things. The drive is mounted read-only. Unplugged, its songs leave the screen; plugged back in, they return, rescanning only new or changed files.
+- **Pictures and videos are imported** into the admin's media library (resized / re-encoded for the Pi as uploads are), under a size cap for what one drive may import.
+- **Formats:** MP3, AAC/M4A (incl. iTunes purchases), ALAC, FLAC, WAV; Apple Music subscription downloads are DRM-locked and are skipped with a note. Tags via tinytag (MIT), not mutagen (GPL) — see docs/extensions-inventory.md.
+- **First step is the shared source interface** (core, library and UI talk to "a source", not jb-source-phone), then jb-source-local.
+
 ## Phase 10+: Features
 
 - Spotify source: Web API for browsing, librespot for playback, requires Premium
