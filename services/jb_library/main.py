@@ -294,7 +294,7 @@ def latest_phone(conn: sqlite3.Connection) -> str | None:
     """The phone whose music was in use most recently: what the board shows
     when no phone is connected (at boot, before it reconnects)."""
     row = conn.execute(
-        "SELECT phone_mac FROM tracks GROUP BY phone_mac"
+        "SELECT phone_mac FROM tracks WHERE phone_mac NOT LIKE 'drive:%' GROUP BY phone_mac"
         " ORDER BY MAX(COALESCE(last_played_at, 0)) DESC, MAX(COALESCE(added_at, 0)) DESC LIMIT 1").fetchone()
     return row[0] if row else None
 
@@ -342,6 +342,29 @@ def upsert_tracks(conn: sqlite3.Connection, mac: str, tracks: list, log=None, no
     elif log:
         log.warning("sync returned %d tracks but %d are stored -- not removing anything",
                     len(numbered), stored)
+    conn.commit()
+    return removed
+
+
+def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None) -> int:
+    """Stores a USB drive's songs (jb-source-local) under phone_mac
+    "drive:<id>". Its tags are exact, so they go where a phone's deep crawl
+    puts what the phone says (phone_artist/album/genre, album_track): they
+    win over the iTunes guesses, which still bring the covers. Returns how
+    many songs were removed (no longer on the drive)."""
+    key = f"drive:{drive_id}"
+    removed = upsert_tracks(conn, key, tracks, log)
+    numbered = number_duplicates(tracks)
+    by_key = {(t["title"], dup): t for t, (_, dup, _) in zip(tracks, numbered)}
+    conn.executemany(
+        """
+        UPDATE tracks SET phone_artist = ?, phone_album = ?, phone_genre = ?, album_track = ?,
+               enriched = CASE WHEN COALESCE(phone_artist, '') = COALESCE(?, '') THEN enriched ELSE 0 END
+        WHERE phone_mac = ? AND title = ? AND dup = ?
+        """,
+        [(t.get("artist"), t.get("album"), t.get("genre"), t.get("album_track"), t.get("artist"),
+          key, title, dup) for (title, dup), t in by_key.items()],
+    )
     conn.commit()
     return removed
 
@@ -429,6 +452,10 @@ class Snapshots:
         # Only one phone's library at a time -- another phone's songs
         # can't be played on this one.
         self.mac: str | None = latest_phone(conn)
+        # USB drives plugged in now (jb-source-local): their songs are
+        # always shown too, alongside the phone's (stored as phone_mac
+        # "drive:<id>"). A pulled drive's rows stay, for its play counts.
+        self.drives: list[str] = []
 
     async def publish(self) -> None:
         """Whole library sorted by title -- the UI slices/sorts client-side.
@@ -447,9 +474,10 @@ class Snapshots:
             -- lookup's (they're the same for most albums): the phone's Recently
             -- Added order reaches far more songs than the crawled ones.
             LEFT JOIN album_recent r ON r.phone_mac = t.phone_mac AND r.album = COALESCE(t.phone_album, t.album)
-            WHERE ? IS NULL OR t.phone_mac = ?
+            WHERE (t.phone_mac NOT LIKE 'drive:%' AND (? IS NULL OR t.phone_mac = ?))
+               OR t.phone_mac IN (SELECT value FROM json_each(?))
             ORDER BY t.title COLLATE NOCASE
-            """, (self.mac, self.mac)
+            """, (self.mac, self.mac, json.dumps(self.drives))
         ).fetchall()
         tracks = [
             {
@@ -673,6 +701,9 @@ async def main() -> None:
         await bus.subscribe("jukebox/jb-source-phone/now-playing")
         await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
         await bus.subscribe("jukebox/jb-crawl/result")
+        # USB drives: their songs, and what they're playing (for play counts).
+        await bus.subscribe("jukebox/jb-source-local/library")
+        await bus.subscribe("jukebox/jb-source-local/now-playing")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -685,6 +716,7 @@ async def main() -> None:
         wake.set()  # pick up any enrichment left over from before a restart
         asyncio.create_task(enrichment_loop(snapshots, wake, cfg.get("lastfm_api_key"), log))
         plays = PlayTracker(conn, log)
+        drive_plays = PlayTracker(conn, log)   # its mac follows the song playing
 
         async for topic, payload in messages:
             if topic.endswith("/cmd"):
@@ -707,6 +739,32 @@ async def main() -> None:
                     log.info("forgot phone %s: removed %d stored rows", mac, n)
                     if snapshots.mac == mac:
                         snapshots.mac = latest_phone(conn)
+                    await snapshots.publish()
+                continue
+            if topic == "jukebox/jb-source-local/library":
+                attached = []
+                for drive in payload.get("drives") or []:
+                    if not drive.get("id"):
+                        continue
+                    if drive.get("scanning"):
+                        attached.append(f"drive:{drive['id']}")   # what it had, until the scan ends
+                        continue
+                    songs = [t for t in payload.get("tracks") or []
+                             if t.get("title") and str(t.get("item_path", "")).startswith(f"drive:{drive['id']}/")]
+                    removed = store_drive(conn, drive["id"], songs, log)
+                    attached.append(f"drive:{drive['id']}")
+                    log.info("drive %s: %d songs (removed %d no longer on it)", drive["id"], len(songs), removed)
+                if attached != snapshots.drives:
+                    log.info("drives shown: %s", ", ".join(attached) or "none")
+                snapshots.drives = attached
+                await snapshots.publish()
+                wake.set()   # covers for new songs
+                continue
+            if topic == "jukebox/jb-source-local/now-playing":
+                item_path = str(payload.get("item_path") or "")
+                if item_path.startswith("drive:"):
+                    drive_plays.mac = "drive:" + item_path[len("drive:"):].partition("/")[0]
+                if drive_plays.on_now_playing(payload):
                     await snapshots.publish()
                 continue
             if topic.endswith("/now-playing"):

@@ -16,7 +16,8 @@ export const PREVIEW = new URLSearchParams(location.search).has('preview');
 // Only what the engine uses. Not jukebox/#: that would also pull in large
 // payloads it ignores (e.g. the retained crawl-result).
 const HANDLERS = {
-  'jukebox/jb-source-phone/now-playing': np => store.set('nowPlaying', np),
+  'jukebox/jb-source-phone/now-playing': np => nowPlayingFrom('phone', np),
+  'jukebox/jb-source-local/now-playing': np => nowPlayingFrom('local', np),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
   'jukebox/jb-core/queue': q => store.set('queue', q),
   'jukebox/jb-library/tracks': lib => {
@@ -47,6 +48,15 @@ const HANDLERS = {
     if (!PREVIEW) location.reload();
   },
 };
+
+// Two sources report now-playing: the phone and USB drives (jb-source-local).
+// Only one plays at a time (jb-core pauses the other), so the screen shows
+// the one playing -- or, when neither is, the last one that was.
+let npSource = 'phone';
+function nowPlayingFrom(source, np) {
+  if (np?.status === 'playing') npSource = source;
+  if (source === npSource) store.set('nowPlaying', np);
+}
 
 // The knob arrives from jb-input, which grabs the keypad exclusively, so
 // navigation works whether or not the kiosk window has keyboard focus.

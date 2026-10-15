@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "roles": ["service"],
   "publishes": ["jukebox/jb-core/queue", "jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/power", "jukebox/jb-core/notice", "jukebox/jb-core/rejected", "jukebox/jb-core/skipped"],
-  "subscribes": ["jukebox/jb-core/cmd", "jukebox/jb-input/key", "jukebox/jb-input/gesture", "jukebox/jb-library/tracks", "jukebox/jb-source-phone/connected", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-phone/play-error"],
+  "subscribes": ["jukebox/jb-core/cmd", "jukebox/jb-input/key", "jukebox/jb-input/gesture", "jukebox/jb-library/tracks", "jukebox/jb-source-phone/connected", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-phone/play-error", "jukebox/jb-source-local/now-playing", "jukebox/jb-source-local/play-error"],
   "commands": ["select", "select_album", "shuffle_on", "shuffle_off", "power"],
   "essential": true
 }

@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "roles": ["source"],
   "publishes": ["jukebox/jb-library/tracks", "jukebox/jb-library/playlists", "jukebox/jb-library/albums"],
-  "subscribes": ["jukebox/jb-library/cmd", "jukebox/jb-source-phone/crawl-result", "jukebox/jb-source-phone/now-playing"],
+  "subscribes": ["jukebox/jb-library/cmd", "jukebox/jb-source-phone/crawl-result", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/library", "jukebox/jb-source-local/now-playing"],
   "commands": ["favorite"],
   "settings": "jb-library",
   "essential": true

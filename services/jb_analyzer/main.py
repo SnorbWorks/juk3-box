@@ -9,7 +9,8 @@ itself: lights, screens and logs subscribe and decide what to do.
 Capture: a PipeWire monitor of the default output (what the DAC plays) via
 pw-record -- a digital copy of the decoded audio, read without disturbing
 playback. Identity comes from the phone's own metadata for now
-(jukebox/jb-source-phone/now-playing); listeners' tags and genre from Last.fm
+(jukebox/jb-source-phone/now-playing, or jb-source-local/now-playing for a
+USB drive); listeners' tags and genre from Last.fm
 (tags.py) when a lastfm_key is configured. Fingerprinting comes later, if a
 source without metadata ever needs it.
 
@@ -70,6 +71,10 @@ async def main() -> None:
         await bus.publish(f"{TOPIC}/status", {"v": V, "online": True, "module": SERVICE_NAME,
                                               "rate": RATE, "fps": round(fps, 2)}, retain=True)
         messages = await bus.subscribe("jukebox/jb-source-phone/now-playing")
+        # USB drives (jb-source-local) too. Only one source plays at a time;
+        # the song is whichever one last said it's playing.
+        await bus.subscribe("jukebox/jb-source-local/now-playing")
+        playing_from = {"topic": "jukebox/jb-source-phone/now-playing"}
         last_slow = {"v": None}
 
         async def publish_slow(force=False):
@@ -82,7 +87,11 @@ async def main() -> None:
                 await bus.publish(f"{TOPIC}/slow", state, retain=True)
 
         async def follow_identity():
-            async for _topic, np_ in messages:
+            async for topic, np_ in messages:
+                if np_.get("status") == "playing":
+                    playing_from["topic"] = topic
+                if topic != playing_from["topic"]:
+                    continue
                 new = {"title": np_.get("title"), "artist": np_.get("artist"), "album": np_.get("album")}
                 if new["title"] and new["title"] != identity["title"]:
                     slow.reset()                       # a new song: its own tempo

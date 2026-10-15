@@ -1,0 +1,6 @@
+# A USB drive's partition with a filesystem the jukebox reads: have systemd
+# mount it read-only (jb-drive@<device>.service runs deploy/jb-drive), and
+# unmount it when the drive is pulled (the unit BindsTo the device).
+# udev itself can't mount (it runs in its own mount namespace), hence the unit.
+# Installed by deploy.sh.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="exfat|vfat|ntfs|hfsplus", TAG+="systemd", ENV{SYSTEMD_WANTS}+="jb-drive@%k.service"

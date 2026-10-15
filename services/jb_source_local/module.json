@@ -1,0 +1,10 @@
+{
+  "contract": 1,
+  "id": "jb-source-local",
+  "name": "Music drives (USB)",
+  "description": "Plays music from USB drives plugged into the jukebox. Their songs join the phone's library; nothing is copied off the drive.",
+  "version": "1.0.0",
+  "roles": ["source"],
+  "publishes": ["jukebox/jb-source-local/library", "jukebox/jb-source-local/now-playing", "jukebox/jb-source-local/play-error"],
+  "subscribes": ["jukebox/jb-source-local/cmd"]
+}

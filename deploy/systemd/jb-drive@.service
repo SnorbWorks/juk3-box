@@ -1,0 +1,13 @@
+# Mounts one USB drive for the jukebox, read-only (deploy/jb-drive). Started
+# by udev (deploy/udev/99-jb-drive.rules); stopped, and so unmounted, when
+# the drive is pulled.
+[Unit]
+Description=juk3-box USB drive %i
+BindsTo=dev-%i.device
+After=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/jb-drive add %i
+ExecStop=/usr/local/sbin/jb-drive remove %i

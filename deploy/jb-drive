@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+"""jb-drive: mounts a USB drive for the jukebox, read-only, and unmounts it
+when it's pulled. Run as root by jb-drive@<device>.service, which udev
+starts when a USB partition with a filesystem appears (99-jb-drive.rules)
+and systemd stops when it goes away (BindsTo the device).
+
+    jb-drive add <device>       mount /dev/<device> under MOUNTS, describe it in STATE
+    jb-drive remove <device>    unmount it (lazily: it's usually already gone)
+
+Read-only always: the jukebox only reads music and pictures, so a drive
+pulled mid-song, or a power cut, can't damage what's on it. Only the
+filesystems people format drives with on a Mac or a PC are taken (exFAT,
+FAT, NTFS, Mac OS Extended); a Linux system's partition (ext4) on the same
+card is left alone. jb-source-local finds the drives in STATE.
+
+Installed copy: /usr/local/sbin/jb-drive, root-owned (deploy.sh copies it
+there; the copy in /opt is the admin user's and is never run as root).
+"""
+
+import json
+import os
+import pwd
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+MOUNTS = Path("/media/juk3-box")
+STATE = Path("/run/juk3-box-drives")
+OWNER = "admin"
+DEVICE_RE = re.compile(r"^sd[a-z]{1,2}[0-9]{0,3}$")
+UUID_RE = re.compile(r"[^A-Za-z0-9-]")
+# blkid's TYPE -> the kernel filesystem to mount it with.
+TYPES = {"exfat": "exfat", "vfat": "vfat", "ntfs": "ntfs3", "hfsplus": "hfsplus"}
+SAFE = "ro,nosuid,nodev,noexec"
+
+
+def props(device: str) -> dict:
+    out = subprocess.run(["udevadm", "info", "--query=property", f"--name=/dev/{device}"],
+                         capture_output=True, text=True, check=True).stdout
+    return dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+
+
+def decode_label(enc: str) -> str:
+    """udev's ID_FS_LABEL_ENC (\\x20 for a space) back to the label."""
+    raw = re.sub(rb"\\x([0-9a-fA-F]{2})", lambda m: bytes([int(m.group(1), 16)]), enc.encode())
+    return raw.decode("utf-8", "replace").strip()
+
+
+def mount_point(device: str) -> Path | None:
+    for line in Path("/proc/self/mounts").read_text().splitlines():
+        source, target = line.split()[:2]
+        if source == f"/dev/{device}" and target.startswith(f"{MOUNTS}/"):
+            return Path(target.replace("\\040", " "))
+    return None
+
+
+def add(device: str) -> None:
+    info = props(device)
+    if info.get("ID_BUS") != "usb":
+        sys.exit(f"{device} isn't a USB drive")
+    fstype = TYPES.get(info.get("ID_FS_TYPE", ""))
+    if not fstype:
+        sys.exit(f"{device}: {info.get('ID_FS_TYPE') or 'no'} filesystem, not one the jukebox reads")
+    if mount_point(device):
+        return
+    uuid = UUID_RE.sub("", info.get("ID_FS_UUID", "")) or device
+    target = MOUNTS / uuid
+    target.mkdir(parents=True, exist_ok=True)
+    user = pwd.getpwnam(OWNER)
+    options = SAFE + f",uid={user.pw_uid},gid={user.pw_gid}"
+    if fstype in ("exfat", "vfat", "ntfs3"):
+        options += ",fmask=0133,dmask=0022"
+    if fstype == "vfat":
+        options += ",utf8"
+    subprocess.run(["mount", "-t", fstype, "-o", options, f"/dev/{device}", str(target)], check=True)
+    STATE.mkdir(mode=0o755, exist_ok=True)
+    label = decode_label(info.get("ID_FS_LABEL_ENC", ""))
+    (STATE / f"{device}.json").write_text(json.dumps({
+        "device": device, "uuid": uuid, "label": label, "fstype": fstype,
+        "path": str(target), "size": int(info.get("ID_PART_ENTRY_SIZE", 0) or 0) * 512,
+    }))
+    print(f"mounted /dev/{device} ({fstype}, {label or 'no label'}) read-only at {target}")
+
+
+def remove(device: str) -> None:
+    (STATE / f"{device}.json").unlink(missing_ok=True)
+    target = mount_point(device)
+    if not target:
+        return
+    subprocess.run(["umount", "--lazy", str(target)], check=False)
+    try:
+        target.rmdir()
+    except OSError:
+        pass
+    print(f"unmounted /dev/{device}")
+
+
+def main() -> None:
+    if len(sys.argv) != 3 or sys.argv[1] not in ("add", "remove") or not DEVICE_RE.match(sys.argv[2]):
+        sys.exit(__doc__)
+    if os.geteuid() != 0:
+        sys.exit("jb-drive runs as root (from jb-drive@.service)")
+    (add if sys.argv[1] == "add" else remove)(sys.argv[2])
+
+
+if __name__ == "__main__":
+    main()

@@ -29,7 +29,9 @@ KEEP_EVENTS = 500
 # If the graceful reboot hasn't happened by then (a hung driver can stall
 # shutdown), restart at once.
 FORCE_REBOOT_AFTER_S = 180
-NOW_PLAYING_TOPIC = "jukebox/jb-source-phone/now-playing"
+# What's playing, from the phone or a USB drive (both report every few
+# seconds while a song plays).
+NOW_PLAYING_TOPICS = ["jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing"]
 
 log = logging.getLogger("jb-netwatch")
 
@@ -75,7 +77,8 @@ def kernel_log() -> str:
 
 
 def playing() -> bool:
-    code, out = run(["mosquitto_sub", "-h", "localhost", "-t", NOW_PLAYING_TOPIC, "-C", "1", "-W", "3"], 6)
+    code, out = run(["mosquitto_sub", "-h", "localhost", *(a for t in NOW_PLAYING_TOPICS for a in ("-t", t)),
+                     "-C", "1", "-W", "3"], 6)
     try:
         return code == 0 and json.loads(out).get("status") == "playing"
     except (ValueError, AttributeError):

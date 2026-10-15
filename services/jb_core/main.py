@@ -7,6 +7,7 @@ from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
 from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
+from services.jb_core.sources import LOCAL, PHONE, cmd_topic, playable, source_of
 
 SERVICE_NAME = "jb-core"
 ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
@@ -38,32 +39,42 @@ class Queue:
         # waiting in the queue. Set optimistically when we command a play so
         # a second quick selection queues behind it instead of replacing it.
         self.playing = False
-        # Readiness check before playing anything -- what this means
-        # depends on the active source. Only the phone source exists so
-        # far; Library/Spotify (Phases 9/10+, not built) will need their
-        # own equivalent ("are there any songs loaded locally?", etc.)
-        # when they exist.
+        # Whether the phone is there to play its songs (sources.playable);
+        # a USB drive's songs are listed only while it's in, so they always can.
         self.phone_connected = False
+        # The source last told to play (sources.py): the one whose
+        # now-playing counts, and the one pause/stop/resume go to. Only one
+        # plays at a time -- starting the other pauses this one.
+        self.active = PHONE
         # The power menu (holding Reset) holds the queue: nothing starts on
         # its own until a choice is made.
         self.held = False
 
     def refill_shuffle(self) -> None:
-        if not self.shuffle_active or not self.library_tracks:
+        pool = [t for t in self.library_tracks if playable(t, self.phone_connected)]
+        if not self.shuffle_active or not pool:
             return
         while len(self.shuffle_buffer) < SHUFFLE_BUFFER_TARGET:
-            pick = random.choice(self.library_tracks)
+            pick = random.choice(pool)
+            if len(pool) == 1:
+                self.shuffle_buffer.append(pick)
+                continue
             if self.shuffle_buffer and pick["title"] == self.shuffle_buffer[-1]["title"]:
                 continue  # avoid an immediate repeat
             self.shuffle_buffer.append(pick)
 
     def pop_next(self) -> dict | None:
-        if self.manual:
-            return self.manual.pop(0)
-        if self.shuffle_active:
-            self.refill_shuffle()
-            if self.shuffle_buffer:
-                return self.shuffle_buffer.pop(0)
+        """The next song that can play now. A phone song with no phone keeps
+        its place (it plays once the phone connects) and doesn't hold up
+        the drive songs behind it."""
+        for tier in (self.manual, self.shuffle_buffer if self.shuffle_active else []):
+            if tier is self.shuffle_buffer:
+                # Shuffle picks are random anyway: drop any the phone left behind.
+                tier[:] = [t for t in tier if playable(t, self.phone_connected)]
+                self.refill_shuffle()
+            for i, track in enumerate(tier):
+                if playable(track, self.phone_connected):
+                    return tier.pop(i)
         return None
 
     def upcoming(self, limit: int = 30) -> list[dict]:
@@ -82,13 +93,26 @@ async def try_autoplay(bus: Bus, q: Queue, log, delay: float = 0.0) -> None:
     next_track = q.pop_next()
     if next_track:
         log.info("autoplay: %s", next_track["title"])
-        await bus.publish(
-            "jukebox/jb-source-phone/cmd",
-            {"action": "play_item", "item_path": next_track["item_path"], "title": next_track["title"]},
-        )
-        q.expected_title = next_track["title"]
-        q.playing = True
-        await publish_queue(bus, q)
+        await play_track(bus, q, next_track)
+    await publish_queue(bus, q)
+
+
+async def play_track(bus: Bus, q: Queue, track: dict) -> None:
+    """Tell the track's source to play it. If the other source was playing,
+    it's paused (the phone) or stopped (a drive) first: one at a time."""
+    source = source_of(track)
+    if source != q.active and q.playing:
+        await bus.publish(cmd_topic(q.active), {"action": "stop" if q.active == LOCAL else "pause"})
+    q.active = source
+    await bus.publish(cmd_topic(source),
+                      {"action": "play_item", "item_path": track["item_path"], "title": track["title"]})
+    q.expected_title = track["title"]
+    q.playing = True
+
+
+async def source_action(bus: Bus, q: Queue, action: str) -> None:
+    """stop / pause / play (resume), to whichever source is playing."""
+    await bus.publish(cmd_topic(q.active), {"action": action})
 
 
 async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
@@ -102,7 +126,7 @@ async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
     await asyncio.sleep(SHUFFLE_AUTOPLAY_DELAY_S)
     # Something may have started in the meantime (e.g. a keypad pick right
     # after turning shuffle on) -- don't replace it.
-    if not q.shuffle_active or not q.phone_connected or q.playing:
+    if not q.shuffle_active or q.playing:
         return
     await try_autoplay(bus, q, log)
 
@@ -149,19 +173,16 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
             next_track = q.pop_next()
             if next_track:
                 log.info("Reset held: cancelling the song; next: %s", next_track["title"])
-                await bus.publish("jukebox/jb-source-phone/cmd",
-                                  {"action": "play_item", "item_path": next_track["item_path"],
-                                   "title": next_track["title"]})
-                q.expected_title, q.playing = next_track["title"], True
+                await play_track(bus, q, next_track)
             else:
                 log.info("Reset held: cancelling the song; nothing queued, stopping")
                 # "stop", not "pause": the song is done with, and shows as
                 # nothing playing (jb-source-phone keeps the phone paused).
-                await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
+                await source_action(bus, q, "stop")
                 q.playing = False
             await publish_queue(bus, q)
         elif act == "pause":
-            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+            await source_action(bus, q, "pause")
         elif act == "open":
             q.held = True
             await publish_power(bus, "menu", until=time.time() + MENU_TIMEOUT_S)
@@ -170,13 +191,13 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
             await publish_power(bus, "idle")
         elif act == "resume":
             log.info("power menu cancelled: resuming")
-            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "play"})
+            await source_action(bus, q, "play")
         elif act == "clear":
             q.manual, q.shuffle_buffer, q.shuffle_active = [], [], False
             await publish_queue(bus, q)
         elif act in POWER_COMMANDS:
             log.warning("power menu: %s", act)
-            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "pause"})
+            await source_action(bus, q, "pause")
             await publish_power(bus, "rebooting" if act == "reboot" else "shutting_down")
             await asyncio.sleep(1.5)  # let the screen say so
             proc = await asyncio.create_subprocess_exec(*POWER_COMMANDS[act], stderr=asyncio.subprocess.PIPE)
@@ -204,9 +225,9 @@ async def stop_after_last_song(bus: Bus, q: Queue, guard: EndGuard, log) -> None
     while True:
         await asyncio.sleep(0.1)
         title = guard.due(time.monotonic(), queue_empty=not q.upcoming() and not q.shuffle_active)
-        if title:
+        if title and q.active == PHONE:   # a drive song just ends; mpv doesn't move on
             log.info("last song ending, stopping: %s", title)
-            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
+            await source_action(bus, q, "stop")
             q.playing = False
             q.expected_title = None
 
@@ -264,12 +285,13 @@ async def main() -> None:
                 # If something got queued up while disconnected (a manual
                 # pick, or shuffle turned on with nothing to play through),
                 # start it now that a phone actually exists to play it on.
-                if q.phone_connected and not was_connected and (
+                # (Not over a drive song that's playing: it plays on.)
+                if q.phone_connected and not was_connected and not q.playing and (
                     q.manual or (q.shuffle_active and q.shuffle_buffer)
                 ):
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
-            elif topic == "jukebox/jb-source-phone/play-error":
+            elif topic in ("jukebox/jb-source-phone/play-error", "jukebox/jb-source-local/play-error"):
                 # The commanded track never actually started (e.g. a stale
                 # item_path from a library snapshot crawled before the last
                 # AVRCP reconnect) -- don't sit believing it's "now playing"
@@ -279,7 +301,26 @@ async def main() -> None:
                 q.playing = False
                 await try_autoplay(bus, q, log)
 
+            elif topic == "jukebox/jb-source-local/now-playing":
+                # A drive song. When it ends, mpv just stops (no auto-advance
+                # to fight): play what's next, if anything.
+                if q.active != LOCAL:
+                    if payload.get("ended"):
+                        log.info("drive song ended, but the phone is the source playing")
+                    continue
+                q.playing = payload.get("status") == "playing"
+                if payload.get("ended"):
+                    log.info("drive song ended (%d queued)", len(q.upcoming()))
+                    q.playing = False
+                    q.expected_title = None
+                    await try_autoplay(bus, q, log)
+                    await publish_queue(bus, q)
+
             elif topic == "jukebox/jb-source-phone/now-playing":
+                # While a drive song plays the phone sits paused; what it
+                # reports then doesn't matter.
+                if q.active != PHONE:
+                    continue
                 guard.update(payload, time.monotonic())
                 q.playing = payload.get("status") == "playing"
                 title = payload.get("title")
@@ -302,11 +343,7 @@ async def main() -> None:
                 next_track = None if q.held else q.pop_next()
                 if next_track:
                     log.info("overriding auto-advance with queued track: %s", next_track["title"])
-                    await bus.publish(
-                        "jukebox/jb-source-phone/cmd",
-                        {"action": "play_item", "item_path": next_track["item_path"], "title": next_track["title"]},
-                    )
-                    q.expected_title = next_track["title"]
+                    await play_track(bus, q, next_track)
                 else:
                     # Nothing queued -- a jukebox with nothing left to play
                     # should stop, not silently keep going with whatever
@@ -317,7 +354,7 @@ async def main() -> None:
                     # chosen, so it's paused AND cleared -- the screen shows
                     # nothing playing, as when Reset cancels the last song.
                     log.info("queue empty, stopping instead of letting iOS auto-advance run")
-                    await bus.publish("jukebox/jb-source-phone/cmd", {"action": "stop"})
+                    await source_action(bus, q, "stop")
                     q.playing = False
                     q.expected_title = None
                 await publish_queue(bus, q)
@@ -329,7 +366,7 @@ async def main() -> None:
                     if track:
                         q.manual.append(track)
                         log.info("queued manual selection: %s", track.get("title"))
-                        if not q.phone_connected:
+                        if not playable(track, q.phone_connected):
                             await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
                             await publish_queue(bus, q)
                         elif not q.playing:
@@ -346,7 +383,7 @@ async def main() -> None:
                     if tracks:
                         q.manual.extend(tracks)
                         log.info("queued album %r: %d songs", payload.get("album"), len(tracks))
-                        if not q.phone_connected:
+                        if not playable(tracks[0], q.phone_connected):
                             await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
                             await publish_queue(bus, q)
                         elif not q.playing:
@@ -357,7 +394,7 @@ async def main() -> None:
                     q.shuffle_active = True
                     q.refill_shuffle()
                     await publish_queue(bus, q)
-                    if q.phone_connected:
+                    if q.shuffle_buffer:   # something it can play (sources.playable)
                         asyncio.create_task(shuffle_autoplay(bus, q, log))
                     else:
                         await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})

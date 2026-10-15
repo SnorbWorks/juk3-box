@@ -71,6 +71,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-library/cmd` | command | `favorite` (`title`) |
 | `jb-source-phone/connected` | R state | `connected`, `name`, `mac` |
 | `jb-source-phone/now-playing` | state | `title`, `artist`, `album`, `status`, `position`, `duration` |
+| `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |
+| `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |
 | `jb-source-phone/lease`, `reconnect` | R state | source internals other modules may watch |
 | `jb-source-phone/crawl-result` | R state | the deep library crawl |
 | `jb-source-phone/play-error` | event | a pick that failed |
@@ -85,4 +87,4 @@ What the reference build actually publishes, as of this version. Retained = R.
 
 - Fits cleanly: every module already publishes only under its own name, uses JSON objects, and retains its state.
 - Gap: only the analyzer stamps `v`. Fine under the "absent = 1" rule; new public payloads should stamp it.
-- Gap: the source contract is phone-specific in name (`jb-source-phone/now-playing`). Subscribers (the engine) hard-code that topic. Held, by the plan's rule: the generic source contract is decided when a second source exists (see [modules.md](modules.md), Sources).
+- Settled with the second source (USB drives, Oct 14, 2026): sources keep their own topics; subscribers take both and follow whichever last reported `playing` (see [modules.md](modules.md), Roles).

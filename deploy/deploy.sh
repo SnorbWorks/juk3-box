@@ -46,6 +46,11 @@ ssh_pi "cd $REMOTE_DIR && python3 -m venv --system-site-packages venv 2>/dev/nul
 # in its own private folder. No sudo rule involved.
 ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/local/sbin/jb-modctl && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-modctl.service $REMOTE_DIR/deploy/systemd/jb-modctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/modctl $DATA_DIR/modctl/requests && systemctl daemon-reload && systemctl enable --now jb-modctl.path >/dev/null 2>&1"
 
+# USB drives (jb-source-local): mounted read-only by a root-owned helper that
+# udev has systemd start when one is plugged in. The trigger mounts any
+# drive that's already there.
+ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-drive /usr/local/sbin/jb-drive && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-drive@.service /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/udev/99-jb-drive.rules /etc/udev/rules.d/ && systemctl daemon-reload && udevadm control --reload && udevadm trigger --action=add --subsystem-match=block --property-match=ID_BUS=usb"
+
 UNIT_NAME="$(echo "$SERVICE_NAME" | tr '_' '-')"
 RENDERED_UNIT="$(mktemp)"
 # A service with its own unit file (e.g. jb-lights, which runs as root) uses

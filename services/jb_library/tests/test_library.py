@@ -225,3 +225,67 @@ def test_the_board_falls_back_to_the_phone_last_played(db):
     assert lib.latest_phone(db) == MAC
     lib.forget_phone(db, MAC)
     assert lib.latest_phone(db) == OTHER
+
+
+# -- USB drives (jb-source-local) -----------------------------------------
+
+class FakeBus:
+    def __init__(self):
+        self.sent = {}
+
+    async def publish(self, topic, payload, retain=False):
+        self.sent[topic] = payload
+
+
+class Log:
+    def info(self, *a): pass
+    def warning(self, *a): pass
+
+
+def drive_songs(*titles, drive="6AD0"):
+    return [{"title": t, "artist": f"{t} artist", "album": "LP", "genre": "Pop", "album_track": i + 1,
+             "item_path": f"drive:{drive}/Music/{t}.mp3"} for i, t in enumerate(titles)]
+
+
+def test_a_drives_tags_are_stored_as_the_songs_own(db):
+    lib.store_drive(db, "6AD0", drive_songs("Tunnel"))
+    row = db.execute("SELECT phone_mac, phone_artist, phone_album, phone_genre, album_track, item_path"
+                     " FROM tracks").fetchone()
+    assert row == ("drive:6AD0", "Tunnel artist", "LP", "Pop", 1, "drive:6AD0/Music/Tunnel.mp3")
+
+
+def test_a_changed_artist_tag_asks_for_a_new_cover(db):
+    lib.store_drive(db, "6AD0", drive_songs("Tunnel"))
+    db.execute("UPDATE tracks SET enriched = 1")
+    lib.store_drive(db, "6AD0", drive_songs("Tunnel"))
+    assert db.execute("SELECT enriched FROM tracks").fetchone()[0] == 1
+    changed = drive_songs("Tunnel")
+    changed[0]["artist"] = "Someone else"
+    lib.store_drive(db, "6AD0", changed)
+    assert db.execute("SELECT enriched FROM tracks").fetchone()[0] == 0
+
+
+def test_drive_songs_are_shown_with_the_phones_while_the_drive_is_in(db):
+    import asyncio
+    lib.upsert_tracks(db, MAC, crawl("Phone song"))
+    lib.upsert_tracks(db, "11:22:33:44:55:66", crawl("Other phone's song"))
+    lib.store_drive(db, "6AD0", drive_songs("Drive song"))
+    snaps = lib.Snapshots(FakeBus(), db, Log())
+    snaps.mac = MAC
+
+    def shown():
+        asyncio.run(snaps.publish())
+        return [t["title"] for t in snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]]
+
+    assert shown() == ["Phone song"]                       # drive not plugged in
+    snaps.drives = ["drive:6AD0"]
+    assert shown() == ["Drive song", "Phone song"]          # merged, not either/or
+    snaps.mac = None                                        # no phone ever used
+    assert "Drive song" in shown()
+
+
+def test_the_last_phone_used_is_never_a_drive(db):
+    lib.upsert_tracks(db, MAC, crawl("A"))
+    lib.store_drive(db, "6AD0", drive_songs("B"))
+    db.execute("UPDATE tracks SET last_played_at = 100 WHERE phone_mac = 'drive:6AD0'")
+    assert lib.latest_phone(db) == MAC
