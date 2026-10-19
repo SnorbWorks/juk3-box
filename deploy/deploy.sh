@@ -24,7 +24,12 @@ ssh_pi() { ssh -i "$PI_KEY" "$PI_USER@$PI_HOST" "$@"; }
 
 # Sudo on the Pi requires a password (no NOPASSWD configured, deliberately —
 # don't add it). Prompt once per deploy run and reuse it for the few remote
-# steps that need root.
+# steps that need root. If the owner has stored it in the Mac's Keychain
+# (security add-generic-password -a admin -s juk3-box-sudo -w), that's used
+# instead, so a deploy can run without anyone typing it.
+if [ -z "${PI_SUDO_PASS:-}" ]; then
+  PI_SUDO_PASS="$(security find-generic-password -a "$PI_USER" -s juk3-box-sudo -w 2>/dev/null || true)"
+fi
 if [ -z "${PI_SUDO_PASS:-}" ]; then
   read -r -s -p "Pi sudo password (admin@$PI_HOST): " PI_SUDO_PASS
   echo
