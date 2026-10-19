@@ -94,7 +94,8 @@ jb-up-next {
 .jb-queue-artist { font-size: 1.3vmin; opacity: 0.7; }
 
 /* Nav */
-jb-nav { display: flex; flex-direction: column; gap: 0.6vmin; }
+jb-nav { display: flex; flex-direction: column; gap: 2vmin; flex: 1; min-height: 0; }
+.jb-nav-buttons { display: flex; flex-direction: column; gap: 0.6vmin; }
 .jb-nav-item {
   padding: 1vmin 1.5vmin;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -105,6 +106,7 @@ jb-nav { display: flex; flex-direction: column; gap: 0.6vmin; }
   transition: outline-color 300ms;
 }
 .jb-nav-button { display: flex; align-items: center; gap: 1vmin; }
+.jb-nav-modules { display: flex; flex-direction: column; gap: 2vmin; flex: 1; min-height: 0; }
 .jb-nav-icon { width: 2.4vmin; height: 2.4vmin; }
 .jb-nav-item[data-active] { background: rgba(255, 255, 255, 0.12); }
 .jb-nav-item[data-on] .jb-nav-label { color: #ffd54f; }
@@ -123,6 +125,7 @@ jb-nav { display: flex; flex-direction: column; gap: 0.6vmin; }
 .jb-volume-bar { height: 2vmin; background: rgba(255, 255, 255, 0.15); border-radius: 1vmin; overflow: hidden; }
 .jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); background: #ffd54f; }
 .jb-volume-value { margin-top: 1.5vmin; font: 3vmin monospace; }
+.jb-edge .jb-notice { max-width: 60vmin; margin: 1.5vmin auto 0; }
 .jb-notice { font-size: 2vmin; }
 .jb-phones, .jb-pairing { font-size: 1.8vmin; min-width: 50vmin; }
 .jb-phones-list { display: flex; flex-direction: column; gap: 0.6vmin; margin-bottom: 2vmin; }

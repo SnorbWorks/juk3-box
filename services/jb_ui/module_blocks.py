@@ -74,6 +74,8 @@ def check_block(module_id: str, root: Path, b) -> list[str]:
                 problems.append(f"block {name!r}: {key!r} can't be a setting's name")
             elif not isinstance(spec, dict) or spec.get("type") not in BLOCK_SETTING_TYPES or not isinstance(spec.get("label"), str):
                 problems.append(f"block {name!r}: setting {key!r} needs a label and a type ({', '.join(sorted(BLOCK_SETTING_TYPES))})")
+    if not isinstance(b.get("nav", False), bool):
+        problems.append(f"block {name!r}: nav must be true or false")
     shapes = b.get("shapes", [])
     if not isinstance(shapes, list) or not all(
             isinstance(s, list) and len(s) == 2 and isinstance(s[0], str) and themes.ID_RE.match(s[0])
@@ -110,6 +112,8 @@ def module_blocks(folders: list[Path]) -> tuple[dict[str, dict], list[str]]:
                 "icons": {n: {"svg": s} for n in b.get("icons", []) if (s := icons.svg(f"lucide:{n}"))},
                 "shapes": b.get("shapes", []),
                 "settings": b.get("settings") or {},
+                # It can go in the navigation bar (Settings > Navigation).
+                "nav": b.get("nav") is True,
             }
     return out, problems
 

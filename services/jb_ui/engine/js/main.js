@@ -11,6 +11,7 @@ import { nowPlayingData, playingLibraryTrack } from './np.js';
 import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './popup.js';
 import { initPhones, openSwitcher } from './phones.js';
 import { initWholeHome } from './wholehome.js';
+import { initDisplay } from './display.js';
 import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
@@ -31,7 +32,7 @@ const DEFAULT_SETTINGS_LAYOUT = {
   class: 'jb-settings-screen',
   children: [
     { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
-    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'bluetooth' }, { block: 'wholehome' }] },
+    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'bluetooth' }, { block: 'wholehome' }, { block: 'display' }] },
   ],
 };
 
@@ -387,6 +388,7 @@ async function start() {
   store.set('settings', theme.settings);
   initPopups(theme.blocks);
   initWholeHome(theme.blocks);
+  initDisplay(theme.blocks);
   initPhones(theme.blocks, html, {
     // "Add a phone" on the badge: Settings, at its Bluetooth section.
     openSettings: key => {

@@ -437,3 +437,23 @@ jb-shortcut[tint-strength="strong"] { --jb-tint-amount: 75%; }
 jb-screen { position: relative; }
 jb-screen > * { position: absolute; inset: 0; }
 jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
+
+/* The picture area's guide (display.js): a line around the very edge of
+   the page, with the side being moved picked out, so it can be lined up
+   with the window in the cabinet's glass. Over everything, popups too. */
+#jb-display-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 0.5vmin #ffffff;
+}
+#jb-display-guide::before {
+  content: '';
+  position: absolute;
+  background: #ff2d8a;
+}
+#jb-display-guide[data-side="top"]::before { top: 0; left: 0; right: 0; height: 1vmin; }
+#jb-display-guide[data-side="bottom"]::before { bottom: 0; left: 0; right: 0; height: 1vmin; }
+#jb-display-guide[data-side="left"]::before { top: 0; bottom: 0; left: 0; width: 1vmin; }
+#jb-display-guide[data-side="right"]::before { top: 0; bottom: 0; right: 0; width: 1vmin; }

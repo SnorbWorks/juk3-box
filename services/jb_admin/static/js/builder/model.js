@@ -83,7 +83,27 @@ export function canDrop(tree, schema, layout, node, from, parentPath) {
   const parent = at(tree, parentPath);
   if (!isContainer(parent)) return false;
   if (from && within(parentPath, from)) return false;           // into itself
+  if (inNavBar(tree, parentPath) && navManaged(schema, node)) return false;
   return canHave(tree, schema, layout, node, !from);
+}
+
+// Is this spot in the navigation bar: the container holding the nav block,
+// or anywhere inside it?
+export function inNavBar(tree, parentPath) {
+  for (let i = parentPath.length; i >= 0; i--) {
+    const c = at(tree, parentPath.slice(0, i));
+    if (isContainer(c) && c.children.some(ch => ch.block === 'nav')) return true;
+  }
+  return false;
+}
+
+// Does `node` hold a block Settings > Navigation manages (the Now Playing
+// card, Up Next, modules that can go in the navigation bar)? Those go in
+// the navigation bar from Settings only, never from here.
+export function navManaged(schema, node) {
+  let found = false;
+  walk(node, n => { if (n.block && schema.blocks[n.block]?.nav_managed) found = true; });
+  return found;
 }
 
 // May this layout hold `node` (and everything inside it)? `adding` counts it

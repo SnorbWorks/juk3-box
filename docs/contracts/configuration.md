@@ -22,7 +22,7 @@ One JSON object. Every key is optional; anything missing or unusable means "the 
 | Key | Type | Default | Used by |
 | --- | --- | --- | --- |
 | `theme` | theme id | `bare` | jb-ui |
-| `nav` | list of nav button names, in order | `home, volume, shuffle, all-songs, settings` | jb-ui |
+| `nav` | the navigation bar, in order: button names (the first is where the knob rests), then what goes below the buttons as `block:<id>`: `now-playing` (the card), `up-next`, and module blocks (always after every button; see installed-modules.md, Blocks) | `home, volume, shuffle, all-songs, settings, block:now-playing, block:up-next` | jb-ui |
 | `songs_per_page` | 10..100, step 10 | 100 | jb-ui |
 | `idle_home_minutes` | number ≥ 0 (0 = never) | 5 | jb-ui |
 

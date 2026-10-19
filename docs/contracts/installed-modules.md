@@ -39,7 +39,8 @@ All of [modules.md](modules.md)'s fields, plus:
     "topic": "jukebox/jb-weather/current",
     "template": "blocks/weather.html", "style": "blocks/weather.css",
     "icons": ["sun", "cloud", "cloud-sun", "cloud-rain"],
-    "shapes": [["compact", 0], ["card", 0.42], ["banner", 0.95]]
+    "shapes": [["compact", 0], ["card", 0.42], ["banner", 0.95]],
+    "nav": true
   }]
 }
 ```
@@ -64,6 +65,7 @@ A module's block is **declarative**: markup and style files plus data off the bu
 - **Markup** is sanitized like a theme's (no scripts, no event handlers, no outside URLs). **Style** is served inside `@scope (jb-<name>)`, so it can't reach anything else on the screen (a style sheet whose braces don't balance, or that uses `@import`, is refused). It's loaded before the theme's styles, so a theme can restyle a module's block (`jb-<name> ...`).
 - **Shapes.** `shapes` works as for the engine's own blocks (`data-shape`, a Layout setting in the page builder).
 - **Settings.** `settings` gives the block its own settings in the page builder: `{"show-weather": {"type": "bool", "label": "Show the weather", "default": true}}` (types `bool`, `enum`, `text`, `int`, as the engine's block schema). The engine sets each on the block's element as an attribute (`show-weather="false"`), for the block's style to use.
+- **In the navigation bar.** `"nav": true` says the block can go in the navigation bar. **The rule:** every block that can go there is listed in the admin's Settings > Navigation, and that is the only place it's put there. The owner shows or hides it and orders it among what else is below the buttons (the Now Playing card, Up Next, other modules). Modules always come after every navigation button (Home, Volume...), never above or between them; Settings orders the buttons and the modules in two separate lists. Because Settings is where they're managed, the page builder won't place them in the navigation bar (the container holding the `nav` block). Saved in the `nav` setting as `"block:<id>"` ([configuration.md](configuration.md)). A block without `nav` can't be added there. Make such a block work in a narrow column (a `compact` shape).
 - Until data arrives the block shows nothing (`data-empty` on its element).
 - **Not yet:** cabinet screens from modules; knob stops in display blocks (playlist blocks have theirs).
 

@@ -82,10 +82,40 @@ def read_settings(path: Path) -> dict:
 
 
 # Nav buttons the engine knows (docs/theme-format.md, "Nav buttons").
-# "now-playing" is a nav button an owner can add, but by default Now
-# Playing is the header of the Now Playing card instead.
+# "now-playing" is a nav button an owner can add (it opens the Now Playing
+# overlay), but by default the header of the Now Playing card does that.
 NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playing")
-DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings"]
+# A block below the buttons in the navigation bar: "block:<block id>".
+NAV_BLOCK_PREFIX = "block:"
+# The engine's own blocks that can go there (besides modules' blocks).
+NAV_ENGINE_BLOCKS = {"now-playing": "Now Playing card", "up-next": "Up Next (the queue)"}
+DEFAULT_NAV = ["home", "volume", "shuffle", "all-songs", "settings",
+               NAV_BLOCK_PREFIX + "now-playing", NAV_BLOCK_PREFIX + "up-next"]
+
+
+def nav_block(entry) -> str | None:
+    """The module block a nav entry names ("block:weather" -> "weather"), or
+    None if it isn't one."""
+    if isinstance(entry, str) and entry.startswith(NAV_BLOCK_PREFIX):
+        name = entry[len(NAV_BLOCK_PREFIX):]
+        return name if themes.ID_RE.match(name) else None
+    return None
+
+
+def clean_nav(nav) -> list:
+    """The navigation bar, top to bottom: the buttons shown, then the
+    modules shown (docs/contracts/installed-modules.md, "In the navigation
+    bar"). The first button is where the knob rests; what goes below the
+    buttons always comes after every one of them. A module that's gone is
+    skipped by the engine. At least one button, or the defaults."""
+    if not isinstance(nav, list):
+        return DEFAULT_NAV
+    entries = list(dict.fromkeys(e for e in nav if isinstance(e, str)))
+    buttons = [e for e in entries if e in NAV_BUTTONS]
+    modules = [e for e in entries if nav_block(e)]
+    if not buttons:
+        return DEFAULT_NAV
+    return buttons + modules
 
 
 # No SVG: it can carry scripts. Videos are MP4 only: jb-admin converts every
@@ -145,10 +175,7 @@ def theme_payload(theme: themes.Theme, fallback: dict | None, settings: dict,
 def owner_settings(raw: dict) -> dict:
     """The owner's choices the engine needs, with anything unusable
     replaced by the default."""
-    nav = raw.get("nav")
-    nav = list(dict.fromkeys(b for b in nav if b in NAV_BUTTONS)) if isinstance(nav, list) else None
-    if not nav:
-        nav = DEFAULT_NAV
+    nav = clean_nav(raw.get("nav"))
 
     # Songs per board page: 10 to 100 in steps of 10, so every letter gets
     # the same number of slots and the codes always match the keypad.

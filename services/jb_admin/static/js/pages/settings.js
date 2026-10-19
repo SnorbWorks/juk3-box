@@ -55,7 +55,12 @@ function render(main) {
 function control(key, spec, changed) {
   const set = v => { state.values[key] = v; changed(); };
   const value = state.values[key];
-  if (spec.type === 'order') return field(spec.label, orderList(spec, value, v => set(v)), spec.help);
+  if (spec.type === 'order') {
+    // Two sections: the buttons, and (when there are any) the modules.
+    const lists = orderLists(spec, value, v => set(v));
+    return [field(spec.label, lists.button, spec.help),
+      lists.module ? field(spec.modules_label || 'Below', lists.module, spec.modules_help) : null];
+  }
   if (spec.type === 'enum') {
     const sel = h('select', { onchange: () => set(spec.options[sel.selectedIndex].value) },
       spec.options.map(o => h('option', { selected: o.value === value }, o.label)));
@@ -71,34 +76,55 @@ function control(key, spec, changed) {
 }
 
 // An ordered set: every option, switched on or off, in the order chosen.
-function orderList(spec, value, onChange) {
+// The navigation bar's options come in two kinds, each its own list,
+// ordered within itself: its buttons, then the modules (the Now Playing
+// card, Up Next, modules' blocks: docs/contracts/installed-modules.md,
+// Blocks), which always come after every button. Returns the lists.
+function orderLists(spec, value, onChange) {
   const labels = Object.fromEntries(spec.options.map(o => [o.value, o.label]));
-  let order = [...value, ...spec.options.map(o => o.value).filter(v => !value.includes(v))];
-  let on = new Set(value);
-  const list = h('ul.order-list');
-  const emit = () => onChange(order.filter(v => on.has(v)));
-  const draw = () => {
-    clear(list, order.map((v, i) => {
-      const box = h('input', { type: 'checkbox', checked: on.has(v), 'aria-label': `Show ${labels[v]}`, onchange: () => {
-        if (box.checked) on.add(v);
-        else if (on.size > 1) on.delete(v);
-        else { box.checked = true; toast('Keep at least one button.', 'error'); }
-        draw(); emit();
-      } });
-      return h(`li.order-item${on.has(v) ? '' : '.off'}`,
-        h('span.icon-btn', { dataset: { handle: '' }, style: { cursor: 'grab', touchAction: 'none' }, title: 'Drag to reorder' }, icon('grip-vertical')),
-        box, h('span.order-label', labels[v]),
-        i === 0 && on.has(v) ? h('span.badge.accent', 'Rest') : null,
-        iconButton('chevron-up', 'Move up', { disabled: i === 0, onclick: () => move(i, i - 1) }),
-        iconButton('chevron-down', 'Move down', { disabled: i === order.length - 1, onclick: () => move(i, i + 1) }));
-    }));
+  const kindOf = Object.fromEntries(spec.options.map(o => [o.value, o.kind || 'button']));
+  const on = new Set(value.filter(v => v in labels));
+  const ordered = kind => [...value, ...spec.options.map(o => o.value)]
+    .filter((v, i, all) => v in labels && kindOf[v] === kind && all.indexOf(v) === i);
+  const lists = { button: ordered('button'), module: ordered('module') };
+  const emit = () => onChange([...lists.button, ...lists.module].filter(v => on.has(v)));
+  const drawn = [];
+  const redraw = () => drawn.forEach(d => d());
+
+  const section = kind => {
+    const order = lists[kind];
+    const list = h('ul.order-list');
+    const draw = () => {
+      // The knob rests on the first button shown.
+      const rest = lists.button.find(b => on.has(b));
+      clear(list, order.map((v, i) => {
+        const box = h('input', { type: 'checkbox', checked: on.has(v), 'aria-label': `Show ${labels[v]}`, onchange: () => {
+          const buttonsOn = lists.button.filter(b => on.has(b)).length;
+          if (box.checked) on.add(v);
+          else if (kind === 'module' || buttonsOn > 1) on.delete(v);
+          else { box.checked = true; toast('Keep at least one button.', 'error'); }
+          redraw(); emit();
+        } });
+        return h(`li.order-item${on.has(v) ? '' : '.off'}`,
+          h('span.icon-btn', { dataset: { handle: '' }, style: { cursor: 'grab', touchAction: 'none' }, title: 'Drag to reorder' }, icon('grip-vertical')),
+          box, h('span.order-label', labels[v]),
+          v === rest ? h('span.badge.accent', 'Rest') : null,
+          iconButton('chevron-up', 'Move up', { disabled: i === 0, onclick: () => move(i, i - 1) }),
+          iconButton('chevron-down', 'Move down', { disabled: i === order.length - 1, onclick: () => move(i, i + 1) }));
+      }));
+    };
+    const move = (from, to) => {
+      const [item] = order.splice(from, 1);
+      order.splice(to, 0, item);
+      redraw(); emit();
+    };
+    sortable(list, move);
+    drawn.push(draw);
+    draw();
+    return list;
   };
-  const move = (from, to) => {
-    const [item] = order.splice(from, 1);
-    order.splice(to, 0, item);
-    draw(); emit();
-  };
-  sortable(list, move);
-  draw();
-  return list;
+
+  return { button: section('button'), module: lists.module.length ? section('module') : null };
 }
+
+

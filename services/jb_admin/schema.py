@@ -6,7 +6,9 @@ Values are checked here and again by jb-ui when it reads them
 what's usable: the admin refuses what jb-ui would ignore.
 """
 
-from services.jb_ui.main import DEFAULT_NAV, NAV_BUTTONS, owner_settings
+import copy
+
+from services.jb_ui.main import DEFAULT_NAV, NAV_BLOCK_PREFIX, NAV_BUTTONS, NAV_ENGINE_BLOCKS, owner_settings
 
 NAV_LABELS = {
     "home": "Home",
@@ -14,14 +16,15 @@ NAV_LABELS = {
     "shuffle": "Shuffle",
     "all-songs": "All Songs",
     "settings": "Settings",
-    "now-playing": "Now Playing",
+    "now-playing": "Now Playing button",
 }
 
 SCHEMA = {
     "nav": {
-        "type": "order", "label": "Navigation buttons", "group": "Screen",
-        "help": "Which buttons show in the cabinet's navigation, top to bottom. The first is where the knob rests.",
-        "options": [{"value": b, "label": NAV_LABELS[b]} for b in NAV_BUTTONS],
+        "type": "order", "label": "Navigation buttons", "group": "Screen", "modules_label": "Modules",
+        "help": "Which buttons show in the cabinet's navigation bar, top to bottom. The first is where the knob rests. The Now Playing button opens the full-screen Now Playing view, which the Now Playing card's heading opens too.",
+        "modules_help": "What shows below the buttons, top to bottom: the Now Playing card, Up Next, and modules that can go in the navigation bar. They always come after the buttons.",
+        "options": [{"value": b, "label": NAV_LABELS[b], "kind": "button"} for b in NAV_BUTTONS],
         "default": DEFAULT_NAV,
     },
     "songs_per_page": {
@@ -38,8 +41,23 @@ SCHEMA = {
 }
 
 
-def validate(values: dict) -> tuple[dict, dict]:
-    """(clean values, problems by key) for the settings the admin manages."""
+def with_modules(nav_blocks: dict) -> dict:
+    """The schema, with what can go below the buttons in the navigation bar
+    offered after them: the engine's Now Playing card and Up Next, then the
+    module blocks that can go there (`nav_blocks`: block id -> its
+    definition)."""
+    schema = copy.deepcopy(SCHEMA)
+    schema["nav"]["options"] += [{"value": NAV_BLOCK_PREFIX + name, "label": label, "kind": "module"}
+                                 for name, label in NAV_ENGINE_BLOCKS.items()]
+    schema["nav"]["options"] += [{"value": NAV_BLOCK_PREFIX + name, "label": b["label"], "kind": "module"}
+                                 for name, b in sorted(nav_blocks.items())]
+    return schema
+
+
+def validate(values: dict, nav_blocks: dict | None = None) -> tuple[dict, dict]:
+    """(clean values, problems by key) for the settings the admin manages.
+    `nav_blocks`: the module blocks that may go in the navigation bar."""
+    modules = {NAV_BLOCK_PREFIX + name for name in [*NAV_ENGINE_BLOCKS, *(nav_blocks or {})]}
     clean: dict = {}
     problems: dict = {}
     if not isinstance(values, dict):
@@ -50,10 +68,11 @@ def validate(values: dict) -> tuple[dict, dict]:
             problems[key] = "Not a setting the admin manages."
             continue
         if spec["type"] == "order":
-            ok = (isinstance(value, list) and value and len(set(value)) == len(value)
-                  and all(v in NAV_BUTTONS for v in value))
+            ok = (isinstance(value, list) and len(set(value)) == len(value)
+                  and any(v in NAV_BUTTONS for v in value)
+                  and all(v in NAV_BUTTONS or v in modules for v in value))
             if not ok:
-                problems[key] = "Choose at least one button, each once."
+                problems[key] = "Choose at least one button, each once, and only modules that can go there."
                 continue
         elif spec["type"] == "enum":
             if value not in [o["value"] for o in spec["options"]] or isinstance(value, bool):
@@ -78,3 +97,27 @@ def current(raw: dict) -> dict:
     """The values in effect, as jb-ui will use them."""
     used = owner_settings(raw)
     return {key: used[key] for key in SCHEMA}
+
+
+def nav_placement_problems(tree, nav_blocks: dict | None = None) -> list[str]:
+    """What a layout puts in the navigation bar (the container holding the
+    `nav` block, or anywhere inside it) that Settings > Navigation manages
+    instead: the Now Playing card, Up Next, and module blocks that can go
+    there (`nav_blocks`). Settings is the only place those go in it."""
+    managed = {*NAV_ENGINE_BLOCKS, *(nav_blocks or {})}
+    found: list[str] = []
+
+    def walk(node, in_bar: bool) -> None:
+        if not isinstance(node, dict):
+            return
+        children = node.get("children")
+        if isinstance(children, list):
+            in_bar = in_bar or any(isinstance(c, dict) and c.get("block") == "nav" for c in children)
+            for c in children:
+                walk(c, in_bar)
+        elif in_bar and node.get("block") in managed:
+            found.append(node["block"])
+
+    walk(tree, False)
+    return [f"{name} goes in the navigation bar from Settings > Navigation, not the page builder"
+            for name in dict.fromkeys(found)]

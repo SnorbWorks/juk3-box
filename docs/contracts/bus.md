@@ -65,6 +65,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power` |
 | `jb-audio/state` | R state | `volume` 0..1, `muted` |
 | `jb-audio/cmd` | command | `volume_delta`, `mute`, `unmute`, `toggle_mute` |
+| `jb-display/state` | R state | `inset` (top, right, bottom, left px; the kiosk page fits itself inside them), `rotation`, `sleep_minutes`, `asleep`, `guide`, `output`, `limits`, `sway` |
+| `jb-display/cmd` | command | `inset` (`side` + `px`, or `inset`), `inset_reset`, `rotation` (`degrees`), `sleep` (`minutes`), `wake`, `guide` (`on`) |
 | `jb-library/tracks` | R state | `tracks`: title, artist, album, year, length, cover, added_at, last_played_at |
 | `jb-library/playlists` | R state | `playlists`: name, titles |
 | `jb-library/albums` | R state | `albums` |

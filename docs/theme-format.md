@@ -162,9 +162,7 @@ Give `jb-screen` (the `screen` block) a height, e.g. `height: 100%`. Each screen
   "children": [
     { "class": "sidebar", "children": [
       { "block": "logo", "src": "assets/logo.png" },
-      { "block": "nav", "focus": "nav", "focus-flow": "down-from-rest" },
-      { "block": "now-playing" },
-      { "block": "up-next", "limit": 5 }
+      { "block": "nav", "focus": "nav", "focus-flow": "down-from-rest" }
     ]},
     { "class": "main", "children": [
       { "block": "screen" }
@@ -264,7 +262,9 @@ The engine knows these nav buttons. The owner picks which show, and in what orde
 
 The default order is Home, Volume, Shuffle, All Songs, Settings. `now-playing` can be added as a nav button, but by default Now Playing is the header of the `now-playing` block (its `data-stop="open"`), which opens the overlay; put the block in the same focus group as the nav to keep the knob walking from Settings into it. Labels come from the engine; while shuffle is on, its label reads "Single Play", which is what a click switches to. Icons: see Icons.
 
-Each button sits in a `.jb-nav-item` element, which carries its states (see States you can style).
+The owner also sets what comes below the buttons, in order: the Now Playing card (`now-playing`), Up Next (`up-next`, five songs) and modules' blocks that can go there (installed-modules.md, Blocks). The `nav` block draws them, so a theme's layout puts only `nav` in its sidebar, not `now-playing` or `up-next`: listing those too would show them twice.
+
+Inside `<jb-nav>`: a `.jb-nav-buttons` element holding the buttons, then, when there's anything below them, a `.jb-nav-modules` element holding those blocks (`<jb-now-playing>`, `<jb-up-next>`, `<jb-weather>`...). Give both a column layout; making `.jb-nav-modules` fill the rest of the sidebar lets Up Next take the space left. Each button sits in a `.jb-nav-item` element, which carries its states (see States you can style).
 
 ### Home sections
 

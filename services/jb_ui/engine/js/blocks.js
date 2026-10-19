@@ -13,6 +13,8 @@ import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
 import { fillBluetooth } from './phones.js';
 import { fillWholeHome } from './wholehome.js';
+import { fillDisplay } from './display.js';
+import { renderLayout } from './layout.js';
 
 export const BLOCKS = {
   // The engine puts the current screen into this element itself.
@@ -30,6 +32,7 @@ export const BLOCKS = {
   connection: fillConnection,
   bluetooth: el => fillBluetooth(el),
   wholehome: el => fillWholeHome(el),
+  display: el => fillDisplay(el),
   // Content the owner places with the page builder.
   heading: fillText('h2'),
   text: fillText('p'),
@@ -345,10 +348,20 @@ const NAV_LABELS = {
   shuffle: 'Shuffle',
 };
 
-// The owner picks which buttons show, and their order (Settings). Each
-// button sits in a .jb-nav-item, which carries its states.
+// The engine's own blocks the owner can put below the buttons, as they're
+// placed there.
+const NAV_ENGINE_BLOCKS = {
+  'now-playing': { block: 'now-playing' },
+  'up-next': { block: 'up-next', limit: 5 },
+};
+
+// The navigation bar, as the owner set it (Settings > Navigation): the
+// buttons in a .jb-nav-buttons, each in a .jb-nav-item, which carries its
+// states; then, always after them, a .jb-nav-modules with the blocks the
+// owner put below them ("block:<id>" entries): the Now Playing card, Up
+// Next, and modules' blocks. One whose module is gone is skipped.
 function fillNav(el, node, ctx) {
-  const items = ctx.settings.nav.map(name => {
+  const items = ctx.settings.nav.filter(name => !name.startsWith('block:')).map(name => {
     const item = document.createElement('div');
     item.className = 'jb-nav-item';
     item.dataset.button = name;
@@ -356,7 +369,17 @@ function fillNav(el, node, ctx) {
     makeStop(item, `nav:${name}`, () => ctx.actions.nav(name));
     return item;
   });
-  el.replaceChildren(...items);
+  const buttons = document.createElement('div');
+  buttons.className = 'jb-nav-buttons';
+  buttons.append(...items);
+  const below = document.createElement('div');
+  below.className = 'jb-nav-modules';
+  below.append(...ctx.settings.nav
+    .map(name => name.startsWith('block:') && name.slice('block:'.length))
+    .map(name => NAV_ENGINE_BLOCKS[name] || (ctx.moduleBlocks[name] && { block: name }))
+    .filter(Boolean)
+    .map(b => renderLayout(b, ctx)));
+  el.replaceChildren(buttons, ...(below.children.length ? [below] : []));
 
   const render = () => {
     const shuffle = !!store.get('queue')?.shuffle_active;

@@ -245,7 +245,7 @@ export function click() {
 }
 
 // Repurpose the knob, e.g. turning changes the volume. Ends on a click or
-// after MODE_TIMEOUT_MS without turning.
+// after MODE_TIMEOUT_MS without turning (handlers.timeoutMs for longer).
 export function enterMode(name, handlers) {
   if (mode) exitMode();
   mode = { name, ...handlers };
@@ -275,5 +275,5 @@ function armRestTimer() {
 
 function armModeTimer() {
   clearTimeout(modeTimer);
-  modeTimer = setTimeout(exitMode, MODE_TIMEOUT_MS);
+  modeTimer = setTimeout(exitMode, mode?.timeoutMs ?? MODE_TIMEOUT_MS);
 }

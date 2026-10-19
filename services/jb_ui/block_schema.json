@@ -798,6 +798,7 @@
     "now-playing": {
       "label": "Now Playing",
       "group": "music",
+      "nav_managed": true,
       "icon": "now-playing",
       "description": "The song playing: cover, title, progress. Fits itself to its space: compact in a sidebar, a card in part of a row, a banner across the screen. Opens the Now Playing overlay.",
       "settings": {
@@ -863,6 +864,7 @@
     "up-next": {
       "label": "Up Next",
       "group": "music",
+      "nav_managed": true,
       "icon": "queue",
       "description": "The queue. A list in a sidebar; across a wider space, a strip of song cards.",
       "settings": {
@@ -1010,6 +1012,13 @@
       "group": "navigation",
       "icon": "speaker",
       "description": "Play on an AirPlay speaker as well as the cabinet, in sync: on/off, which speaker, and Resync. On the Settings screen by default.",
+      "settings": {}
+    },
+    "display": {
+      "label": "Displays",
+      "group": "navigation",
+      "icon": "monitor",
+      "description": "The screen: fit the picture to the window in the cabinet's glass, rotation, and screen sleep. On the Settings screen by default.",
       "settings": {}
     },
     "screen": {

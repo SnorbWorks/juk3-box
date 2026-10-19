@@ -86,9 +86,13 @@ jb-logo img { width: 72%; height: auto; filter: drop-shadow(0 0.6vh 1.2vh rgba(0
 .jb-logo-text { font-size: 1.9vw; font-weight: 700; letter-spacing: 0.12em; }
 
 /* Nav: rest, focused (the knob is on it), pressed, active (its screen). */
-jb-nav { display: flex; flex-direction: column; gap: 0.35vh; position: relative; padding-bottom: 1.8vh; }
-/* The separator under the nav: thin, fading out at both ends. */
-jb-nav::after {
+/* The nav block: its buttons, then (Settings > Navigation) the Now Playing
+   card, Up Next and modules, filling the rest of the sidebar. */
+jb-nav { display: flex; flex-direction: column; gap: 1.8vh; flex: 1; min-height: 0; }
+.jb-nav-buttons { display: flex; flex-direction: column; gap: 0.35vh; position: relative; padding-bottom: 1.8vh; }
+.jb-nav-modules { display: flex; flex-direction: column; gap: 1.8vh; flex: 1; min-height: 0; }
+/* The separator under the buttons: thin, fading out at both ends. */
+.jb-nav-buttons::after {
   content: "";
   position: absolute;
   left: 4%;
@@ -782,6 +786,7 @@ jb-collection[data-type="browse"] { display: grid; grid-template-columns: repeat
 .jb-volume-bar { height: 1.2vh; border-radius: calc(0.6vh * var(--opt-roundness)); background: hsl(from var(--opt-button) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
 .jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent) h s l), hsl(from var(--opt-accent2) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent) h s l / 0.6); }
 .jb-volume-value { margin-top: 1.8vh; font-size: 3.4vh; font-weight: 600; }
+.jb-edge .jb-notice { max-width: 52vh; margin: 1.6vh auto 0; }
 .jb-notice, .jb-phones, .jb-pairing { font-size: 1.9vh; line-height: 1.5; color: var(--ink-soft); }
 .jb-phones, .jb-pairing { min-width: 52vh; max-width: 70vh; text-align: center; }
 .jb-phone-row { text-align: left; }

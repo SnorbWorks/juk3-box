@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "id": "jb-display",
+  "name": "Display",
+  "description": "Owns the screen: fits the picture to the window in the cabinet's glass, turns it for a panel mounted sideways, and puts it to sleep when nobody's using the jukebox.",
+  "version": "1.0.0",
+  "roles": ["service"],
+  "publishes": ["jukebox/jb-display/state"],
+  "subscribes": ["jukebox/jb-display/cmd", "jukebox/jb-input/gesture", "jukebox/jb-core/entry", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing", "jukebox/jb-source-phone/connected"],
+  "commands": ["inset", "inset_reset", "rotation", "sleep", "wake", "guide"]
+}

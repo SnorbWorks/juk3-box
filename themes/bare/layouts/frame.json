@@ -3,9 +3,7 @@
   "children": [
     { "class": "sidebar", "focus": "nav", "focus-flow": "down-from-rest", "children": [
       { "block": "logo" },
-      { "block": "nav" },
-      { "block": "now-playing" },
-      { "block": "up-next", "limit": 5 }
+      { "block": "nav" }
     ]},
     { "class": "main", "children": [
       { "block": "screen" }

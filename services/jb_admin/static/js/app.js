@@ -8,6 +8,7 @@ const PAGES = [
   { id: 'dashboard', label: 'Dashboard', icon: 'gauge', load: () => import('./pages/dashboard.js') },
   { id: 'phones', label: 'Bluetooth', icon: 'bluetooth', load: () => import('./pages/phones.js') },
   { id: 'sound', label: 'Sound', icon: 'volume-2', load: () => import('./pages/sound.js') },
+  { id: 'displays', label: 'Displays', icon: 'monitor', load: () => import('./pages/displays.js') },
   { id: 'drives', label: 'Drives', icon: 'usb', load: () => import('./pages/drives.js') },
   { id: 'builder', label: 'Page Builder', icon: 'layout-template', load: () => import('./pages/builder.js') },
   { id: 'themes', label: 'Themes', icon: 'palette', load: () => import('./pages/themes.js') },

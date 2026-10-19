@@ -588,3 +588,91 @@ def test_drives_page_combines_the_drive_and_the_library_and_sends_only_drive_com
             ("jukebox/jb-library/cmd", {"action": "forget_drive", "id": "OLD1"}),
         ]
     run(tmp_path, check)
+
+
+def test_displays_page_sends_only_display_commands(tmp_path):
+    async def check(client, admin):
+        admin.live["display"] = {"inset": {"top": 40, "right": 0, "bottom": 0, "left": 0}, "rotation": 0}
+        data = await (await client.get("/api/display", headers=H)).json()
+        assert data["display"]["inset"]["top"] == 40
+        assert (await client.post("/api/display/inset", json={"inset": {"top": 8}}, headers=H)).status == 503
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/display/inset", json={"inset": {"top": 8, "left": 12}}, headers=H)).status == 200
+        assert (await client.post("/api/display/inset", json={"inset": {"middle": 8}}, headers=H)).status == 400
+        assert (await client.post("/api/display/inset", json={"inset": {"top": -1}}, headers=H)).status == 400
+        assert (await client.post("/api/display/inset", json={"inset": {"top": True}}, headers=H)).status == 400
+        assert (await client.post("/api/display/inset_reset", json={}, headers=H)).status == 200
+        assert (await client.post("/api/display/rotation", json={"degrees": 90}, headers=H)).status == 200
+        assert (await client.post("/api/display/rotation", json={"degrees": 45}, headers=H)).status == 400
+        assert (await client.post("/api/display/sleep", json={"minutes": 30}, headers=H)).status == 200
+        assert (await client.post("/api/display/sleep", json={"minutes": 7}, headers=H)).status == 400
+        assert (await client.post("/api/display/guide", json={"on": True}, headers=H)).status == 200
+        assert (await client.post("/api/display/wake", json={}, headers=H)).status == 200
+        assert (await client.post("/api/display/reboot", json={}, headers=H)).status == 404
+        assert admin.bus.sent == [
+            ("jukebox/jb-display/cmd", {"action": "inset", "inset": {"top": 8, "left": 12}}),
+            ("jukebox/jb-display/cmd", {"action": "inset_reset"}),
+            ("jukebox/jb-display/cmd", {"action": "rotation", "degrees": 90}),
+            ("jukebox/jb-display/cmd", {"action": "sleep", "minutes": 30}),
+            ("jukebox/jb-display/cmd", {"action": "guide", "on": True}),
+            ("jukebox/jb-display/cmd", {"action": "wake"}),
+        ]
+    run(tmp_path, check)
+
+
+def test_displays_page_needs_the_owner(tmp_path):
+    async def check(client, admin):
+        assert (await client.get("/api/display", headers=H)).status == 401
+        assert (await client.post("/api/display/wake", json={}, headers=H)).status == 401
+    run(tmp_path, check, login=False)
+
+
+def test_navigation_offers_modules_that_can_go_there(tmp_path):
+    mods = tmp_path / "mods" / "jb-clock"
+    (mods / "blocks").mkdir(parents=True)
+    (mods / "blocks" / "clock.html").write_text('<div data-text="time"></div>')
+    (mods / "module.json").write_text(json.dumps({"contract": 1, "id": "jb-clock", "name": "Clock", "version": "1.0.0",
+        "blocks": [
+            {"id": "clock", "label": "Clock", "topic": "jukebox/jb-clock/now", "template": "blocks/clock.html", "nav": True},
+            {"id": "clock-big", "label": "Big clock", "topic": "jukebox/jb-clock/now", "template": "blocks/clock.html"},
+        ]}))
+
+    async def check(c, admin):
+        admin.cfg["module_dirs"] = [str(tmp_path / "mods")]
+        options = (await (await c.get("/api/settings")).json())["schema"]["nav"]["options"]
+        assert {"value": "block:clock", "label": "Clock", "kind": "module"} in options
+        assert not any(o["value"] == "block:clock-big" for o in options)   # not "nav": not offered
+        # The engine's Now Playing card and Up Next go below the buttons too.
+        assert {"value": "block:now-playing", "label": "Now Playing card", "kind": "module"} in options
+        assert {"value": "block:up-next", "label": "Up Next (the queue)", "kind": "module"} in options
+        r = await c.put("/api/settings", json={"values": {"nav": ["home", "block:up-next", "block:clock", "block:now-playing"]}}, headers=H)
+        assert r.status == 200
+        ok = await c.put("/api/settings", json={"values": {"nav": ["home", "volume", "block:clock"]}}, headers=H)
+        assert ok.status == 200
+        # Modules come after every button, never above or between them.
+        between = await c.put("/api/settings", json={"values": {"nav": ["home", "block:clock", "volume"]}}, headers=H)
+        assert between.status == 400
+        not_nav = await c.put("/api/settings", json={"values": {"nav": ["home", "block:clock-big"]}}, headers=H)
+        assert not_nav.status == 400
+        only_modules = await c.put("/api/settings", json={"values": {"nav": ["block:clock"]}}, headers=H)
+        assert only_modules.status == 400
+    run(tmp_path, check)
+
+
+def test_page_builder_leaves_the_navigation_bar_to_settings(tmp_path):
+    def frame(sidebar, main_extra=()):
+        return {"tree": {"class": "frame", "children": [
+            {"class": "sidebar", "children": [{"block": "logo"}, {"block": "nav"}, *sidebar]},
+            {"class": "main", "children": [{"block": "screen"}, *main_extra]}]}}
+
+    async def check(c, admin):
+        assert (await c.put("/api/layouts/bare/frame/draft", json=frame([]), headers=H)).status == 200
+        # In the navigation bar, even inside a container there: refused.
+        for sidebar in ([{"block": "now-playing"}], [{"class": "jb-u-column", "children": [{"block": "up-next"}]}]):
+            r = await c.put("/api/layouts/bare/frame/draft", json=frame(sidebar), headers=H)
+            assert r.status == 400 and "Settings > Navigation" in json.dumps(await r.json())
+        # Anywhere else: fine.
+        assert (await c.put("/api/layouts/bare/frame/draft", json=frame([], [{"block": "now-playing"}]), headers=H)).status == 200
+        blocks = await (await c.get("/api/blocks")).json()
+        assert blocks["blocks"]["now-playing"]["nav_managed"] and blocks["blocks"]["up-next"]["nav_managed"]
+    run(tmp_path, check)

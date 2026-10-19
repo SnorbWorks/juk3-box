@@ -82,6 +82,15 @@ def test_owner_nav_settings_are_cleaned():
     assert main.owner_settings({"nav": "home"})["nav"] == main.DEFAULT_NAV
 
 
+def test_nav_modules_come_after_every_button():
+    nav = ["block:weather", "volume", "block:bad!", "settings", "block:clock", "block:weather"]
+    assert main.owner_settings({"nav": nav})["nav"] == ["volume", "settings", "block:weather", "block:clock"]
+    # Modules alone aren't a navigation bar: the knob needs a button to rest on.
+    assert main.owner_settings({"nav": ["block:weather"]})["nav"] == main.DEFAULT_NAV
+    assert main.nav_block("block:weather") == "weather"
+    assert main.nav_block("home") is None and main.nav_block("block:") is None
+
+
 def test_api_includes_settings_and_icons(tmp_path):
     def setup(added):
         d = added / "iconic"

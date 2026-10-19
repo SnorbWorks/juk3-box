@@ -34,7 +34,7 @@ from services.jb_admin.drive_import import DriveImport
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
 from services.jb_admin.registry import Registry, read_manifests
 from services.jb_ui import main as ui
-from services.jb_ui import customize, icons, media, themes
+from services.jb_ui import customize, icons, media, module_blocks, themes
 
 SERVICE_NAME = "jb-admin"
 HERE = Path(__file__).resolve().parent
@@ -145,6 +145,7 @@ class Admin:
         "jukebox/jb-source-phone/switch": "phone_switch",
         "jukebox/jb-source-phone/bluetooth": "bluetooth",
         "jukebox/jb-audio/airplay": "airplay",
+        "jukebox/jb-display/state": "display",
     }
 
     # What the Phones page may ask jb-source-phone to do.
@@ -411,6 +412,49 @@ class Admin:
         self.log.info("sound: %s", cmd)
         return web.json_response({"ok": True})
 
+    # Displays -------------------------------------------------------------------
+
+    DISPLAY_SIDES = ("top", "right", "bottom", "left")
+
+    async def get_display(self, request):
+        return web.json_response({
+            "display": self.live.get("display"),   # None until jb-display reports it
+            "bus": self.bus is not None,
+        })
+
+    async def display_action(self, request):
+        """What the Displays page may ask jb-display to do. jb-display keeps
+        each side within what the screen allows."""
+        action = request.match_info["action"]
+        body = await json_body(request)
+        if action == "inset":
+            inset = body.get("inset")
+            if (not isinstance(inset, dict) or not inset or set(inset) - set(self.DISPLAY_SIDES)
+                    or not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 2000 for v in inset.values())):
+                raise error(400, "Each edge is a whole number of pixels, 0 or more.")
+            cmd = {"action": "inset", "inset": inset}
+        elif action == "inset_reset":
+            cmd = {"action": "inset_reset"}
+        elif action == "rotation":
+            if body.get("degrees") not in (0, 90, 180, 270) or isinstance(body.get("degrees"), bool):
+                raise error(400, "The rotation is 0, 90, 180 or 270 degrees.")
+            cmd = {"action": "rotation", "degrees": body["degrees"]}
+        elif action == "sleep":
+            if body.get("minutes") not in (0, 5, 10, 15, 30, 60, 120) or isinstance(body.get("minutes"), bool):
+                raise error(400, "Not one of the sleep choices.")
+            cmd = {"action": "sleep", "minutes": body["minutes"]}
+        elif action == "guide":
+            cmd = {"action": "guide", "on": bool(body.get("on"))}
+        elif action == "wake":
+            cmd = {"action": "wake"}
+        else:
+            raise web.HTTPNotFound()
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-display/cmd", cmd)
+        self.log.info("display: %s", cmd)
+        return web.json_response({"ok": True})
+
     # USB drives -----------------------------------------------------------------
 
     DRIVE_ACTIONS = {"rescan", "eject", "mount", "forget", "edit", "settings", "reimport"}
@@ -495,12 +539,18 @@ class Admin:
 
     # Settings -----------------------------------------------------------------
 
+    def nav_blocks(self) -> dict:
+        """The module blocks that can go in the navigation bar, by id."""
+        found, _ = module_blocks.module_blocks([Path(d) for d in self.cfg["module_dirs"]])
+        return {name: b for name, b in found.items() if b.get("nav")}
+
     async def get_settings(self, request):
-        return web.json_response({"values": schema.current(self.raw_settings()), "schema": schema.SCHEMA})
+        return web.json_response({"values": schema.current(self.raw_settings()),
+                                  "schema": schema.with_modules(self.nav_blocks())})
 
     async def put_settings(self, request):
         body = await json_body(request)
-        clean, problems = schema.validate(body.get("values"))
+        clean, problems = schema.validate(body.get("values"), self.nav_blocks())
         if problems:
             raise error(400, "Some settings can't be used.", problems=problems)
         raw = self.raw_settings()
@@ -569,6 +619,8 @@ class Admin:
                                       {g["id"] for g in schema["groups"]} else "content",
                                       "icon": "module", "description": b["description"] or f"From the {b['module']} module.",
                                       "module": b["module"], "kind": b["kind"], "settings": settings}
+            if b["nav"]:
+                schema["blocks"][name]["nav_managed"] = True
             # A playlist block can also be one of a Browse row's cards.
             if b["kind"] == "playlist":
                 sorts = schema["blocks"]["section"]["settings"].get("sorts")
@@ -603,6 +655,7 @@ class Admin:
         body = await json_body(request)
         tree = body.get("tree")
         problems, warnings = themes.check_layout(name, tree)
+        problems += schema.nav_placement_problems(tree, self.nav_blocks())
         if problems:
             raise error(400, "The layout can't be used.", problems=problems)
         try:
@@ -628,6 +681,7 @@ class Admin:
         if draft is None:
             raise error(400, "There's nothing new to publish.")
         problems, _ = themes.check_layout(name, draft)
+        problems += schema.nav_placement_problems(draft, self.nav_blocks())
         if problems:
             raise error(400, "The layout can't be used.", problems=problems)
         self.layouts.publish(theme_id, name)
@@ -1017,6 +1071,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/phones/{action}", admin.phone_action)
     r.add_get("/api/audio", admin.get_audio)
     r.add_post("/api/audio/{action}", admin.audio_action)
+    r.add_get("/api/display", admin.get_display)
+    r.add_post("/api/display/{action}", admin.display_action)
     r.add_get("/api/drives", admin.get_drives)
     r.add_post("/api/drives/{action}", admin.drive_action)
     r.add_put("/api/settings", admin.put_settings)

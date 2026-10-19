@@ -488,6 +488,8 @@ One at a time, in this order. Each item points at the phase that holds its detai
 7. **Hard drive / USB source** (Phase 9): found and sorted automatically, shown only while a drive is attached.
 8. **Software updates and installer** (Phase 7b Maintenance): one-click updates from the admin; an SD image or installer for anyone's Pi.
 
+**Displays** (built Oct 18, 2026): jb-display owns the screen through sway. Picture area (each edge pulled in so the screen's contents fit the window in the cabinet's glass; the background still fills the panel, and the page places #jb-root and the popups inside the edges, scaled with CSS zoom so vh-sized themes still fit), rotation (edges stay on the same part of the glass; the cabinet asks to keep it or goes back in 15 s), and screen sleep (off after idle with nothing playing; the first knob gesture only wakes it). Cabinet: Settings > Displays, with an edge guide while adjusting. Admin: the Displays page. Brightness over DDC/CI is a possible next tool (the Dell supports it; needs ddcutil and i2c access).
+
 Also on the list: the jb-netwatch live test (Phase 8), power-loss safety (settings and library writes that survive a pulled plug; read-only root), volume at boot and a maximum (admin Settings).
 
 **Parked: knowing where it's used.** The aim is to catch commercial use by someone without the right to it. Not a hidden report (anyone can watch a Pi's traffic, and undisclosed location data is a legal problem). When it's time: license terms, a disclosed activation key at setup, optional opt-in usage stats, and value tied to an activated account (updates, the module catalog, support).

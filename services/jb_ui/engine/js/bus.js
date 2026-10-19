@@ -38,6 +38,7 @@ const HANDLERS = {
   'jukebox/jb-source-phone/switch': s => store.set('phoneSwitch', s),
   'jukebox/jb-source-phone/bluetooth': b => store.set('bluetooth', b),
   'jukebox/jb-audio/airplay': a => store.set('airplay', a.receivers || []),
+  'jukebox/jb-display/state': d => store.set('display', d),
   'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
   // The owner published a change in the admin (settings, layouts, theme):
@@ -66,8 +67,24 @@ function nowPlayingFrom(source, np) {
 function knob(g) {
   if (g.control !== 'knob') return;
   activity();
+  if (asleepSwallow()) return;
   if (g.gesture === 'turn' && Number.isInteger(g.steps)) rotate(g.steps);
   else if (g.gesture === 'click') click();
+}
+
+// The screen is asleep (jb-display): the first turn or click only wakes it
+// (jb-display hears it too and turns the screen on), so nothing is picked
+// in the dark. Once per sleep: if jb-display has gone away its retained
+// state may still say asleep, and the knob must not stay dead.
+let swallowed = false;
+function asleepSwallow() {
+  if (!store.get('display')?.asleep) {
+    swallowed = false;
+    return false;
+  }
+  if (swallowed) return false;
+  swallowed = true;
+  return true;
 }
 
 // Someone is using the jukebox (knob or keypad).
