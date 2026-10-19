@@ -276,6 +276,10 @@ async def main() -> None:
     # Browse lease: while jb-crawl holds it, this service doesn't browse.
     lease: dict | None = None  # {"holder", "until", "revoked_at"}
     pending_pick: dict | None = None  # a pick that arrived while leased
+    # A pick whose play path went stale while the phone offered no browsing
+    # (iOS reports the last app that made a sound, e.g. Messages, as its
+    # player and won't browse it): played once a reconnect's sync lands.
+    waiting_pick: dict | None = None
 
     def now() -> float:
         return asyncio.get_running_loop().time()
@@ -311,6 +315,14 @@ async def main() -> None:
             synced_player_path = p.player_path
             last_tracks = tracks
             log.info("library sync complete: %d tracks from %s", len(tracks), p.name)
+        if waiting_pick:
+            asyncio.create_task(play_waiting_pick(bus))
+
+    async def play_waiting_pick(bus: Bus):
+        nonlocal waiting_pick
+        pick, waiting_pick = waiting_pick, None
+        if pick and not await play_fresh_copy(pick):
+            await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", pick["cmd"])
 
     async def sync_library_logged(bus: Bus):
         # Fired as a background task -- log failures instead of letting them
@@ -564,6 +576,7 @@ async def main() -> None:
         re-sync hasn't happened or was missed). Re-sync now, find the same
         song in the fresh crawl, and play that -- the pick plays a few
         seconds late instead of being dropped. Returns whether it played."""
+        nonlocal waiting_pick
         stale = cmd["item_path"]
         old = [t for t in last_tracks if t["item_path"] == stale]
         title = old[0]["title"] if old else cmd.get("title")
@@ -573,6 +586,14 @@ async def main() -> None:
         copy = 0
         if old:
             copy = sum(1 for t in last_tracks[:last_tracks.index(old[0])] if t["title"] == title)
+        pick = {"cmd": cmd, "title": title, "copy": copy, "stale": stale}
+        if phone is not None and not phone.can_browse and not lease:
+            # No browsing to re-sync with, and it may never come on its own:
+            # reconnect for a fresh session, and play the pick after its sync.
+            log.info("play path looks stale and the phone isn't browsable; reconnecting to retry %r", title)
+            waiting_pick = pick
+            request_browse_reset(bus)
+            return True
         log.info("play path looks stale; re-syncing to retry %r", title)
         try:
             await sync_library(bus)
@@ -583,6 +604,11 @@ async def main() -> None:
         except Exception:
             log.exception("re-sync for a stale play path failed")
             return False
+        return await play_fresh_copy(pick)
+
+    async def play_fresh_copy(pick: dict) -> bool:
+        """Play the pick's song from the latest crawl, by title and copy."""
+        title, copy, stale = pick["title"], pick["copy"], pick["stale"]
         fresh = [t["item_path"] for t in last_tracks if t["title"] == title]
         if not fresh or phone is None:
             return False
