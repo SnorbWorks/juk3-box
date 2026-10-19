@@ -32,6 +32,7 @@ START_S = 15.0            # a pick should be playing by now...
 RETRY_GRACE_S = 100.0     # ...or by this long after the source says it's retrying
 SOUND_S = 12.0            # once playing, sound should reach the cabinet by now
 LOG_LEN = 20
+STUCK_AFTER = 3           # this many picks failing in a row, with nothing playing between: stop
 
 ADVICE = {
     "no_controls": ("Your phone isn't letting the jukebox control it",
@@ -46,6 +47,8 @@ ADVICE = {
               "Turn the volume knob up (press it to unmute)."),
     "no_sound": ("No sound is reaching the jukebox",
                  "Your phone is playing somewhere else. Check its audio output is set to the jukebox."),
+    "stuck": ("Songs aren't playing",
+              "Shuffle is off. Turn Bluetooth off and on again on your phone, then pick a song."),
 }
 
 # What makes it worth giving the pick another go once the phone is back.
@@ -68,6 +71,7 @@ class PickDoctor:
     audio: dict = field(default_factory=dict)      # jb-audio/state
     sound_at: float | None = None                  # the last analyzer frame
     log: list = field(default_factory=list)
+    in_row: int = 0                                # picks failed in a row (play-error), nothing playing between
 
     def picked(self, track: dict, now: float):
         self.pick = Pick(track, now)
@@ -78,6 +82,8 @@ class PickDoctor:
 
     def heard(self, title: str | None, status: str | None, now: float):
         """A now-playing from the source the pick went to."""
+        if status == "playing":
+            self.in_row = 0
         p = self.pick
         if p and p.started_at is None and status == "playing" and title == p.track.get("title"):
             p.started_at = now
@@ -112,12 +118,24 @@ class PickDoctor:
 
     def failed(self, payload: dict, now: float) -> dict | None:
         """The source gave up on the pick (play-error): diagnose now."""
+        self.in_row += 1
         p = self.pick
         if not p:
             return None
         if payload.get("reason"):
             p.reason = payload["reason"]
         return self._verdict(self._diagnose(started=False), now)
+
+    @property
+    def stuck(self) -> bool:
+        """Picks keep failing (a phone that won't play anything, 2026-10-18:
+        shuffle fed it 3,000 songs in two minutes). Stop advancing."""
+        return self.in_row >= STUCK_AFTER
+
+    def stuck_verdict(self) -> dict:
+        self.in_row = 0
+        self.pick = Pick({}, 0.0)
+        return self._verdict("stuck", 0.0)
 
     def check(self, now: float) -> dict | None:
         """Called every second or so. A verdict once, when a pick has gone wrong."""

@@ -1,4 +1,4 @@
-from services.jb_core.pick_doctor import RETRY_GRACE_S, SOUND_S, START_S, PickDoctor
+from services.jb_core.pick_doctor import RETRY_GRACE_S, SOUND_S, START_S, STUCK_AFTER, PickDoctor
 
 SONG = {"title": "Bad Dreams", "artist": "Teddy Swims", "item_path": "/x/1"}
 
@@ -97,3 +97,20 @@ def test_forget():
     d = doctor()
     d.forget()
     assert d.check(START_S + 1) is None
+
+
+def test_picks_failing_in_a_row_get_stuck_and_a_play_clears_it():
+    d = PickDoctor()
+    for k in range(STUCK_AFTER - 1):
+        d.picked(SONG, k)
+        d.failed({"reason": "not_found"}, k)
+    assert not d.stuck
+    d.heard("Anything", "playing", 10.0)
+    assert d.in_row == 0
+    for k in range(STUCK_AFTER):
+        d.picked(SONG, k)
+        d.failed({"reason": "not_found"}, k)
+    assert d.stuck
+    v = d.stuck_verdict()
+    assert v["problem"] == "stuck" and "Shuffle is off" in v["advice"]
+    assert not d.stuck and d.log[0]["problem"] == "stuck"

@@ -239,6 +239,13 @@ async def stop_after_last_song(bus: Bus, q: Queue, guard: EndGuard, log) -> None
 
 
 PICK_CHECK_S = 1.0
+FAILED_PICK_PAUSE_S = 2.0   # a breath before the next song after one fails
+
+
+async def autoplay_after_failure(bus: Bus, q: Queue, log) -> None:
+    await asyncio.sleep(FAILED_PICK_PAUSE_S)
+    if not q.playing:          # something was picked meanwhile
+        await try_autoplay(bus, q, log)
 
 
 async def report_pick(bus: Bus, q: Queue, verdict: dict, log) -> None:
@@ -339,10 +346,20 @@ async def main() -> None:
                 q.expected_title = None
                 q.playing = False
                 verdict = q.doctor.failed(payload, time.monotonic())
-                if verdict:
-                    await report_pick(bus, q, verdict, log)
-                if not (verdict and verdict.get("retry")):
-                    await try_autoplay(bus, q, log)
+                if q.doctor.stuck:
+                    # Song after song failing: stop, rather than feed a phone
+                    # that won't play anything the whole shuffle (2026-10-18:
+                    # 3,000 songs in two minutes, and Reset couldn't get a
+                    # word in). Manual picks keep their place.
+                    log.warning("%d picks failed in a row: stopping, shuffle off", q.doctor.in_row)
+                    q.shuffle_active, q.shuffle_buffer = False, []
+                    await report_pick(bus, q, q.doctor.stuck_verdict(), log)
+                    await publish_queue(bus, q)
+                else:
+                    if verdict:
+                        await report_pick(bus, q, verdict, log)
+                    if not (verdict and verdict.get("retry")):
+                        asyncio.create_task(autoplay_after_failure(bus, q, log))
 
             elif topic == "jukebox/jb-source-phone/pick-problem":
                 note = q.doctor.source_says(payload, time.monotonic())
@@ -426,6 +443,7 @@ async def main() -> None:
                     track = payload.get("track")
                     if track:
                         q.manual.append(track)
+                        q.doctor.in_row = 0       # a fresh try
                         log.info("queued manual selection: %s", track.get("title"))
                         if not playable(track, q.phone_connected):
                             await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
@@ -443,6 +461,7 @@ async def main() -> None:
                     tracks = [t for t in payload.get("tracks") or [] if t]
                     if tracks:
                         q.manual.extend(tracks)
+                        q.doctor.in_row = 0
                         log.info("queued album %r: %d songs", payload.get("album"), len(tracks))
                         if not playable(tracks[0], q.phone_connected):
                             await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})

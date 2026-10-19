@@ -62,7 +62,7 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-core/power` | R state | `state` |
 | `jb-core/selection` | event | a keypad pick: slot `index`, `code` |
 | `jb-core/notice`, `rejected`, `skipped` | event | messages for the screen |
-| `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
+| `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, `stuck` (picks failing one after another: shuffle is turned off and the queue stops), or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
 | `jb-core/pick-log` | R state | `problems`: the last 20 pick problems, newest first, each with `at` (epoch seconds); the admin dashboard shows them |
 | `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power` |
 | `jb-audio/state` | R state | `volume` 0..1, `muted` |
