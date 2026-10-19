@@ -12,6 +12,7 @@ import { fillCollection, fillSection, fillShortcut } from './sections.js';
 import { store } from './store.js';
 import { sized, toTrack } from './tracks.js';
 import { fillBluetooth } from './phones.js';
+import { fillWholeHome } from './wholehome.js';
 
 export const BLOCKS = {
   // The engine puts the current screen into this element itself.
@@ -28,6 +29,7 @@ export const BLOCKS = {
   header: fillHeader,
   connection: fillConnection,
   bluetooth: el => fillBluetooth(el),
+  wholehome: el => fillWholeHome(el),
   // Content the owner places with the page builder.
   heading: fillText('h2'),
   text: fillText('p'),

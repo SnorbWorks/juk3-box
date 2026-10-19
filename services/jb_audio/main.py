@@ -83,9 +83,12 @@ async def handle_command(bus: Bus, log, outputs: Outputs, cmd: dict) -> None:
     elif action == "whole_home":
         # {"action": "whole_home", "enabled": true, "airplay": "Inside"}
         await outputs.set_enabled(bool(cmd.get("enabled")), cmd.get("airplay"))
-    elif action == "whole_home_delay":
-        # Fine-tuning the sync by ear: {"action": "whole_home_delay", "ms": 1580}
-        await outputs.set_delay(int(cmd["ms"]))
+    elif action == "whole_home_offset":
+        # Fine-tuning the sync by ear, on top of the measured delay:
+        # {"action": "whole_home_offset", "ms": 20} (positive holds the cabinet back more)
+        await outputs.set_offset(int(cmd["ms"]))
+    elif action == "whole_home_resync":
+        await outputs.resync()
     elif action == "airplay_volume":
         await outputs.set_airplay_volume(float(cmd["value"]))
     else:

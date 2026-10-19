@@ -19,7 +19,7 @@ REQUIRED_LAYOUTS = ("frame", "home", "all-songs")
 # as nothing.
 KNOWN_BLOCKS = {
     "screen", "logo", "nav", "now-playing", "up-next", "board",
-    "section", "page-info", "pager", "header", "connection", "bluetooth", "collection",
+    "section", "page-info", "pager", "header", "connection", "bluetooth", "wholehome", "collection",
     "heading", "text", "image", "spacer", "shortcut",
 }
 

@@ -505,14 +505,16 @@ def test_sound_page_sends_only_audio_commands(tmp_path):
         admin.bus = RecordingBus()
         assert (await client.post("/api/audio/whole_home", json={"enabled": True, "airplay": " Den "}, headers=H)).status == 200
         assert (await client.post("/api/audio/whole_home", json={"enabled": True, "airplay": ""}, headers=H)).status == 400
-        assert (await client.post("/api/audio/whole_home_delay", json={"ms": 1600}, headers=H)).status == 200
-        assert (await client.post("/api/audio/whole_home_delay", json={"ms": 9000}, headers=H)).status == 400
+        assert (await client.post("/api/audio/whole_home_offset", json={"ms": -40}, headers=H)).status == 200
+        assert (await client.post("/api/audio/whole_home_offset", json={"ms": 9000}, headers=H)).status == 400
+        assert (await client.post("/api/audio/whole_home_resync", json={}, headers=H)).status == 200
         assert (await client.post("/api/audio/airplay_volume", json={"value": 0.555}, headers=H)).status == 200
         assert (await client.post("/api/audio/airplay_volume", json={"value": "loud"}, headers=H)).status == 400
         assert (await client.post("/api/audio/reboot", json={}, headers=H)).status == 404
         assert admin.bus.sent == [
             ("jukebox/jb-audio/cmd", {"action": "whole_home", "enabled": True, "airplay": "Den"}),
-            ("jukebox/jb-audio/cmd", {"action": "whole_home_delay", "ms": 1600}),
+            ("jukebox/jb-audio/cmd", {"action": "whole_home_offset", "ms": -40}),
+            ("jukebox/jb-audio/cmd", {"action": "whole_home_resync"}),
             ("jukebox/jb-audio/cmd", {"action": "airplay_volume", "value": 0.56}),
         ]
         assert (await client.get("/api/audio", headers=H)).status == 200

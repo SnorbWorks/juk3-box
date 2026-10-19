@@ -16,9 +16,17 @@ How it fits together (all PipeWire, no root needed):
   analyzer listens to it), so a permanent link would claim the house zone
   around the clock. Stopped, the sink suspends and the session closes.
 
-The delay is fixed rather than measured (combine-stream's latency
-compensation measures it, but its links keep the AirPlay session open
-forever), so starting and stopping the feed never jumps the cabinet audio.
+The delay comes from the AirPlay protocol itself: RAOP plays at a scheduled
+timestamp, so once connected the receiver's delay is a known constant, which
+PipeWire's raop-sink reports as its latency (sender buffer + the receiver's
+own Audio-Latency; Inside: 77175 samples at 44.1 kHz = 1.75 s). Turning
+whole-home on connects silently, reads it and sets the cabinet's delay
+before the jukebox switches over; it's read again each time AirPlay
+connects for music, and Resync reconnects and measures afresh. The phone's
+Bluetooth delay sits upstream of the split, so it moves both outputs alike.
+The owner's by-ear offset is added on top. (combine-stream's own latency
+compensation was tried first: it read those samples at 48 kHz, ~1.59 s,
+and its links keep the AirPlay session open forever.)
 """
 
 import asyncio
@@ -36,11 +44,15 @@ FEED = "jb-airplay-feed"
 AIRPLAY_NODE = "jb-airplay"
 SETTINGS_PATH = Path("/var/lib/juk3-box/jb-audio.json")
 CONF_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")) / "jb-audio"
-# The AirPlay sender's buffer is raop.latency.ms (1500 by default); the
-# rest is the receiver's output and the network. 1580 is what PipeWire's
-# own latency compensation measured against JUKE Audio (2026-10-18).
-DEFAULT_DELAY_MS = 1580
+# Until a receiver has been measured: raop.latency.ms (1500) plus a
+# typical receiver's own 250 ms.
+DEFAULT_DELAY_MS = 1750
 MAX_DELAY_S = 4.0
+MAX_OFFSET_MS = 1000
+CALIBRATE_TIMEOUT_S = 10
+# A re-reading that moves the delay less than this is left alone (changing
+# it mid-song is an audible jump).
+RECALIBRATE_MIN_CHANGE_MS = 10
 # How long after the music stops the feed stays up (a pause, the gap
 # between songs); then the house zone is let go.
 FEED_LINGER_S = 30
@@ -54,8 +66,14 @@ log = logging.getLogger("jb-audio.outputs")
 class Settings:
     whole_home: bool = False
     airplay: str = "Inside"          # the AirPlay receiver's name, as the phone lists it
-    delay_ms: int = DEFAULT_DELAY_MS  # how far the DAC is held back
+    measured_ms: int = DEFAULT_DELAY_MS  # the receiver's delay, as last measured
+    offset_ms: int = 0                # the owner's by-ear correction, added on top
     airplay_volume: float = 0.7       # the receiver's own level (its zone volume still applies)
+
+    @property
+    def delay_ms(self) -> int:
+        """How far the DAC is held back."""
+        return int(min(max(self.measured_ms + self.offset_ms, 0), MAX_DELAY_S * 1000))
 
     @classmethod
     def load(cls, path: Path = SETTINGS_PATH) -> "Settings":
@@ -67,7 +85,8 @@ class Settings:
         return cls(**known).clamped()
 
     def clamped(self) -> "Settings":
-        self.delay_ms = int(min(max(self.delay_ms, 0), MAX_DELAY_S * 1000))
+        self.measured_ms = int(min(max(self.measured_ms, 0), MAX_DELAY_S * 1000))
+        self.offset_ms = int(min(max(self.offset_ms, -MAX_OFFSET_MS), MAX_OFFSET_MS))
         self.airplay_volume = float(min(max(self.airplay_volume, 0.0), 1.0))
         return self
 
@@ -178,6 +197,25 @@ class FeedPolicy:
         return self.last_playing is not None and now - self.last_playing < self.linger_s
 
 
+def airplay_latency_ms(objects: list, name: str = AIRPLAY_NODE) -> int | None:
+    """The AirPlay sink's reported latency, or None while it isn't connected
+    (it reports 0 then). The latency is in samples at the sink's own rate.
+
+    The DAC adds one graph quantum of its own and so does the feed's
+    loopback on the AirPlay side; they cancel, so this is the delay."""
+    for n in pw.nodes(objects):
+        if n["name"] != name:
+            continue
+        rate = int(n["props"].get("audio.rate") or 44100)
+        for o in objects:
+            if o.get("id") != n["id"]:
+                continue
+            for lat in ((o.get("info") or {}).get("params") or {}).get("Latency") or []:
+                if lat.get("direction") == "Input" and lat.get("minRate"):
+                    return round(lat["minRate"] * 1000 / rate + (lat.get("minNs") or 0) / 1e6)
+    return None
+
+
 def default_sink_name(objects: list) -> str | None:
     """The current default sink's node name, from the pw-dump metadata."""
     for o in objects:
@@ -217,6 +255,9 @@ class Outputs:
         self.airplay_id: int | None = None
         self.airplay_volume_set_on: int | None = None
         self.whole_home_id: int | None = None
+        self.calibrated_for: int | None = None   # the AirPlay node id the delay was measured on
+        self.calibration = "pending"   # pending | measuring | measured | estimated
+        self.recheck = False           # re-read the latency once the feed has connected
         self._last_status = None
         self._lock = asyncio.Lock()   # tick() runs from the timer and from bus messages
 
@@ -227,6 +268,10 @@ class Outputs:
             "airplay": self.settings.airplay,
             "airplay_found": self.airplay_id is not None,
             "streaming": self.feed is not None and self.feed.returncode is None,
+            "active": self.proc is not None and self.calibrated_for is not None,
+            "calibration": self.calibration,
+            "measured_ms": self.settings.measured_ms,
+            "offset_ms": self.settings.offset_ms,
             "delay_ms": self.settings.delay_ms,
             "airplay_volume": self.settings.airplay_volume,
         }
@@ -249,13 +294,27 @@ class Outputs:
         self.next_start = 0.0
         await self.tick()
 
-    async def set_delay(self, ms: int) -> None:
-        self.settings.delay_ms = int(ms)
+    async def set_offset(self, ms: int) -> None:
+        self.settings.offset_ms = int(ms)
         self.settings.clamped().save()
+        await self._apply_delay()
+        await self._report()
+
+    async def resync(self) -> None:
+        """Drop the AirPlay connection, reconnect and measure again."""
+        if not self.settings.whole_home:
+            return
+        log.info("resync: reconnecting %r and measuring again", self.settings.airplay)
+        async with self._lock:
+            await self.stop()
+            self.next_start = 0.0
+        await self.tick()
+
+    async def _apply_delay(self) -> None:
         if self.whole_home_id is not None:
             await _run("pw-cli", "s", str(self.whole_home_id), "Props", delay_params(self.settings.delay_ms))
-            log.info("cabinet delay now %d ms", self.settings.delay_ms)
-        await self._report()
+            log.info("cabinet delay now %d ms (measured %d, offset %+d)", self.settings.delay_ms,
+                     self.settings.measured_ms, self.settings.offset_ms)
 
     async def set_airplay_volume(self, value: float) -> None:
         self.settings.airplay_volume = float(value)
@@ -299,21 +358,66 @@ class Outputs:
         if self.whole_home_id is None:
             return  # still starting up
         self.failures = 0
+        if self.airplay_id is None:
+            return  # the speaker isn't on the network (yet): the DAC stays the output, undelayed
+        if self.airplay_volume_set_on != self.airplay_id:
+            await _run("wpctl", "set-volume", str(self.airplay_id), f"{self.settings.airplay_volume:.2f}")
+            self.airplay_volume_set_on = self.airplay_id
+        if self.calibrated_for != self.airplay_id:
+            # Before taking over the output: measure, so the first song is in sync.
+            await self._calibrate()
         if default_sink_name(objects) != WHOLE_HOME:
             await _run("wpctl", "set-default", str(self.whole_home_id))
             log.info("default output -> %s", WHOLE_HOME)
-        if self.airplay_id is not None and self.airplay_volume_set_on != self.airplay_id:
-            await _run("wpctl", "set-volume", str(self.airplay_id), f"{self.settings.airplay_volume:.2f}")
-            self.airplay_volume_set_on = self.airplay_id
-        want = self.policy.want_feed(now) and self.airplay_id is not None
+        want = self.policy.want_feed(now)
         feed_up = self.feed is not None and self.feed.returncode is None
         if want and not feed_up:
-            self.feed = await asyncio.create_subprocess_exec(
-                *feed_cmd(), stdout=asyncio.subprocess.DEVNULL, env=pw._env())
+            await self._start_feed()
+            self.recheck = True
             log.info("AirPlay feed on -> %s", self.settings.airplay)
+        elif want and feed_up and self.recheck:
+            measured = airplay_latency_ms(objects)
+            if measured is not None:
+                self.recheck = False
+                if abs(measured - self.settings.measured_ms) >= RECALIBRATE_MIN_CHANGE_MS:
+                    log.warning("AirPlay delay moved %d -> %d ms; correcting", self.settings.measured_ms, measured)
+                    self.settings.measured_ms = measured
+                    self.settings.clamped().save()
+                    await self._apply_delay()
         elif not want and feed_up:
             await self._stop_feed()
             log.info("AirPlay feed off (nothing playing)")
+
+    async def _start_feed(self) -> None:
+        self.feed = await asyncio.create_subprocess_exec(
+            *feed_cmd(), stdout=asyncio.subprocess.DEVNULL, env=pw._env())
+
+    async def _calibrate(self) -> None:
+        """Connect to the speaker (silence, if nothing plays), read the delay
+        it reports, set the cabinet to match."""
+        self.calibration = "measuring"
+        await self._report()
+        if self.feed is None or self.feed.returncode is not None:
+            await self._start_feed()
+        deadline = time.monotonic() + CALIBRATE_TIMEOUT_S
+        measured = None
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.5)
+            measured = airplay_latency_ms(await pw.dump())
+            if measured is not None:
+                break
+        if measured is not None:
+            self.settings.measured_ms = measured
+            self.settings.clamped().save()
+            self.calibration = "measured"
+            log.info("measured %r: %d ms", self.settings.airplay, measured)
+        else:
+            self.calibration = "estimated"
+            log.warning("couldn't measure %r in %ds; using %d ms", self.settings.airplay,
+                        CALIBRATE_TIMEOUT_S, self.settings.measured_ms)
+        await self._apply_delay()
+        self.calibrated_for = self.airplay_id
+        self.recheck = False
 
     async def _start(self, dac_name: str) -> None:
         CONF_DIR.mkdir(parents=True, exist_ok=True)
@@ -352,7 +456,8 @@ class Outputs:
             except Exception:
                 log.exception("couldn't set the DAC back as the default output")
         self.proc = None
-        self.whole_home_id = self.airplay_id = None
+        self.whole_home_id = self.airplay_id = self.calibrated_for = None
+        self.calibration = "pending"
 
     async def run(self) -> None:
         while True:

@@ -391,11 +391,13 @@ class Admin:
                 if not isinstance(airplay, str) or not 0 < len(airplay.strip()) <= 100:
                     raise error(400, "Which AirPlay speaker?")
                 cmd["airplay"] = airplay.strip()
-        elif action == "whole_home_delay":
+        elif action == "whole_home_offset":
             ms = body.get("ms")
-            if not isinstance(ms, (int, float)) or not 0 <= ms <= 4000:
-                raise error(400, "The delay is 0 to 4000 milliseconds.")
-            cmd = {"action": "whole_home_delay", "ms": int(ms)}
+            if not isinstance(ms, (int, float)) or not -1000 <= ms <= 1000:
+                raise error(400, "The correction is -1000 to 1000 milliseconds.")
+            cmd = {"action": "whole_home_offset", "ms": int(ms)}
+        elif action == "whole_home_resync":
+            cmd = {"action": "whole_home_resync"}
         elif action == "airplay_volume":
             value = body.get("value")
             if not isinstance(value, (int, float)) or not 0 <= value <= 1:

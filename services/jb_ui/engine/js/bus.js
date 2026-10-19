@@ -37,6 +37,7 @@ const HANDLERS = {
   'jukebox/jb-source-phone/pairing': s => store.set('pairing', s),
   'jukebox/jb-source-phone/switch': s => store.set('phoneSwitch', s),
   'jukebox/jb-source-phone/bluetooth': b => store.set('bluetooth', b),
+  'jukebox/jb-audio/airplay': a => store.set('airplay', a.receivers || []),
   'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
   // The owner published a change in the admin (settings, layouts, theme):

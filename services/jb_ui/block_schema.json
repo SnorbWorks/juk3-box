@@ -1005,6 +1005,13 @@
       "description": "Bluetooth on/off, the paired phones and pairing a new one. On the Settings screen by default.",
       "settings": {}
     },
+    "wholehome": {
+      "label": "Whole-home audio",
+      "group": "navigation",
+      "icon": "speaker",
+      "description": "Play on an AirPlay speaker as well as the cabinet, in sync: on/off, which speaker, and Resync. On the Settings screen by default.",
+      "settings": {}
+    },
     "screen": {
       "label": "Screen",
       "group": "structure",

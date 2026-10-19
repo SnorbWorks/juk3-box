@@ -947,6 +947,7 @@ jb-board[data-cards] .jb-slot[data-entry] .jb-album-code { background: hsl(from 
 .jb-settings-sections { flex: 1; min-height: 0; overflow-y: auto; padding: 1vh 2vw 6vh 2.6vw; scrollbar-width: none; }
 .jb-settings-sections::-webkit-scrollbar { display: none; }
 .jb-settings-section { max-width: 110vh; }
+.jb-settings-sections .jb-settings-section { margin-bottom: 5vh; }
 .jb-settings-heading { margin: 0 0 1.6vh; font-size: 2.6vh; font-weight: 650; color: var(--ink); }
 .jb-settings-subheading { margin: 3vh 0 1.2vh; font-size: 1.5vh; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); }
 .jb-settings-list { display: flex; flex-direction: column; gap: 0.8vh; margin-bottom: 0.8vh; }

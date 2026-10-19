@@ -45,9 +45,16 @@ async function act(action, payload, done) {
 
 function statusLine(w) {
   if (!w.enabled) return 'Off: only the cabinet plays.';
-  if (!w.airplay_found) return `Looking for ${w.airplay}… Is it on, and on the same Wi-Fi?`;
+  if (!w.airplay_found) return `Looking for ${w.airplay}… Until it's found, only the cabinet plays. Is it on, and on the same Wi-Fi?`;
+  if (w.calibration === 'measuring' || !w.active) return `Measuring ${w.airplay}'s delay…`;
   if (w.streaming) return `Playing on ${w.airplay} too.`;
   return `Ready. ${w.airplay} joins in when music plays and is let go 30 seconds after it stops.`;
+}
+
+function syncLine(w) {
+  const offset = w.offset_ms ? `, ${w.offset_ms > 0 ? '+' : ''}${w.offset_ms} ms by ear` : '';
+  const how = w.calibration === 'estimated' ? 'estimated (it couldn\'t be measured; try Resync)' : 'measured';
+  return `${w.airplay}'s delay: ${w.measured_ms} ms, ${how}${offset}. The cabinet is held back ${w.delay_ms} ms.`;
 }
 
 function powerCard(w, receivers) {
@@ -68,7 +75,11 @@ function powerCard(w, receivers) {
       h('div.phone-text', h('div.stat-value', 'Play in the house too'), h('div.stat-sub', statusLine(w))),
       toggle),
     h('div.card-pad.stack',
-      field('AirPlay speaker', pick, 'The speakers it plays on as well. Changing it takes a few seconds.')));
+      field('AirPlay speaker', pick, 'The speakers it plays on as well. Changing it takes a few seconds.'),
+      w.enabled ? field('AirPlay level', slider({
+        min: 0, max: 100, step: 5, value: Math.round(w.airplay_volume * 100), format: v => `${v}%`,
+        onchange: v => act('airplay_volume', { value: v / 100 }, `AirPlay level ${v}%.`),
+      }), 'How loud the AirPlay speaker plays. The cabinet knob sets the cabinet; the zone\'s own volume in JUKE Audio still applies.') : null));
 }
 
 function slider({ min, max, step, value, format, onchange }) {
@@ -82,17 +93,18 @@ function slider({ min, max, step, value, format, onchange }) {
 }
 
 function tuningCard(w) {
-  const nudge = ms => act('whole_home_delay', { ms: Math.max(0, Math.min(4000, w.delay_ms + ms)) });
-  return h('div.card', h('div.card-head', h('h2', 'Fine-tuning')), h('div.card-pad.stack',
-    field('AirPlay level', slider({
-      min: 0, max: 100, step: 5, value: Math.round(w.airplay_volume * 100), format: v => `${v}%`,
-      onchange: v => act('airplay_volume', { value: v / 100 }, `AirPlay level ${v}%.`),
-    }), 'How loud the AirPlay speaker plays. The cabinet knob sets the cabinet; the zone\'s own volume in JUKE Audio still applies.'),
-    field('Sync', h('div.quick',
+  const nudge = ms => act('whole_home_offset', { ms: Math.max(-1000, Math.min(1000, w.offset_ms + ms)) });
+  return h('div.card', h('div.card-head', h('h2', 'Sync')), h('div.card-pad.stack',
+    h('p.muted', syncLine(w)),
+    h('div.quick',
+      button('Resync', { onclick: () => act('whole_home_resync', {}, `Reconnecting ${w.airplay} and measuring again…`) }, 'refresh-cw')),
+    h('p.field-help', 'Resync drops the AirPlay connection, reconnects and measures the delay again. Use it if the two ever drift apart.'),
+    field('By ear', h('div.quick',
       button('Cabinet is early', { onclick: () => nudge(20) }, 'chevron-left'),
-      h('span.muted', `${w.delay_ms} ms`),
-      button('Cabinet is late', { onclick: () => nudge(-20) }, 'chevron-right')),
-      'Stand where you hear both. If the cabinet plays first, it\'s early: hold it back. Each tap is 20 ms.')));
+      h('span.muted', `${w.offset_ms > 0 ? '+' : ''}${w.offset_ms} ms`),
+      button('Cabinet is late', { onclick: () => nudge(-20) }, 'chevron-right'),
+      w.offset_ms ? button('Reset', { onclick: () => act('whole_home_offset', { ms: 0 }) }, 'rotate-ccw') : null),
+      'Only if it still sounds off where you hear both. If the cabinet plays first, it\'s early: hold it back. Each tap is 20 ms, kept on top of the measured delay.')));
 }
 
 function render(data) {
