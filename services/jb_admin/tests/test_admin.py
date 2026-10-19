@@ -508,14 +508,15 @@ def test_sound_page_sends_only_audio_commands(tmp_path):
         assert (await client.post("/api/audio/whole_home_offset", json={"ms": -40}, headers=H)).status == 200
         assert (await client.post("/api/audio/whole_home_offset", json={"ms": 9000}, headers=H)).status == 400
         assert (await client.post("/api/audio/whole_home_resync", json={}, headers=H)).status == 200
-        assert (await client.post("/api/audio/airplay_volume", json={"value": 0.555}, headers=H)).status == 200
-        assert (await client.post("/api/audio/airplay_volume", json={"value": "loud"}, headers=H)).status == 400
+        assert (await client.post("/api/audio/airplay_match", json={"value": 1.25}, headers=H)).status == 200
+        assert (await client.post("/api/audio/airplay_match", json={"value": "loud"}, headers=H)).status == 400
+        assert (await client.post("/api/audio/airplay_match", json={"value": 0.1}, headers=H)).status == 400
         assert (await client.post("/api/audio/reboot", json={}, headers=H)).status == 404
         assert admin.bus.sent == [
             ("jukebox/jb-audio/cmd", {"action": "whole_home", "enabled": True, "airplay": "Den"}),
             ("jukebox/jb-audio/cmd", {"action": "whole_home_offset", "ms": -40}),
             ("jukebox/jb-audio/cmd", {"action": "whole_home_resync"}),
-            ("jukebox/jb-audio/cmd", {"action": "airplay_volume", "value": 0.56}),
+            ("jukebox/jb-audio/cmd", {"action": "airplay_match", "value": 1.25}),
         ]
         assert (await client.get("/api/audio", headers=H)).status == 200
     run(tmp_path, check)

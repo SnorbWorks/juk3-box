@@ -76,10 +76,14 @@ function powerCard(w, receivers) {
       toggle),
     h('div.card-pad.stack',
       field('AirPlay speaker', pick, 'The speakers it plays on as well. Changing it takes a few seconds.'),
-      w.enabled ? field('AirPlay level', slider({
-        min: 0, max: 100, step: 5, value: Math.round(w.airplay_volume * 100), format: v => `${v}%`,
-        onchange: v => act('airplay_volume', { value: v / 100 }, `AirPlay level ${v}%.`),
-      }), 'How loud the AirPlay speaker plays. The cabinet knob sets the cabinet; the zone\'s own volume in JUKE Audio still applies.') : null));
+      w.enabled ? field('AirPlay loudness', slider({
+        min: 25, max: 300, step: 5, value: Math.round(w.airplay_match * 100), format: matchText,
+        onchange: v => act('airplay_match', { value: v / 100 }, `AirPlay loudness: ${matchText(v)}.`),
+      }), `The cabinet knob turns both up and down, and mute mutes both. If ${w.airplay} sounds louder or quieter than the cabinet, move this.${w.airplay_level == null ? '' : ` Right now ${w.airplay} is at ${Math.round(w.airplay_level * 100)}%.`}`) : null));
+}
+
+function matchText(v) {
+  return v === 100 ? 'same as the cabinet' : `${v}% of the cabinet`;
 }
 
 function slider({ min, max, step, value, format, onchange }) {

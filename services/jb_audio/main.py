@@ -60,7 +60,9 @@ async def get_state() -> dict:
 
 
 async def publish_state(bus: Bus, log, outputs: Outputs) -> None:
-    state = {**await get_state(), "whole_home": outputs.status()}
+    cabinet = await get_state()
+    await outputs.follow_cabinet(cabinet["volume"], cabinet["muted"])
+    state = {**cabinet, "whole_home": outputs.status()}
     # Retained, so a screen that loads later still knows the volume.
     await bus.publish(f"jukebox/{SERVICE_NAME}/state", state, retain=True)
     log.info("state: %s", state)
@@ -89,8 +91,10 @@ async def handle_command(bus: Bus, log, outputs: Outputs, cmd: dict) -> None:
         await outputs.set_offset(int(cmd["ms"]))
     elif action == "whole_home_resync":
         await outputs.resync()
-    elif action == "airplay_volume":
-        await outputs.set_airplay_volume(float(cmd["value"]))
+    elif action == "airplay_match":
+        # The AirPlay speaker follows the knob; this scales it to match the
+        # cabinet's loudness: {"action": "airplay_match", "value": 1.0}
+        await outputs.set_airplay_match(float(cmd["value"]))
     else:
         log.warning("unknown command action: %r", action)
         return

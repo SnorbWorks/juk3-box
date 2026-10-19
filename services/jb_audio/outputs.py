@@ -59,7 +59,17 @@ FEED_LINGER_S = 30
 TICK_S = 5
 RESTART_BACKOFF_S = (2, 5, 15, 30)
 
+MATCH_MIN, MATCH_MAX = 0.25, 3.0
+
 log = logging.getLogger("jb-audio.outputs")
+
+
+def airplay_level(cabinet_volume: float, muted: bool, match: float) -> float:
+    """The AirPlay speaker follows the cabinet's knob (and mute), scaled by
+    the owner's match setting."""
+    if muted:
+        return 0.0
+    return round(min(max(cabinet_volume * match, 0.0), 1.0), 2)
 
 
 @dataclass
@@ -68,7 +78,7 @@ class Settings:
     airplay: str = "Inside"          # the AirPlay receiver's name, as the phone lists it
     measured_ms: int = DEFAULT_DELAY_MS  # the receiver's delay, as last measured
     offset_ms: int = 0                # the owner's by-ear correction, added on top
-    airplay_volume: float = 0.7       # the receiver's own level (its zone volume still applies)
+    airplay_match: float = 1.0        # the AirPlay speaker's level relative to the cabinet's knob
 
     @property
     def delay_ms(self) -> int:
@@ -87,7 +97,7 @@ class Settings:
     def clamped(self) -> "Settings":
         self.measured_ms = int(min(max(self.measured_ms, 0), MAX_DELAY_S * 1000))
         self.offset_ms = int(min(max(self.offset_ms, -MAX_OFFSET_MS), MAX_OFFSET_MS))
-        self.airplay_volume = float(min(max(self.airplay_volume, 0.0), 1.0))
+        self.airplay_match = round(float(min(max(self.airplay_match, MATCH_MIN), MATCH_MAX)), 2)
         return self
 
     def save(self, path: Path = SETTINGS_PATH) -> None:
@@ -253,7 +263,7 @@ class Outputs:
         self.failures = 0
         self.next_start = 0.0
         self.airplay_id: int | None = None
-        self.airplay_volume_set_on: int | None = None
+        self.cabinet: tuple[float, bool] | None = None   # the knob's (volume, muted)
         self.whole_home_id: int | None = None
         self.calibrated_for: int | None = None   # the AirPlay node id the delay was measured on
         self.calibration = "pending"   # pending | measuring | measured | estimated
@@ -273,7 +283,8 @@ class Outputs:
             "measured_ms": self.settings.measured_ms,
             "offset_ms": self.settings.offset_ms,
             "delay_ms": self.settings.delay_ms,
-            "airplay_volume": self.settings.airplay_volume,
+            "airplay_match": self.settings.airplay_match,
+            "airplay_level": self._airplay_level(),
         }
 
     def source_status(self, source: str, status: str | None) -> bool:
@@ -316,11 +327,38 @@ class Outputs:
             log.info("cabinet delay now %d ms (measured %d, offset %+d)", self.settings.delay_ms,
                      self.settings.measured_ms, self.settings.offset_ms)
 
-    async def set_airplay_volume(self, value: float) -> None:
-        self.settings.airplay_volume = float(value)
+    def _airplay_level(self) -> float | None:
+        if self.cabinet is None:
+            return None
+        return airplay_level(*self.cabinet, self.settings.airplay_match)
+
+    async def follow_cabinet(self, volume: float, muted: bool) -> None:
+        """The knob moved (or was read): the AirPlay speaker follows. No lock:
+        this runs from status reports made while tick() holds it."""
+        self.cabinet = (float(volume), bool(muted))
+        await self._apply_airplay_volume()
+
+    async def set_airplay_match(self, value: float) -> None:
+        self.settings.airplay_match = float(value)
         self.settings.clamped().save()
-        self.airplay_volume_set_on = None   # re-applied on the next tick
-        await self.tick()
+        await self._apply_airplay_volume()
+        await self._report()
+
+    async def _apply_airplay_volume(self) -> None:
+        """Checked every tick too: the speaker's level can be reset when the
+        AirPlay connection is made."""
+        level = self._airplay_level()
+        node = self.airplay_id
+        if level is None or node is None:
+            return
+        try:
+            current = float((await _run("wpctl", "get-volume", str(node))).split()[1])
+        except Exception:
+            current = None
+        if current is None or abs(current - level) > 0.005:
+            await _run("wpctl", "set-volume", str(node), f"{level:.2f}")
+            log.info("AirPlay level %.2f (cabinet %.2f%s x %.2f)", level, self.cabinet[0],
+                     " muted" if self.cabinet[1] else "", self.settings.airplay_match)
 
     # keeping it right
     async def tick(self) -> None:
@@ -360,9 +398,7 @@ class Outputs:
         self.failures = 0
         if self.airplay_id is None:
             return  # the speaker isn't on the network (yet): the DAC stays the output, undelayed
-        if self.airplay_volume_set_on != self.airplay_id:
-            await _run("wpctl", "set-volume", str(self.airplay_id), f"{self.settings.airplay_volume:.2f}")
-            self.airplay_volume_set_on = self.airplay_id
+        await self._apply_airplay_volume()
         if self.calibrated_for != self.airplay_id:
             # Before taking over the output: measure, so the first song is in sync.
             await self._calibrate()
@@ -425,7 +461,6 @@ class Outputs:
         conf.write_text(outputs_conf(self.settings, dac_name))
         self.proc = await asyncio.create_subprocess_exec(
             "pipewire", "-c", str(conf), stdout=asyncio.subprocess.DEVNULL, env=pw._env())
-        self.airplay_volume_set_on = None
         log.info("whole-home on: %s delayed %d ms + AirPlay %r", dac_name, self.settings.delay_ms,
                  self.settings.airplay)
 

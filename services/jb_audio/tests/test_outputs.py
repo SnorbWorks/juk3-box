@@ -80,12 +80,20 @@ def test_settings_round_trip_and_clamp(tmp_path):
     path = tmp_path / "jb-audio.json"
     assert o.Settings.load(path) == o.Settings()
     assert o.Settings().whole_home is False      # off unless the owner turns it on
-    o.Settings(whole_home=True, airplay="Den", measured_ms=99999, offset_ms=-5000, airplay_volume=3).clamped().save(path)
+    o.Settings(whole_home=True, airplay="Den", measured_ms=99999, offset_ms=-5000, airplay_match=9).clamped().save(path)
     s = o.Settings.load(path)
-    assert (s.whole_home, s.airplay, s.measured_ms, s.offset_ms, s.airplay_volume) == (True, "Den", 4000, -1000, 1.0)
-    # an old file (fixed delay_ms) loads; the unknown key is dropped
-    path.write_text(json.dumps({"whole_home": True, "delay_ms": 1580, "unknown": 1}))
-    assert o.Settings.load(path).whole_home is True
+    assert (s.whole_home, s.airplay, s.measured_ms, s.offset_ms, s.airplay_match) == (True, "Den", 4000, -1000, 3.0)
+    # an old file (fixed delay_ms, a fixed airplay_volume) loads; the unknown keys are dropped
+    path.write_text(json.dumps({"whole_home": True, "delay_ms": 1580, "airplay_volume": 0.7, "unknown": 1}))
+    s = o.Settings.load(path)
+    assert s.whole_home is True and s.airplay_match == 1.0
+
+
+def test_airplay_follows_the_knob():
+    assert o.airplay_level(0.2, False, 1.0) == 0.2
+    assert o.airplay_level(0.2, False, 1.5) == 0.3
+    assert o.airplay_level(0.8, False, 2.0) == 1.0     # never past full
+    assert o.airplay_level(0.5, True, 1.0) == 0.0      # mute mutes both
 
 
 def test_delay_is_measured_plus_offset_never_negative():

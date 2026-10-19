@@ -398,11 +398,11 @@ class Admin:
             cmd = {"action": "whole_home_offset", "ms": int(ms)}
         elif action == "whole_home_resync":
             cmd = {"action": "whole_home_resync"}
-        elif action == "airplay_volume":
+        elif action == "airplay_match":
             value = body.get("value")
-            if not isinstance(value, (int, float)) or not 0 <= value <= 1:
-                raise error(400, "The level is 0 to 100%.")
-            cmd = {"action": "airplay_volume", "value": round(float(value), 2)}
+            if not isinstance(value, (int, float)) or not 0.25 <= value <= 3:
+                raise error(400, "The match is 25% to 300% of the cabinet's level.")
+            cmd = {"action": "airplay_match", "value": round(float(value), 2)}
         else:
             raise web.HTTPNotFound()
         if self.bus is None:

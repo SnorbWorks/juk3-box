@@ -7,6 +7,6 @@
   "roles": ["output"],
   "publishes": ["jukebox/jb-audio/state", "jukebox/jb-audio/airplay"],
   "subscribes": ["jukebox/jb-audio/cmd", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing", "jukebox/jb-source-phone/connected"],
-  "commands": ["volume_delta", "mute", "unmute", "toggle_mute", "whole_home", "whole_home_offset", "whole_home_resync", "airplay_volume"],
+  "commands": ["volume_delta", "mute", "unmute", "toggle_mute", "whole_home", "whole_home_offset", "whole_home_resync", "airplay_match"],
   "essential": true
 }

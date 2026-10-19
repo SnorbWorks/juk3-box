@@ -2,7 +2,7 @@
 // speaker (a JUKE Audio zone) as well as the cabinet, in sync. jb-audio does
 // the work (services/jb_audio/outputs.py): turning it on measures the
 // speaker's delay before switching over; Resync reconnects and measures again.
-// The by-ear fine-tuning and the AirPlay level are on the admin's Sound page.
+// The by-ear fine-tuning and the AirPlay match are on the admin's Sound page.
 //
 // Markup: engine blocks wholehome and popup-speakers (rows are phone-row).
 
