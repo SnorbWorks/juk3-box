@@ -14,6 +14,9 @@ SOURCES = {
     "jukebox/jb-source-local/now-playing": "local",
 }
 PHONE_CONNECTED = "jukebox/jb-source-phone/connected"
+VOLUME_ACTIONS = ("volume_delta",)
+# At boot PipeWire may come up after us: keep trying to put the volume back this long.
+RESTORE_TRIES, RESTORE_EVERY_S = 30, 2.0
 
 _dac_id: str | None = None
 
@@ -59,6 +62,33 @@ async def get_state() -> dict:
     return {"volume": float(parts[1]), "muted": "[MUTED]" in raw}
 
 
+async def restore_volume(bus: Bus, log, outputs: Outputs) -> None:
+    """Put the cabinet back at the volume it was last left at. The DAC's
+    profile (stereo-fallback) has no route for PipeWire to remember it by,
+    so on its own every boot would start at PipeWire's default (40%)."""
+    volume = outputs.settings.volume
+    for _ in range(RESTORE_TRIES):
+        if await volume_sink(refresh=True) != FALLBACK_SINK:
+            try:
+                if volume is None:                     # nothing saved yet: start remembering from here
+                    remember_volume(outputs, (await get_state())["volume"])
+                    return
+                await wpctl_volume("set-volume", None, f"{volume:.3f}")
+                log.info("volume restored to %.0f%%", volume * 100)
+                await publish_state(bus, log, outputs)
+                return
+            except RuntimeError:
+                pass
+        await asyncio.sleep(RESTORE_EVERY_S)
+    log.warning("couldn't restore the volume: no DAC")
+
+
+def remember_volume(outputs: Outputs, volume: float) -> None:
+    if outputs.settings.volume is None or abs(outputs.settings.volume - volume) > 1e-3:
+        outputs.settings.volume = volume
+        outputs.settings.clamped().save()
+
+
 async def publish_state(bus: Bus, log, outputs: Outputs) -> None:
     cabinet = await get_state()
     await outputs.follow_cabinet(cabinet["volume"], cabinet["muted"])
@@ -99,6 +129,8 @@ async def handle_command(bus: Bus, log, outputs: Outputs, cmd: dict) -> None:
         log.warning("unknown command action: %r", action)
         return
     await publish_state(bus, log, outputs)
+    if action in VOLUME_ACTIONS:
+        remember_volume(outputs, (await get_state())["volume"])
 
 
 async def main() -> None:
@@ -125,7 +157,7 @@ async def main() -> None:
             await bus.subscribe(topic)
         await publish_state(bus, log, outputs)
         tasks = [asyncio.create_task(bus.run_heartbeat()), asyncio.create_task(outputs.run()),
-                 asyncio.create_task(receivers.run())]
+                 asyncio.create_task(receivers.run()), asyncio.create_task(restore_volume(bus, log, outputs))]
         try:
             async for topic, payload in messages:
                 try:

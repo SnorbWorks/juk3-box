@@ -121,3 +121,13 @@ def test_reads_the_airplay_latency_the_protocol_reports():
 
 def test_delay_params():
     assert o.delay_params(1500) == '{ params = [ "dl:Delay (s)" 1.5 "dr:Delay (s)" 1.5 ] }'
+
+
+def test_the_volume_is_remembered_and_kept_sane(tmp_path):
+    path = tmp_path / "jb-audio.json"
+    assert o.Settings.load(path).volume is None          # nothing saved: leave PipeWire's own
+    o.Settings(volume=0.1).clamped().save(path)
+    assert o.Settings.load(path).volume == 0.1
+    assert o.Settings(volume=1.7).clamped().volume == 1.0
+    assert o.Settings(volume=True).clamped().volume is None
+    assert o.Settings(volume="loud").clamped().volume is None

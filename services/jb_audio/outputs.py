@@ -79,6 +79,8 @@ class Settings:
     measured_ms: int = DEFAULT_DELAY_MS  # the receiver's delay, as last measured
     offset_ms: int = 0                # the owner's by-ear correction, added on top
     airplay_match: float = 1.0        # the AirPlay speaker's level relative to the cabinet's knob
+    volume: float | None = None       # the cabinet's volume as last set, put back at startup (PipeWire
+                                      # doesn't remember it for the DAC's stereo-fallback profile)
 
     @property
     def delay_ms(self) -> int:
@@ -98,6 +100,10 @@ class Settings:
         self.measured_ms = int(min(max(self.measured_ms, 0), MAX_DELAY_S * 1000))
         self.offset_ms = int(min(max(self.offset_ms, -MAX_OFFSET_MS), MAX_OFFSET_MS))
         self.airplay_match = round(float(min(max(self.airplay_match, MATCH_MIN), MATCH_MAX)), 2)
+        if not isinstance(self.volume, (int, float)) or isinstance(self.volume, bool):
+            self.volume = None
+        else:
+            self.volume = round(float(min(max(self.volume, 0.0), 1.0)), 3)
         return self
 
     def save(self, path: Path = SETTINGS_PATH) -> None:
