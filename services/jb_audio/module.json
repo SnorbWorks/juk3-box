@@ -2,11 +2,11 @@
   "contract": 1,
   "id": "jb-audio",
   "name": "Audio output",
-  "description": "Owns the volume of the sound output.",
-  "version": "1.0.0",
+  "description": "Owns the volume of the sound output, and whole-home audio: the cabinet plus an AirPlay zone, in sync.",
+  "version": "1.1.0",
   "roles": ["output"],
-  "publishes": ["jukebox/jb-audio/state"],
-  "subscribes": ["jukebox/jb-audio/cmd"],
-  "commands": ["volume_delta", "mute", "unmute", "toggle_mute"],
+  "publishes": ["jukebox/jb-audio/state", "jukebox/jb-audio/airplay"],
+  "subscribes": ["jukebox/jb-audio/cmd", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing", "jukebox/jb-source-phone/connected"],
+  "commands": ["volume_delta", "mute", "unmute", "toggle_mute", "whole_home", "whole_home_delay", "airplay_volume"],
   "essential": true
 }

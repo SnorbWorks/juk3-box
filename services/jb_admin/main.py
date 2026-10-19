@@ -144,6 +144,7 @@ class Admin:
         "jukebox/jb-source-phone/pairing": "pairing",
         "jukebox/jb-source-phone/switch": "phone_switch",
         "jukebox/jb-source-phone/bluetooth": "bluetooth",
+        "jukebox/jb-audio/airplay": "airplay",
     }
 
     # What the Phones page may ask jb-source-phone to do.
@@ -366,6 +367,46 @@ class Admin:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
         await self.bus.publish("jukebox/jb-source-phone/cmd", cmd)
         self.log.info("phones: %s %s", action, cmd.get("mac", ""))
+        return web.json_response({"ok": True})
+
+    # Sound (whole-home audio) ----------------------------------------------------
+
+    async def get_audio(self, request):
+        state = self.live.get("volume") or {}
+        return web.json_response({
+            "volume": state.get("volume"),
+            "whole_home": state.get("whole_home"),   # None until jb-audio reports it
+            "receivers": (self.live.get("airplay") or {}).get("receivers") or [],
+            "bus": self.bus is not None,
+        })
+
+    async def audio_action(self, request):
+        """What the Sound page may ask jb-audio to do."""
+        action = request.match_info["action"]
+        body = await json_body(request)
+        if action == "whole_home":
+            cmd = {"action": "whole_home", "enabled": bool(body.get("enabled"))}
+            airplay = body.get("airplay")
+            if airplay is not None:
+                if not isinstance(airplay, str) or not 0 < len(airplay.strip()) <= 100:
+                    raise error(400, "Which AirPlay speaker?")
+                cmd["airplay"] = airplay.strip()
+        elif action == "whole_home_delay":
+            ms = body.get("ms")
+            if not isinstance(ms, (int, float)) or not 0 <= ms <= 4000:
+                raise error(400, "The delay is 0 to 4000 milliseconds.")
+            cmd = {"action": "whole_home_delay", "ms": int(ms)}
+        elif action == "airplay_volume":
+            value = body.get("value")
+            if not isinstance(value, (int, float)) or not 0 <= value <= 1:
+                raise error(400, "The level is 0 to 100%.")
+            cmd = {"action": "airplay_volume", "value": round(float(value), 2)}
+        else:
+            raise web.HTTPNotFound()
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-audio/cmd", cmd)
+        self.log.info("sound: %s", cmd)
         return web.json_response({"ok": True})
 
     # USB drives -----------------------------------------------------------------
@@ -972,6 +1013,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/phones", admin.get_phones)
     r.add_get("/api/extensions", admin.get_extensions)
     r.add_post("/api/phones/{action}", admin.phone_action)
+    r.add_get("/api/audio", admin.get_audio)
+    r.add_post("/api/audio/{action}", admin.audio_action)
     r.add_get("/api/drives", admin.get_drives)
     r.add_post("/api/drives/{action}", admin.drive_action)
     r.add_put("/api/settings", admin.put_settings)

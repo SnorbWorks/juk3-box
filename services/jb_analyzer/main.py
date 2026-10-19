@@ -6,7 +6,7 @@ now, ~30 times a second), the slow channel (tempo, energy, mood, identity),
 events (silence, sound, clip, drop) and status. It never drives anything
 itself: lights, screens and logs subscribe and decide what to do.
 
-Capture: a PipeWire monitor of the default output (what the DAC plays) via
+Capture: a PipeWire monitor of the DAC (what the cabinet plays) via
 pw-record -- a digital copy of the decoded audio, read without disturbing
 playback. Identity comes from the phone's own metadata for now
 (jukebox/jb-source-phone/now-playing, or jb-source-local/now-playing for a
@@ -25,7 +25,7 @@ import time
 
 import numpy as np
 
-from shared import config, logging as jb_logging
+from shared import config, logging as jb_logging, pipewire as pw
 from shared.bus import Bus
 from services.jb_analyzer.dsp import FastAnalyzer
 from services.jb_analyzer.levels import Levels
@@ -42,11 +42,25 @@ RESTART_DELAY_S = 3.0
 
 
 def capture_cmd(cfg: dict) -> list:
-    cmd = ["pw-record", "-P", "{ stream.capture.sink=true node.name=jb-analyzer node.description=\"JUKE.BOX analyzer\" }",
+    cmd = ["pw-record", "-P", "{ stream.capture.sink=true node.dont-reconnect=true node.name=jb-analyzer node.description=\"JUKE.BOX analyzer\" }",
            "--rate", str(RATE), "--channels", str(CHANNELS), "--format", "f32", "--latency", "30ms", "--raw"]
-    if cfg.get("target"):
-        cmd += ["--target", cfg["target"]]
+    target = cfg.get("target") or dac_name()
+    if target:
+        cmd += ["--target", target]
     return cmd + ["-"]
+
+
+def dac_name() -> str | None:
+    """The DAC by name, not the default output: with whole-home audio on the
+    default is jb-whole-home, whose monitor is ~1.5 s ahead of what the
+    cabinet plays (see services/jb_audio/outputs.py). The capture also has
+    node.dont-reconnect: WirePlumber treats a stream whose target is the
+    current default as following the default, and would move it."""
+    try:
+        dac = pw.find_dac(pw.dump_sync())
+    except Exception:
+        return None
+    return dac["name"] if dac else None
 
 
 async def main() -> None:

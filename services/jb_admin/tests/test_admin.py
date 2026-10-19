@@ -494,6 +494,38 @@ def test_phones_page_sends_only_phone_commands(tmp_path):
     run(tmp_path, check)
 
 
+def test_sound_page_sends_only_audio_commands(tmp_path):
+    async def check(client, admin):
+        admin.live["volume"] = {"volume": 0.2, "muted": False,
+                                "whole_home": {"enabled": True, "airplay": "Inside", "airplay_found": True}}
+        admin.live["airplay"] = {"receivers": ["Den", "Inside"]}
+        data = await (await client.get("/api/audio", headers=H)).json()
+        assert data["whole_home"]["airplay"] == "Inside" and data["receivers"] == ["Den", "Inside"]
+        assert (await client.post("/api/audio/whole_home", json={"enabled": True}, headers=H)).status == 503
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/audio/whole_home", json={"enabled": True, "airplay": " Den "}, headers=H)).status == 200
+        assert (await client.post("/api/audio/whole_home", json={"enabled": True, "airplay": ""}, headers=H)).status == 400
+        assert (await client.post("/api/audio/whole_home_delay", json={"ms": 1600}, headers=H)).status == 200
+        assert (await client.post("/api/audio/whole_home_delay", json={"ms": 9000}, headers=H)).status == 400
+        assert (await client.post("/api/audio/airplay_volume", json={"value": 0.555}, headers=H)).status == 200
+        assert (await client.post("/api/audio/airplay_volume", json={"value": "loud"}, headers=H)).status == 400
+        assert (await client.post("/api/audio/reboot", json={}, headers=H)).status == 404
+        assert admin.bus.sent == [
+            ("jukebox/jb-audio/cmd", {"action": "whole_home", "enabled": True, "airplay": "Den"}),
+            ("jukebox/jb-audio/cmd", {"action": "whole_home_delay", "ms": 1600}),
+            ("jukebox/jb-audio/cmd", {"action": "airplay_volume", "value": 0.56}),
+        ]
+        assert (await client.get("/api/audio", headers=H)).status == 200
+    run(tmp_path, check)
+
+
+def test_sound_page_needs_the_owner(tmp_path):
+    async def check(client, admin):
+        assert (await client.get("/api/audio", headers=H)).status == 401
+        assert (await client.post("/api/audio/whole_home", json={"enabled": False}, headers=H)).status == 401
+    run(tmp_path, check, login=False)
+
+
 def test_phones_page_needs_the_owner(tmp_path):
     async def check(client, admin):
         assert (await client.get("/api/phones", headers=H)).status == 401

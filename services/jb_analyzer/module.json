@@ -3,7 +3,7 @@
   "id": "jb-analyzer",
   "name": "Audio analyzer",
   "description": "Listens to what's playing and publishes levels, beats, drops and mood.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "roles": ["analyzer"],
   "publishes": ["jukebox/analysis/audio/fast", "jukebox/analysis/audio/slow", "jukebox/analysis/audio/events", "jukebox/analysis/audio/status"],
   "settings": "jb-analyzer"
