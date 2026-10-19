@@ -5,8 +5,9 @@ Drives every LED chain:
   - level bar    levelbar.run() in its own thread (idle white, volume fill)
   - accent chain accent_lights.run() in its own thread: the upper panel and
                  footlights, accent-city at idle
-While music plays both follow jb-analyzer's stream through one shared
-AudioFeed (EQ or ribbon by mood, a flash on the drop).
+While music plays, all of them put on one light show from jb-analyzer's
+stream through the shared AudioFeed: its director picks a style for the
+song and cues each part (show/, docs/Light Show Styles.md).
 The buttons and the accent chain share one rpi_ws281x controller
 (pwm_chains); the level bar is on SPI.
 

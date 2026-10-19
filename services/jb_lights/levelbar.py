@@ -28,6 +28,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from services.jb_lights import matrix
+from services.jb_lights.show.parts import BarShow
 from services.jb_lights.themes import (
     volume_bar_theme1 as theme1,
     volume_bar_theme2 as theme2,
@@ -84,7 +85,8 @@ LOOK_FADE_S = 1.5
 
 class MusicLooks:
     """The bar following the music (the shared AudioFeed's look):
-    idle -> the default theme, eq -> theme 3 (the classic analyzer) on the
+    idle -> the default theme, show -> its part of the light show (show/parts.py),
+    eq -> theme 3 (the classic analyzer) on the
     real bands, ribbon -> theme 2 swelling with the music and flaring on the
     beat. Looks crossfade; a drop flashes white. Pure (no LEDs)."""
 
@@ -94,8 +96,11 @@ class MusicLooks:
         self.ribbon = theme2.Ribbon()
         self.ribbon_clock = 0.0
         self.current, self.previous, self.fade = "idle", None, 1.0
+        self.show = BarShow()
 
     def _render(self, look, t, dt, snap):
+        if look == "show":
+            return self.show.frame(t, dt, snap)
         if look == "eq":
             gain = 0.5 + 0.5 * snap.level
             cols = [min(1.0, v * gain) for v in snap.resample(matrix.COLS)]
@@ -113,7 +118,7 @@ class MusicLooks:
         out = self._render(self.current, t, dt, snap)
         if self.fade < 1.0 and self.previous:
             out = _mix(self._render(self.previous, t, dt, snap), out, self.fade)
-        if snap.look != "idle" and snap.drop_age < DROP_FLASH_S:
+        if snap.look in ("eq", "ribbon") and snap.drop_age < DROP_FLASH_S:
             k = DROP_FLASH * (1 - snap.drop_age / DROP_FLASH_S) ** 2
             out = _mix(out, [(255, 255, 255)] * len(out), k)
         return out

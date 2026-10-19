@@ -47,7 +47,9 @@ one (e.g. the mood picks the palette, the beat picks the moment).
  "bands": [0.71, 0.66, ...],
  "brightness": 0.44,
  "beat": true, "onset": 0.37,
- "build": "rising"}
+ "kick": 0.9, "snare": 0.0, "hat": 0.4,
+ "build": "rising",
+ "phase": 0.04, "bar_beat": 0}
 ```
 
 | Field | Meaning |
@@ -59,6 +61,9 @@ one (e.g. the mood picks the palette, the beat picks the moment).
 | `beat` | `true` on the frame a beat (kick) lands |
 | `onset` | How strong the newest attack was (0 none) |
 | `build` | Trajectory over the last several seconds: `none`, `rising` (a riser), `breakdown` (thinned out, a drop may follow), `drop` (bass slammed back). Expect the occasional head-fake |
+| `kick`, `snare`, `hat` | Each part of the drum kit: how far its newest attack stands out from its own last second and a half, 0 (nothing new) .. 1 (a clear hit). Kick ~40-150 Hz, snare's crack ~1.5-5 kHz, hats and cymbals ~7-16 kHz. Lets consumers give each drum its own job |
+| `phase` | The beat clock: where we are within the beat, 0 on the beat .. 1 just before the next, or `null` until the tempo is known. Runs at the tempo and is pulled into step by the detected kicks, so it keeps time through gaps and fills where no kick lands |
+| `bar_beat` | Which beat of a 4-beat bar (0 = the downbeat), or `null` with `phase`. Re-anchored to 0 on a hit, a new section or a drop (they almost always land on the one) |
 
 ### `slow`
 
@@ -94,12 +99,18 @@ per song, so a quiet bridge pulls it down and the chorus brings it back.
 {"v": 1, "t": 1234.5, "type": "silence"}
 ```
 
+Some events carry more fields (below), e.g. `{"v": 1, "t": 1234.5, "type": "hit", "strength": 0.8, "after_gap": true}`.
+Added in v1 without a version bump, like `tags`: consumers ignore types and fields they don't know.
+
 | `type` | When |
 | --- | --- |
 | `silence` | The level has been near zero for about 1.5 s (song ended, paused, gap) |
 | `sound` | Sound is back after a silence |
 | `clip` | The signal is pinning near full scale (distortion; protect the amp) |
 | `drop` | A build resolved into a drop (the same moment `build` becomes `drop`) |
+| `gap` | Mid-song, the sound suddenly fell away (~14 dB under the song for ~0.1 s): the beat of silence before a drop, a band stopping dead. Not sent in a song's first seconds, nor as it fades out |
+| `hit` | A big attack out of something quieter: the sound slamming back after a gap, a crash, the drop landing. Carries `strength` (0.3 .. 1) and `after_gap` (true when it ends a gap) |
+| `section` | The song moved on: the last few seconds sound clearly different from the stretch before (verse to chorus, the bridge). Carries `change` (0 .. 1, how different) and `energy` (`up`, `down`, `same`). At most every 10 s |
 
 ### `status`
 

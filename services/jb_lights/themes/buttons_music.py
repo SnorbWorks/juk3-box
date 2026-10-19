@@ -7,6 +7,8 @@ Follows the same look as the rest of the cabinet (the shared AudioFeed):
   ribbon  the ribbon's palette (white-hot core, pink, purple, deep blue)
           rolls across the letters and digits, swelling with the music and
           flaring hot on the beat
+  show    the keypad's part of the light show (show/parts.py Keys): the
+          sparkle -- hats, accents -- in the song's palette
   idle    white at 70% -- buttons-theme1's resting look
 SINGLE/ALBUM sit behind coloured filters (blue is blocked), so they pulse
 white on the beat; RESET does the same. A drop flashes the keypad white.
@@ -22,6 +24,7 @@ import colorsys
 import math
 
 from services.jb_lights import buttons
+from services.jb_lights.show.parts import Keys
 from services.jb_lights.themes.volume_bar_theme2 import HOT, _lerp, _palette
 
 IDLE_W = int(255 * 0.70)              # buttons-theme1's idle white
@@ -51,6 +54,7 @@ class ButtonsMusic:
     def __init__(self):
         self.current, self.previous, self.fade = "idle", None, 1.0
         self.clock = 0.0
+        self.keys = Keys()
 
     def resume(self):
         """Back from an interaction (the keypad showed plain white): fade
@@ -61,6 +65,8 @@ class ButtonsMusic:
     def _render(self, look, dt, snap):
         out = {}
         beat = snap.beat()
+        if look == "show":
+            return self.keys.frame(snap.cues, snap, dt)
         if look == "eq":
             bands = snap.resample(10)
             gain = 0.5 + 0.5 * snap.level
@@ -97,7 +103,7 @@ class ButtonsMusic:
         if self.fade < 1.0 and self.previous:
             before = self._render(self.previous, 0.0, snap)
             out = {i: _mix(before[i], out[i], self.fade) for i in out}
-        if snap.look != "idle" and snap.drop_age < DROP_FLASH_S:
+        if snap.look in ("eq", "ribbon") and snap.drop_age < DROP_FLASH_S:
             k = 0.7 * (1 - snap.drop_age / DROP_FLASH_S) ** 2
             out = {i: _mix(c, (c[0], c[1], c[2], 255), k) for i, c in out.items()}
         return out

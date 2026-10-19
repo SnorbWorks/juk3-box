@@ -3,10 +3,13 @@ jb-lights service in its own thread.
 
 Follows the music via the shared AudioFeed (jb-analyzer's stream):
   idle    accent-city, the city at night
+  show    the light show (show/parts.py): the upper panel tells the song's
+          story, the footlights carry its rhythm, as the director cues
   eq      accent-eq, the columns as a graphic EQ of the real bands
   ribbon  accent-ribbon, flowing faster and swelling with the music, its hot
           spots flaring on the beat
-Looks crossfade; a drop flashes the whole chain white for a moment. Without
+Looks crossfade; in eq and ribbon a drop flashes the whole chain white for a
+moment (the show flashes on its own cues). Without
 the analyzer (or a feed) the city simply stays on.
 
 The chain shares its controller with the buttons (pwm_chains), and the
@@ -19,6 +22,7 @@ import time
 from rpi_ws281x import Color
 
 from services.jb_lights import accent, pwm_chains
+from services.jb_lights.show.parts import AccentShow
 from services.jb_lights.themes.accent_city import BRIGHTNESS, City
 from services.jb_lights.themes.accent_diner import limit
 from services.jb_lights.themes.accent_eq import EQ
@@ -47,10 +51,13 @@ class Looks:
         self.city = City(pos)
         self.eq = EQ(pos)
         self.ribbon = AccentRibbon(pos)
+        self.show = AccentShow(pos)
         self.ribbon_clock = 0.0
         self.current, self.previous, self.fade = "idle", None, 1.0
 
     def _render(self, look, t, dt, snap):
+        if look == "show":
+            return self.show.frame(t, dt, snap)
         if look == "eq":
             bands = snap.resample(16)
             gain = 0.5 + 0.5 * snap.level
@@ -70,7 +77,7 @@ class Looks:
         out = self._render(self.current, t, dt, snap)
         if self.fade < 1.0 and self.previous:
             out = mix(self._render(self.previous, t, dt, snap), out, self.fade)
-        if snap.look != "idle" and snap.drop_age < DROP_FLASH_S:
+        if snap.look in ("eq", "ribbon") and snap.drop_age < DROP_FLASH_S:
             k = DROP_FLASH * (1 - snap.drop_age / DROP_FLASH_S) ** 2
             out = mix(out, [WHITE] * len(out), k)
         return out

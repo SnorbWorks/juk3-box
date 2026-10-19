@@ -15,8 +15,10 @@ USB drive); listeners' tags and genre from Last.fm
 source without metadata ever needs it.
 
 Stages built here: 0 capture, 1 fast layer (dsp.py), 2 signal-level events
-(levels.py), 3 build/drop (trajectory.py), 4 local mood (slow.py), 5 tags
-(tags.py; no fingerprinting), 6 the published stream. See docs/Audio Analyzer — Architecture.md.
+(levels.py), 3 build/drop (trajectory.py) and the moments a light show waits
+for -- gaps, hits, new sections, the beat clock (moments.py), 4 local mood
+(slow.py), 5 tags (tags.py; no fingerprinting), 6 the published stream; one
+frame runs through stages 1-4 in pipeline.py. See docs/Audio Analyzer — Architecture.md.
 """
 
 import asyncio
@@ -27,11 +29,8 @@ import numpy as np
 
 from shared import config, logging as jb_logging, pipewire as pw
 from shared.bus import Bus
-from services.jb_analyzer.dsp import FastAnalyzer
-from services.jb_analyzer.levels import Levels
-from services.jb_analyzer.slow import SlowAnalyzer
+from services.jb_analyzer.pipeline import Pipeline
 from services.jb_analyzer.tags import TagLookup, genre_of, mood_nudge
-from services.jb_analyzer.trajectory import Trajectory
 
 SERVICE_NAME = "jb-analyzer"
 TOPIC = "jukebox/analysis/audio"
@@ -70,9 +69,8 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGTERM, stop.set)
 
-    fast = FastAnalyzer(RATE, HOP)
-    fps = fast.fps
-    levels, traj, slow = Levels(fps), Trajectory(fps), SlowAnalyzer(fps)
+    pipe = Pipeline(RATE, HOP)
+    fps, slow, levels = pipe.fps, pipe.slow, pipe.levels
     identity = {"title": None, "artist": None, "album": None}
     song = {"tags": [], "genre": None}
     lookups = set()                                    # in-flight tag lookups (kept referenced)
@@ -108,7 +106,7 @@ async def main() -> None:
                     continue
                 new = {"title": np_.get("title"), "artist": np_.get("artist"), "album": np_.get("album")}
                 if new["title"] and new["title"] != identity["title"]:
-                    slow.reset()                       # a new song: its own tempo
+                    pipe.new_song()
                 if new != identity:
                     identity.update(new)
                     song.update(tags=[], genre=None)
@@ -138,21 +136,15 @@ async def main() -> None:
                     while not stop.is_set():
                         raw = await proc.stdout.readexactly(frame_bytes)
                         samples = np.frombuffer(raw, dtype=np.float32).reshape(-1, CHANNELS).mean(axis=1)
-                        f = fast.process(samples)
+                        public, events = pipe.frame(samples)
                         now = time.monotonic()
-                        events = levels.step(f["_loudness"], f["peak"])
-                        build = traj.step(f["_loudness"], f["_bass_db"], levels.sounding)
-                        if traj.dropped:
-                            events.append("drop")
-                        slow.step(f)
                         for e in events:
-                            await bus.publish(f"{TOPIC}/events", {"v": V, "t": round(now, 3), "type": e})
-                            if e in ("silence", "sound"):
-                                log.info("%s", e)
+                            await bus.publish(f"{TOPIC}/events", {"v": V, "t": round(now, 3), **e})
+                            if e["type"] in ("silence", "sound"):
+                                log.info("%s", e["type"])
                                 await publish_slow(force=True)
-                        if levels.sounding:
-                            public = {k: v for k, v in f.items() if not k.startswith("_")}
-                            await bus.publish(f"{TOPIC}/fast", {"v": V, "t": round(now, 3), **public, "build": build})
+                        if public:
+                            await bus.publish(f"{TOPIC}/fast", {"v": V, "t": round(now, 3), **public})
                         if now >= next_slow:
                             next_slow = now + SLOW_EVERY_S
                             await publish_slow()

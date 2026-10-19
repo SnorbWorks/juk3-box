@@ -16,20 +16,20 @@ def play(picker, start, seconds, arousal, step=0.5):
 
 
 def test_music_starts_lively_or_calm_by_mood():
-    assert play(LookPicker(), 0, 1, 0.7)[0] == "eq"
-    assert play(LookPicker(), 0, 1, 0.3)[0] == "ribbon"
-    assert play(LookPicker(), 0, 1, None)[0] == "eq"
+    assert play(LookPicker("auto"), 0, 1, 0.7)[0] == "eq"
+    assert play(LookPicker("auto"), 0, 1, 0.3)[0] == "ribbon"
+    assert play(LookPicker("auto"), 0, 1, None)[0] == "eq"
 
 
 def test_early_in_a_song_the_look_follows_the_settling_mood():
-    p = LookPicker()
+    p = LookPicker("auto")
     _, t = play(p, 0, 3, 0.7)                 # last song's mood still in the window
     look, _ = play(p, t, 6, 0.3)              # ...then this song's reads calm
     assert look == "ribbon"
 
 
 def test_after_settling_the_look_holds_through_wobbles_and_only_moves_on_a_clear_change():
-    p = LookPicker()
+    p = LookPicker("auto")
     _, t = play(p, 0, 20, 0.6)
     look, t = play(p, t, 40, 0.45)            # between the thresholds: stays
     assert look == "eq"
@@ -42,7 +42,7 @@ def test_after_settling_the_look_holds_through_wobbles_and_only_moves_on_a_clear
 
 
 def test_idle_rides_over_gaps_between_songs():
-    p = LookPicker()
+    p = LookPicker("auto")
     _, t = play(p, 0, 20, 0.7)
     assert p.update(t + 2, False, 0.7) == "eq"
     assert p.update(t + 5, False, 0.7) == "idle"
@@ -53,7 +53,7 @@ def test_pinned_look():
 
 
 def test_feed_turns_the_stream_into_snapshots():
-    feed = AudioFeed()
+    feed = AudioFeed(picker=LookPicker("auto"))
     feed.on_message("jukebox/analysis/audio/slow", {"v": 1, "playing": True, "mood": {"arousal": 0.3}}, now=0.0)
     feed.on_message("jukebox/analysis/audio/fast", {"v": 1, "level": 0.8, "bands": [0.5] * 32, "beat": True}, now=1.0)
     snap = feed.snapshot(now=1.05)
@@ -126,7 +126,7 @@ def test_malformed_messages_are_ignored():
 
 def test_idle_washes_into_the_ribbon_every_few_minutes_then_back():
     from services.jb_lights.audio_feed import INTERLUDE_EVERY_S, INTERLUDE_S
-    p = LookPicker()
+    p = LookPicker("auto")
     assert p.update(0, False, None) == "idle"
     assert p.update(INTERLUDE_EVERY_S - 1, False, None) == "idle"
     assert p.update(INTERLUDE_EVERY_S + 1, False, None) == "ribbon"
@@ -136,7 +136,7 @@ def test_idle_washes_into_the_ribbon_every_few_minutes_then_back():
 
 def test_music_during_the_wash_takes_over_and_the_idle_clock_restarts_after():
     from services.jb_lights.audio_feed import IDLE_AFTER_S, INTERLUDE_EVERY_S
-    p = LookPicker()
+    p = LookPicker("auto")
     p.update(0, False, None)
     assert p.update(INTERLUDE_EVERY_S + 5, False, None) == "ribbon"
     look, t = play(p, INTERLUDE_EVERY_S + 10, 2, 0.8)

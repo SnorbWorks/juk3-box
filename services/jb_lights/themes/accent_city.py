@@ -32,7 +32,7 @@ from services.jb_lights import accent
 from services.jb_lights.themes.accent_diner import CIRCLE, Diner, limit, segments
 
 FPS = 40
-BRIGHTNESS = 0.6
+BRIGHTNESS = 0.8
 BRIDGES = range(91, 104)          # chain indices of the swooshes (pixels 92-104)
 
 LOGO = (255, 245, 230)            # white behind the logo

@@ -4,7 +4,8 @@ Pure numpy, no I/O, so it can be tested with synthetic signals. Each call to
 FastAnalyzer.process() takes the newest `hop` mono samples (float, full scale
 = 1.0) and returns the fast-channel fields of the audio-analysis contract
 (docs/contracts/audio-analysis.md): level, peak, bands, brightness, beat,
-onset -- plus a few internals the slower layers read (bass, flux).
+onset, and the drums (kick, snare, hat) -- plus a few internals the slower
+layers read (bass, flux, each band in dB).
 """
 
 import numpy as np
@@ -15,6 +16,10 @@ LEVEL_RANGE_DB = 24.0     # published level spans this far under the recent loud
 LEVEL_REF_DECAY_DB = 0.5  # how fast the loud reference forgets (dB per second)
 BAND_TAU_S = 3.0          # how fast each band's range adapts
 BAND_FLOOR_DB = 45.0      # a band this far under the loudest (tilt-levelled) is "nothing there"
+# Each part of the kit by where its attack lands (Hz): the kick's thump, the
+# snare's crack, the hats' and cymbals' sizzle.
+DRUMS = {"kick": (40, 150), "snare": (1500, 5000), "hat": (7000, 16000)}
+DRUM_HIST_S = 1.5         # each part is judged against its own last second and a half
 
 
 def a_weighting(freqs):
@@ -45,6 +50,9 @@ class FastAnalyzer:
                 idx = np.array([int(np.argmin(np.abs(freqs - np.sqrt(lo * hi))))])
             self.band_bins.append(idx)
         self.bass_bins = np.nonzero((freqs >= 40) & (freqs < 150))[0]
+        # The drum kit, roughly: where each part's attack lands in the spectrum.
+        self.drum_bins = {name: np.nonzero((freqs >= lo) & (freqs < hi))[0] for name, (lo, hi) in DRUMS.items()}
+        self.drum_hist = {name: [] for name in DRUMS}
         self.centroid_lo, self.centroid_hi = np.log(150.0), np.log(8000.0)
         # State
         self.bands = np.zeros(N_BANDS)
@@ -115,7 +123,8 @@ class FastAnalyzer:
 
         # Onset: positive spectral flux across the spectrum (log power).
         logp = np.log10(power + 1e-10)
-        flux = 0.0 if self.prev_log is None else float(np.sum(np.maximum(0, logp - self.prev_log)))
+        rise = np.zeros_like(logp) if self.prev_log is None else np.maximum(0, logp - self.prev_log)
+        flux = float(np.sum(rise))
         self.prev_log = logp
         self.onset_ref = max(flux, self.onset_ref * (1 - 0.5 / self.fps))
         onset = float(np.clip(flux / (self.onset_ref + 1e-9), 0, 1))
@@ -135,6 +144,20 @@ class FastAnalyzer:
         if beat:
             self.since_beat = 0
 
+        # Drums: how far each part's attack stands out from its own recent
+        # attacks, 0 (nothing new) .. 1 (a clear hit), so the lights can give
+        # the kick, the snare and the hats each their own job.
+        drums = {}
+        keep = int(DRUM_HIST_S * self.fps)
+        for name, bins in self.drum_bins.items():
+            x = float(np.mean(rise[bins])) if bins.size else 0.0
+            hist = self.drum_hist[name]
+            hist.append(x)
+            del hist[:-keep]
+            h = np.array(hist)
+            hit = (x - h.mean()) / (3 * h.std() + 0.05) if target > 0.08 else 0.0
+            drums[name] = round(float(np.clip(hit, 0, 1)), 3)
+
         return {
             "level": round(self.level, 3),
             "peak": round(min(peak, 1.0), 3),
@@ -142,9 +165,11 @@ class FastAnalyzer:
             "brightness": round(brightness, 3),
             "beat": beat,
             "onset": round(onset, 3),
+            **drums,
             # internals for the slower layers (not published as-is)
             "_loudness": round(self.loudness, 3),
             "_bass_db": bass_db,
             "_rms_db": rms_db,
             "_flux": flux,
+            "_band_db": band_db,
         }

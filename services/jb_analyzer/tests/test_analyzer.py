@@ -123,3 +123,70 @@ def test_mood_axes_separate_slow_dark_from_fast_bright():
     c, w = calm.state(True)["mood"], wild.state(True)["mood"]
     assert c["arousal"] < w["arousal"] and c["warmth"] > w["warmth"]
     assert c["label"] == "moody" and w["label"] in ("bright", "energetic")
+
+
+def noise(seconds, amp, seed=2):
+    return amp * np.random.default_rng(seed).standard_normal(int(seconds * RATE))
+
+
+def moments_of(signal):
+    from services.jb_analyzer.pipeline import Pipeline
+    pipe, events = Pipeline(RATE, HOP), []
+    for i in range(0, signal.size - HOP + 1, HOP):
+        _, found = pipe.frame(signal[i:i + HOP].astype(np.float32))
+        events += [(round(i / RATE, 2), e) for e in found if e["type"] not in ("sound", "clip")]
+    return events
+
+
+def test_a_gap_then_the_sound_slamming_back_is_a_gap_and_a_hit():
+    sig = np.concatenate([noise(6, 0.3), noise(0.4, 0.002, 3), noise(2, 0.3, 4)])
+    events = moments_of(sig)
+    kinds = [e["type"] for _, e in events]
+    assert kinds == ["gap", "hit"]
+    (t_gap, _), (t_hit, hit) = events
+    assert 6.0 <= t_gap <= 6.3 and 6.35 <= t_hit <= 6.6
+    assert hit["after_gap"] is True
+
+
+def test_a_steady_beat_is_not_a_hit_or_a_gap():
+    assert moments_of(kicks(120, 12) + noise(12, 0.05)) == []
+
+
+def test_a_new_section_is_noticed_once():
+    sig = np.concatenate([tone(200, 16, amp=0.1) + noise(16, 0.01), tone(3000, 14, amp=0.4) + noise(14, 0.05, 5)])
+    sections = [(t, e) for t, e in moments_of(sig) if e["type"] == "section"]
+    assert len(sections) == 1
+    t, e = sections[0]
+    assert 16 <= t <= 20 and e["energy"] == "up"
+
+
+def test_the_drums_each_get_their_own_reading():
+    quiet = noise(2, 0.01)
+    snare = quiet.copy()
+    burst = np.random.default_rng(6).standard_normal(int(0.05 * RATE))
+    sos_hi = np.fft.rfft(burst)
+    f = np.fft.rfftfreq(burst.size, 1 / RATE)
+    sos_hi[(f < 1500) | (f > 5000)] = 0
+    crack = np.fft.irfft(sos_hi, burst.size)
+    snare[RATE:RATE + crack.size] += 0.5 * crack / np.abs(crack).max()
+    frames = run(snare)
+    peak = max(frames, key=lambda f: f["snare"])
+    assert peak["snare"] > 0.5 and peak["kick"] < 0.3
+    frames = run(kicks(120, 3) + noise(3, 0.01))
+    assert max(f["kick"] for f in frames) > 0.5
+
+
+def test_the_beat_clock_counts_bars_and_follows_the_kicks():
+    from services.jb_analyzer.moments import BeatClock
+    clock = BeatClock(FPS)
+    period = FPS / 2                                  # 120 bpm
+    out = []
+    for i in range(int(8 * FPS)):
+        kick = (i + 4) % period < 1                   # the kicks land 4 frames after the clock started
+        out.append((kick, *clock.step(120.0, kick)))
+    late = [min(p, 1 - p) for kick, p, _ in out[int(4 * FPS):] if kick]
+    assert late and max(late) < 0.1                   # pulled into step
+    assert {b for _, _, b in out} == {0, 1, 2, 3}
+    clock.downbeat()
+    assert clock.step(120.0, False)[1] == 0
+    assert BeatClock(FPS).step(None, True) == (None, None)
