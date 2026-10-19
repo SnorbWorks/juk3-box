@@ -63,6 +63,12 @@ RESET_WAIT_POLL_S = 60
 LEASE_MAX_S = 1200          # a lease can't outlive this, whatever was asked
 LEASE_REVOKE_WAIT_S = 30    # after a pick revokes it, how long the holder gets to hand back
 LEASE_CHECK_S = 2
+# A pick the phone can't take right now (it stopped answering, or offers no
+# controls at all) is kept while the cabinet reconnects the phone, and
+# played once it's back -- or given up on after WAITING_PICK_S. The reconnect
+# is rate-limited separately from browse resets: a pick is worth it.
+PICK_RECONNECT_MIN_S = 120
+WAITING_PICK_S = 90
 
 
 class BrowseLost(RuntimeError):
@@ -208,13 +214,7 @@ class Phone:
     async def reconnect(self):
         """Drop and re-make the Bluetooth connection: a fresh AVRCP session
         starts browsing at the root, the only reliable way back there."""
-        intro = await self.system_bus.introspect(BLUEZ, self.device_path)
-        dev = self.system_bus.get_proxy_object(BLUEZ, self.device_path, intro).get_interface("org.bluez.Device1")
-        await dev.call_disconnect()
-        await asyncio.sleep(3)
-        # The audio profile, not a plain Connect: that can go to Bluetooth LE
-        # for an iPhone and hang (see reconnect.connect).
-        await asyncio.wait_for(dev.call_connect_profile(rc.A2DP_SOURCE), 30)
+        await rc.reconnect(self.system_bus, self.device_path)
 
     async def play_item(self, item_path: str):
         item_intro = await self.system_bus.introspect(BLUEZ, item_path)
@@ -280,6 +280,7 @@ async def main() -> None:
     # (iOS reports the last app that made a sound, e.g. Messages, as its
     # player and won't browse it): played once a reconnect's sync lands.
     waiting_pick: dict | None = None
+    last_pick_reconnect_at = None
 
     def now() -> float:
         return asyncio.get_running_loop().time()
@@ -322,7 +323,48 @@ async def main() -> None:
         nonlocal waiting_pick
         pick, waiting_pick = waiting_pick, None
         if pick and not await play_fresh_copy(pick):
-            await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", pick["cmd"])
+            await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", pick["cmd"] | {"reason": "not_found"})
+
+    async def pick_problem(bus: Bus, cmd: dict, reason: str | None, retrying: bool):
+        """What went wrong with a pick, for jb-core's pick doctor."""
+        await bus.publish(f"jukebox/{SERVICE_NAME}/pick-problem",
+                          {"title": cmd.get("title"), "item_path": cmd.get("item_path"),
+                           "reason": reason, "retrying": retrying})
+
+    async def wait_for_phone(bus: Bus, pick: dict, reason: str):
+        """Keep the pick, reconnect the phone, and play it after the
+        reconnect's sync (sync_library) -- or give up after WAITING_PICK_S."""
+        nonlocal waiting_pick, last_pick_reconnect_at
+        waiting_pick = pick
+        await pick_problem(bus, pick["cmd"], reason, retrying=True)
+
+        async def give_up():
+            nonlocal waiting_pick
+            await asyncio.sleep(WAITING_PICK_S)
+            if waiting_pick is pick:
+                waiting_pick = None
+                log.warning("gave up waiting to play %r", pick["title"])
+                await bus.publish(f"jukebox/{SERVICE_NAME}/play-error",
+                                  {**pick["cmd"], "reason": "no_controls" if phone is None else reason})
+        asyncio.create_task(give_up())
+
+        if last_pick_reconnect_at is not None and now() - last_pick_reconnect_at < PICK_RECONNECT_MIN_S:
+            log.info("not reconnecting for %r: reconnected for a pick moments ago", pick["title"])
+            return
+        if phone is not None:
+            path = phone.device_path
+        else:
+            audio = [d for d in await rc.phones(system_bus) if d[3]]
+            device = next((d for d in audio if d[0] == lock.owner), audio[0] if audio else None)
+            if device is None:
+                return
+            path = device[1]
+        last_pick_reconnect_at = now()
+        log.info("reconnecting the phone to play %r (%s)", pick["title"], reason)
+        try:
+            await rc.reconnect(system_bus, path)
+        except Exception:
+            log.exception("reconnect for a pick failed")
 
     async def sync_library_logged(bus: Bus):
         # Fired as a background task -- log failures instead of letting them
@@ -533,6 +575,12 @@ async def main() -> None:
         if action == "forget" and cmd.get("mac"):
             await forget_phone(bus, cmd["mac"])
             return
+        if phone is None and action == "play_item" and not lease:
+            # Connected for audio only: the phone isn't letting us control it.
+            log.warning("pick %r with no controls; reconnecting the phone", cmd.get("title"))
+            asyncio.create_task(wait_for_phone(
+                bus, {"cmd": cmd, "title": cmd.get("title"), "copy": 0, "stale": None}, "no_controls"))
+            return
         if phone is None:
             log.warning("command %r received with no phone connected", action)
             return
@@ -559,10 +607,12 @@ async def main() -> None:
         elif action == "play_item":
             try:
                 await phone.play_item(cmd["item_path"])
-            except Exception:
+            except Exception as e:
                 log.exception("play_item failed: %r", cmd["item_path"])
-                if not await replay_after_resync(bus, cmd):
-                    await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", cmd)
+                reason = "no_answer" if "timed out" in str(e).lower() or isinstance(e, asyncio.TimeoutError) else None
+                await pick_problem(bus, cmd, reason, retrying=True)
+                if not await replay_after_resync(bus, cmd, reason or "no_answer"):
+                    await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", {**cmd, "reason": reason or "not_found"})
         elif action == "crawl":
             # Manual re-sync (e.g. from the phone manager UI, after adding
             # music on the phone). Automatic syncs happen on connect.
@@ -570,13 +620,12 @@ async def main() -> None:
         else:
             log.warning("unknown command action: %r", action)
 
-    async def replay_after_resync(bus: Bus, cmd: dict) -> bool:
+    async def replay_after_resync(bus: Bus, cmd: dict, reason: str = "no_answer") -> bool:
         """A pick failed, most likely because its play path belongs to a
         player BlueZ has since replaced (the phone switched apps and the
         re-sync hasn't happened or was missed). Re-sync now, find the same
         song in the fresh crawl, and play that -- the pick plays a few
         seconds late instead of being dropped. Returns whether it played."""
-        nonlocal waiting_pick
         stale = cmd["item_path"]
         old = [t for t in last_tracks if t["item_path"] == stale]
         title = old[0]["title"] if old else cmd.get("title")
@@ -591,20 +640,22 @@ async def main() -> None:
             # No browsing to re-sync with, and it may never come on its own:
             # reconnect for a fresh session, and play the pick after its sync.
             log.info("play path looks stale and the phone isn't browsable; reconnecting to retry %r", title)
-            waiting_pick = pick
-            request_browse_reset(bus)
+            asyncio.create_task(wait_for_phone(bus, pick, reason))
             return True
         log.info("play path looks stale; re-syncing to retry %r", title)
         try:
             await sync_library(bus)
         except BrowseLost as e:
             log.warning("re-sync for a stale play path: browsing is lost (%s)", e)
-            request_browse_reset(bus)
-            return False
         except Exception:
             log.exception("re-sync for a stale play path failed")
-            return False
-        return await play_fresh_copy(pick)
+        else:
+            if phone is not None and phone.can_browse and phone.player_path == synced_player_path:
+                return await play_fresh_copy(pick)
+        # The re-sync didn't land (the phone stopped answering, or dropped its
+        # controls mid-way, as on 2026-10-18): reconnect, and play it after.
+        asyncio.create_task(wait_for_phone(bus, pick, reason))
+        return True
 
     async def play_fresh_copy(pick: dict) -> bool:
         """Play the pick's song from the latest crawl, by title and copy."""

@@ -124,3 +124,16 @@ async def connect(system_bus, path: str):
         except Exception:
             pass
         raise
+
+
+async def reconnect(system_bus, path: str):
+    """Drop and re-make a phone's Bluetooth connection. A fresh connection
+    gives a fresh AVRCP session: browsing starts at the root, and a phone
+    that stopped answering control (or stopped offering it at all) usually
+    offers it again."""
+    intro = await system_bus.introspect(BLUEZ, path)
+    dev = system_bus.get_proxy_object(BLUEZ, path, intro).get_interface("org.bluez.Device1")
+    await dev.call_disconnect()
+    await asyncio.sleep(3)
+    # The audio profile, not a plain Connect (see connect).
+    await asyncio.wait_for(dev.call_connect_profile(A2DP_SOURCE), 30)

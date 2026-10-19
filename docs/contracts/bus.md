@@ -62,6 +62,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-core/power` | R state | `state` |
 | `jb-core/selection` | event | a keypad pick: slot `index`, `code` |
 | `jb-core/notice`, `rejected`, `skipped` | event | messages for the screen |
+| `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
+| `jb-core/pick-log` | R state | `problems`: the last 20 pick problems, newest first, each with `at` (epoch seconds); the admin dashboard shows them |
 | `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power` |
 | `jb-audio/state` | R state | `volume` 0..1, `muted` |
 | `jb-audio/cmd` | command | `volume_delta`, `mute`, `unmute`, `toggle_mute` |
@@ -77,7 +79,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |
 | `jb-source-phone/lease`, `reconnect` | R state | source internals other modules may watch |
 | `jb-source-phone/crawl-result` | R state | the deep library crawl |
-| `jb-source-phone/play-error` | event | a pick that failed |
+| `jb-source-phone/play-error` | event | a pick that failed: the `play_item` command, plus `reason` (`not_found`, `no_answer`, `no_controls`) |
+| `jb-source-phone/pick-problem` | event | what went wrong with a pick while the source deals with it: `title`, `item_path`, `reason` (or null), `retrying` (re-syncing, or reconnecting the phone with the pick kept) |
 | `jb-source-phone/cmd` | command | play, pause, crawl... |
 | `jb-crawl/status`, `album` | R state | crawl progress |
 | `jb-crawl/cmd` | command | `crawl_now`, `album` |

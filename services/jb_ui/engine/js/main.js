@@ -311,16 +311,17 @@ function watchSystem() {
     setTimeout(() => closePopup('notice'), NOTICE_MS);
   });
 
-  // A pick the phone couldn't play. Usually another app (an audiobook, a
-  // video) has the phone's audio: the jukebox can only browse and play
-  // from the Music app.
-  store.watch(html, 'playError', e => {
-    if (!e || currentMode() !== 'select' || popupOpen()) return;
-    openPopup('notice', {
-      title: 'Couldn\'t play that song',
-      message: 'Open the Music app on your phone, then pick it again.',
-    });
-    setTimeout(() => closePopup('notice'), NOTICE_MS + 2000);
+  // A pick that didn't play: jb-core's pick doctor says why and what to
+  // do ("Turn Bluetooth off and on again on your phone"), or that it's
+  // already trying again. Shown over another notice, not over a menu.
+  let problemTimer;
+  store.watch(html, 'pickProblem', p => {
+    const open = popupOpen();
+    if (!p || currentMode() !== 'select' || (open && open !== 'notice' && open !== 'now-playing')) return;
+    const song = p.title ? `"${p.title}": ` : '';
+    openPopup('notice', { title: p.headline, message: `${song}${p.advice}` });
+    clearTimeout(problemTimer);
+    problemTimer = setTimeout(() => closePopup('notice'), p.problem === 'retrying' ? NOTICE_MS : NOTICE_MS * 3);
   });
 
   // The keypad: a letter brings up the board (so you can see what you're

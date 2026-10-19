@@ -11,6 +11,8 @@ The user's design, tested 2026-10-10:
   - cancelled (RESET): RESET blinks red to acknowledge, with the letter still
     green, then all white
   - timed out: straight back to all white
+  - a pick that didn't play (jb-core's pick doctor): the whole keypad
+    swells amber twice, slowly -- the screen says why (added 2026-10-18)
 (blink changes 2026-10-11)
 SINGLE/ALBUM stay white and sit out the chase.
 
@@ -27,6 +29,7 @@ latest entry state, not replayed.
 import argparse
 import colorsys
 import json
+import math
 import queue
 import time
 
@@ -37,7 +40,8 @@ from services.jb_lights import buttons
 from services.jb_lights.themes.buttons_music import ButtonsMusic
 
 TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected",
-          "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw")
+          "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw",
+          "jukebox/jb-core/pick-problem")
 
 WHITE = Color(0, 0, 0, int(255 * 0.70))
 GREEN = Color(0, 200, 0, 0)
@@ -55,6 +59,9 @@ CANCEL_BLINKS = 3         # RESET acknowledges the cancel
 RESET_BLINKS = 2          # holding Reset: the song cancelled, and again when the power menu opens
 RESET_ON_S, RESET_OFF_S = 0.18, 0.14
 CANCEL_ON_S, CANCEL_OFF_S = 0.15, 0.12
+PROBLEM_SWELLS = 2        # a pick that didn't play: slow amber swells, unlike any other feedback
+PROBLEM_SWELL_S = 0.9
+PROBLEM_STEPS = 24
 MUSIC_FPS = 30            # the keypad's part of the music show
 
 
@@ -106,6 +113,15 @@ class Theme1:
         self.blink({}, {i: GREEN for i in picks}, {i: OFF for i in picks},
                    CONFIRM_BLINKS, CONFIRM_ON_S, CONFIRM_OFF_S)
         self.comet()
+
+    def pick_problem(self):
+        """Every key swells amber and fades, twice."""
+        keys = range(buttons.NUM_PIXELS)
+        for _ in range(PROBLEM_SWELLS):
+            for s in range(PROBLEM_STEPS + 1):
+                v = math.sin(math.pi * s / PROBLEM_STEPS)
+                self.paint({i: Color(int(255 * v), int(80 * v), 0, 0) for i in keys})
+                time.sleep(PROBLEM_SWELL_S / PROBLEM_STEPS)
 
     def comet(self):
         n = len(CHASE)
@@ -213,6 +229,10 @@ def main(feed=None):
                 theme.selected(p["slot"])
             elif topic.endswith("/rejected"):
                 theme.rejected(p["key"])
+            elif topic.endswith("/pick-problem"):
+                if p.get("problem") == "retrying":
+                    continue
+                theme.pick_problem()
             # Catch up on whatever came in during the animation: keep the
             # state (entry, Reset held, menu), not the animations, then show it.
             while not events.empty():

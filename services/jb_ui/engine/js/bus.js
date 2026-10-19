@@ -39,7 +39,7 @@ const HANDLERS = {
   'jukebox/jb-source-phone/bluetooth': b => store.set('bluetooth', b),
   'jukebox/jb-audio/airplay': a => store.set('airplay', a.receivers || []),
   'jukebox/jb-display/state': d => store.set('display', d),
-  'jukebox/jb-source-phone/play-error': e => store.set('playError', { ...e, at: Date.now() }),
+  'jukebox/jb-core/pick-problem': p => store.set('pickProblem', { ...p, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
   // The owner published a change in the admin (settings, layouts, theme):
   // start again with it. A preview is reloaded by the admin instead.

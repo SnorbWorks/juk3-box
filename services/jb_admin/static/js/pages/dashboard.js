@@ -62,7 +62,21 @@ function render(body, s) {
         button('Change theme', { onclick: () => { location.hash = '#/themes'; } }, 'palette'),
         button('Upload pictures', { onclick: () => { location.hash = '#/media'; } }, 'image'),
         button('Settings', { onclick: () => { location.hash = '#/settings'; } }, 'settings'))),
+    problems(s.live.pick_log),
     down.length ? h('div.card',
       h('div.card-head', h('h2', 'Needs attention')),
       h('ul.list', down.map(m => h('li', h('span.dot.down'), h('strong', m.name), h('span.muted', m.id))))) : null);
+}
+
+// Picks that didn't play, and why (jb-core's pick doctor), newest first.
+function problems(log) {
+  const list = (log?.problems || []).slice(0, 8);
+  if (!list.length) return null;
+  const when = t => new Date(t * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return h('div.card',
+    h('div.card-head', h('h2', 'Picks that didn\'t play')),
+    h('ul.list', list.map(p => h('li',
+      h('span.dot.down'),
+      h('div', h('strong', p.title || 'A song'), ' ', h('span.muted', when(p.at)),
+        h('div', p.headline), h('div.muted', p.advice))))));
 }

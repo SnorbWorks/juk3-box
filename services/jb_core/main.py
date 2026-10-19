@@ -6,6 +6,7 @@ from shared import config, logging as jb_logging
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
+from services.jb_core.pick_doctor import PickDoctor
 from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
 from services.jb_core.sources import LOCAL, PHONE, cmd_topic, playable, source_of
 
@@ -49,6 +50,8 @@ class Queue:
         # The power menu (holding Reset) holds the queue: nothing starts on
         # its own until a choice is made.
         self.held = False
+        # Watches each pick until it's heard playing (pick_doctor.py).
+        self.doctor = PickDoctor()
 
     def refill_shuffle(self) -> None:
         pool = [t for t in self.library_tracks if playable(t, self.phone_connected)]
@@ -108,6 +111,7 @@ async def play_track(bus: Bus, q: Queue, track: dict) -> None:
                       {"action": "play_item", "item_path": track["item_path"], "title": track["title"]})
     q.expected_title = track["title"]
     q.playing = True
+    q.doctor.picked(track, time.monotonic())
 
 
 async def source_action(bus: Bus, q: Queue, action: str) -> None:
@@ -176,6 +180,7 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
                 await play_track(bus, q, next_track)
             else:
                 log.info("Reset held: cancelling the song; nothing queued, stopping")
+                q.doctor.forget()
                 # "stop", not "pause": the song is done with, and shows as
                 # nothing playing (jb-source-phone keeps the phone paused).
                 await source_action(bus, q, "stop")
@@ -197,6 +202,7 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
             await publish_queue(bus, q)
         elif act in POWER_COMMANDS:
             log.warning("power menu: %s", act)
+            q.doctor.forget()
             await source_action(bus, q, "pause")
             await publish_power(bus, "rebooting" if act == "reboot" else "shutting_down")
             await asyncio.sleep(1.5)  # let the screen say so
@@ -232,6 +238,32 @@ async def stop_after_last_song(bus: Bus, q: Queue, guard: EndGuard, log) -> None
             q.expected_title = None
 
 
+PICK_CHECK_S = 1.0
+
+
+async def report_pick(bus: Bus, q: Queue, verdict: dict, log) -> None:
+    """A pick went wrong: say why on the screen and the keypad, keep a record
+    (retained, for the admin), and if a reconnect could fix it, put the song
+    back at the front of the queue so it plays when the phone is back."""
+    if verdict["problem"] != "retrying":
+        log.warning("pick problem: %r: %s", verdict.get("title"), verdict["problem"])
+        if verdict.get("retry"):
+            q.manual.insert(0, verdict["track"])
+            q.expected_title = None
+            q.playing = False
+            await publish_queue(bus, q)
+        await bus.publish("jukebox/jb-core/pick-log", {"problems": q.doctor.log}, retain=True)
+    await bus.publish("jukebox/jb-core/pick-problem", {k: v for k, v in verdict.items() if k != "track"})
+
+
+async def check_picks(bus: Bus, q: Queue, log) -> None:
+    while True:
+        await asyncio.sleep(PICK_CHECK_S)
+        verdict = q.doctor.check(time.monotonic())
+        if verdict:
+            await report_pick(bus, q, verdict, log)
+
+
 async def main() -> None:
     log = jb_logging.setup(SERVICE_NAME)
     cfg = config.load(SERVICE_NAME)
@@ -250,6 +282,7 @@ async def main() -> None:
         asyncio.create_task(power_ticks(bus, q, menu, log))
         guard = EndGuard()
         asyncio.create_task(stop_after_last_song(bus, q, guard, log))
+        asyncio.create_task(check_picks(bus, q, log))
 
         async for topic, payload in messages:
             if topic == "jukebox/jb-input/key":
@@ -275,7 +308,13 @@ async def main() -> None:
 
             elif topic == "jukebox/jb-source-phone/connected":
                 was_connected = q.phone_connected
+                had_controls = q.doctor.phone.get("controls") is not False
                 q.phone_connected = bool(payload.get("connected"))
+                q.doctor.phone = payload
+                # Back with controls after an audio-only spell (Bluetooth
+                # turned off and on at the phone) counts as coming back.
+                back = q.phone_connected and payload.get("controls") is not False and (
+                    not was_connected or not had_controls)
                 # Don't fight whatever's already playing on a fresh
                 # (re)connect -- re-establish baseline on the next
                 # now-playing update instead of treating it as an
@@ -286,7 +325,7 @@ async def main() -> None:
                 # pick, or shuffle turned on with nothing to play through),
                 # start it now that a phone actually exists to play it on.
                 # (Not over a drive song that's playing: it plays on.)
-                if q.phone_connected and not was_connected and not q.playing and (
+                if back and not q.playing and (
                     q.manual or (q.shuffle_active and q.shuffle_buffer)
                 ):
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
@@ -299,7 +338,27 @@ async def main() -> None:
                 log.warning("play_item failed on the bus, advancing queue: %r", payload.get("item_path"))
                 q.expected_title = None
                 q.playing = False
-                await try_autoplay(bus, q, log)
+                verdict = q.doctor.failed(payload, time.monotonic())
+                if verdict:
+                    await report_pick(bus, q, verdict, log)
+                if not (verdict and verdict.get("retry")):
+                    await try_autoplay(bus, q, log)
+
+            elif topic == "jukebox/jb-source-phone/pick-problem":
+                note = q.doctor.source_says(payload, time.monotonic())
+                if note:
+                    await report_pick(bus, q, note, log)
+
+            elif topic == "jukebox/jb-audio/state":
+                q.doctor.audio = payload
+
+            elif topic == "jukebox/jb-core/pick-log":
+                # Our own record, retained: pick it back up after a restart.
+                if not q.doctor.log:
+                    q.doctor.log = list(payload.get("problems") or [])
+
+            elif topic == "jukebox/analysis/audio/fast":
+                q.doctor.sound(time.monotonic())
 
             elif topic == "jukebox/jb-source-local/now-playing":
                 # A drive song. When it ends, mpv just stops (no auto-advance
@@ -308,6 +367,7 @@ async def main() -> None:
                     if payload.get("ended"):
                         log.info("drive song ended, but the phone is the source playing")
                     continue
+                q.doctor.heard(payload.get("title"), payload.get("status"), time.monotonic())
                 q.playing = payload.get("status") == "playing"
                 if payload.get("ended"):
                     log.info("drive song ended (%d queued)", len(q.upcoming()))
@@ -324,6 +384,7 @@ async def main() -> None:
                 guard.update(payload, time.monotonic())
                 q.playing = payload.get("status") == "playing"
                 title = payload.get("title")
+                q.doctor.heard(title, payload.get("status"), time.monotonic())
                 if not title:
                     continue
                 if q.last_seen_title is None:

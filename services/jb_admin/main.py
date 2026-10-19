@@ -139,6 +139,7 @@ class Admin:
         "jukebox/jb-source-phone/now-playing": "now_playing",
         "jukebox/jb-source-phone/connected": "phone",
         "jukebox/jb-audio/state": "volume",
+        "jukebox/jb-core/pick-log": "pick_log",
         "jukebox/jb-core/queue": "queue",
         "jukebox/jb-source-phone/phones": "phones",
         "jukebox/jb-source-phone/pairing": "pairing",
