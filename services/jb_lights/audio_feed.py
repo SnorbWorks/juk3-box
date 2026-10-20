@@ -40,7 +40,7 @@ START_SPLIT = 0.48        # first pick of a song: eq at or above this
 MIN_DWELL_S = 30.0        # a look stays at least this long before the mood may change it
 SETTLE_S = 12.0           # early in a song the mood is still settling (its window holds the last song):
                           # follow it directly until then
-INTERLUDE_EVERY_S = 240.0  # idle: after this long on the idle looks...
+INTERLUDE_EVERY_S = 120.0  # idle: after this long on the idle looks...
 INTERLUDE_S = 60.0         # ...the whole cabinet washes into the ribbon for this long, then back
 INTERLUDE_LOOK = "ribbon"
 
