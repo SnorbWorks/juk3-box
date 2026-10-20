@@ -30,7 +30,8 @@ Every message is a JSON object:
 2. App sends `client_hello`:
    `{ "deviceName": "Shawn's iPhone", "deviceId": "<uuid the app keeps>", "appVersion": "0.1", "token": "<if paired before>", "model": "iPhone16,1" }`
 3. Pi answers:
-   - a known token for that `deviceId`: `welcome { "deviceId", "active": bool }`. Done.
+   - a known token for that `deviceId`: `welcome { "deviceId", "active": bool }`. Done. `active` is false when another phone (Bluetooth or another app) has the jukebox: the app stays connected and its library is kept, and the cabinet asks "Shawn's iPhone is here. Switch to it?" (or the owner switches under Sources). `set_active { "active": true }` arrives when it's chosen.
+   - an unknown phone while pairing is turned off (the admin's Sources > App, "Allow new phones to pair"): `pair_closed { "message": "…" }`, then the Pi closes. The app shows the message ("Pairing is off on JUKE.BOX. Turn it on in the jukebox admin: Sources > App.") and retries with its usual backoff, so it pairs as soon as pairing is turned on.
    - otherwise `pair_challenge { "digits": 4, "expires": <seconds> }` and the cabinet shows a 4-digit code with the phone's name. The app asks the owner for it and sends `pair_response { "code": "1234" }`. Right: `paired { "token": "…" }` then `welcome`. Wrong: `pair_failed { "triesLeft": n }`; after 3 wrong tries or when it expires, a new `pair_challenge` (and a new code on the cabinet).
 4. The app keeps the token in the Keychain, per `jukeboxId`.
 

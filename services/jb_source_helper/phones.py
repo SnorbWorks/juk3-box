@@ -56,6 +56,15 @@ class Phones:
                 p["name"] = name
             self.save()
 
+    def rename(self, device_id: str, name: str) -> None:
+        """The owner's name for it, kept over the one the app sends."""
+        self.phones[device_id]["custom_name"] = name
+        self.save()
+
+    def name_of(self, device_id: str) -> str | None:
+        p = self.phones.get(device_id) or {}
+        return p.get("custom_name") or p.get("name")
+
     def forget(self, device_id: str) -> bool:
         if self.phones.pop(device_id, None) is None:
             return False
@@ -63,7 +72,7 @@ class Phones:
         return True
 
     def listing(self) -> list:
-        return [{"device_id": d, "name": p.get("name"), "model": p.get("model"),
+        return [{"device_id": d, "name": p.get("custom_name") or p.get("name"), "model": p.get("model"),
                  "paired_at": p.get("paired_at"), "last_seen": p.get("last_seen")}
                 for d, p in sorted(self.phones.items(), key=lambda kv: -(kv[1].get("last_seen") or 0))]
 

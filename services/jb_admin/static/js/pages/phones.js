@@ -1,7 +1,7 @@
-// Bluetooth: on or off, the phones paired with the jukebox, which one has
-// it, and pairing a new one. The same as the cabinet's Settings >
+// Sources > Bluetooth: on or off, the phones paired with the jukebox, which
+// one has it, and pairing a new one. The same as the cabinet's Settings >
 // Bluetooth; jb-source-phone does the work. One phone has the jukebox at a
-// time.
+// time, Bluetooth or the app (jb-core chooses; Connect asks it).
 
 import { get, post } from '../api.js';
 import { button, clear, confirmDialog, emptyState, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
@@ -11,7 +11,7 @@ let body = null;
 
 export async function show(main) {
   body = h('div.stack');
-  clear(main, pageHeader('Bluetooth', 'Phones paired with the jukebox. One has the jukebox at a time; switch or pair here or on the cabinet.'), body);
+  clear(main, pageHeader('Bluetooth', 'Phones paired over Bluetooth. One phone has the jukebox at a time (Bluetooth or the app); switch here or with the cabinet\'s Sources button.'), body);
   await refresh();
   timer = setInterval(refresh, 1500);
 }
@@ -32,9 +32,11 @@ async function refresh() {
   if (body?.isConnected) render(data);
 }
 
+let activeId = null;
+
 async function act(action, payload = {}, done) {
   try {
-    await post(`/api/phones/${action}`, payload);
+    await post(action === 'use' ? '/api/sources/use' : `/api/phones/${action}`, payload);
     if (done) toast(done, 'ok');
     await refresh();
   } catch (e) {
@@ -43,7 +45,8 @@ async function act(action, payload = {}, done) {
 }
 
 function statusOf(p) {
-  if (p.connected) return p.active ? 'Has the jukebox' : 'Connected, leaving';
+  if (p.mac === activeId) return p.connected ? 'Has the jukebox' : 'Has the jukebox, connecting';
+  if (p.connected) return p.active ? 'Connected (the app has the jukebox)' : 'Connected, leaving';
   if (!p.last_connected) return 'Not connected yet';
   const when = new Date(p.last_connected * 1000);
   return `Last used ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
@@ -51,9 +54,12 @@ function statusOf(p) {
 
 function phoneRow(p) {
   const actions = [
+    p.mac !== activeId
+      ? button(p.connected ? 'Use' : 'Connect', { variant: 'primary', onclick: () => act('use', { id: p.mac }, p.connected ? `Switched to ${p.name}.` : `Connecting to ${p.name}…`) }, 'bluetooth')
+      : null,
     p.connected
       ? button('Disconnect', { onclick: () => act('disconnect', { mac: p.mac }, `Disconnected ${p.name}.`) }, 'x')
-      : button('Connect', { variant: 'primary', onclick: () => act('switch', { mac: p.mac }, `Connecting to ${p.name}…`) }, 'bluetooth'),
+      : null,
     button('Forget', {
       variant: 'danger',
       onclick: async () => {
@@ -120,38 +126,9 @@ function powerCard(on, phones) {
     toggle);
 }
 
-// Phones paired with the juk3box Helper app: paired from the app itself
-// (a code on the cabinet), so only Forget here.
-function helperRow(p, helper) {
-  const active = helper.device_id === p.device_id;
-  const status = active && helper.awake ? 'Has the jukebox (app open)'
-    : active && helper.connected ? 'Has the jukebox (app asleep, woken for a pick)'
-      : p.last_seen ? `Last seen ${new Date(p.last_seen * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Paired';
-  return h('div.card.card-pad.phone-row',
-    h('div.stat-icon', icon('smartphone')),
-    h('div.phone-text', h('div.stat-value', p.name || 'iPhone'), h('div.stat-sub', status)),
-    h('div.phone-actions', button('Forget', {
-      variant: 'danger',
-      onclick: async () => {
-        const ok = await confirmDialog(`Forget ${p.name || 'this phone'}?`,
-          'The app is unpaired, and its songs, playlists and plays are removed from the jukebox. Pair it again from the app.',
-          { confirm: 'Forget', danger: true });
-        if (ok) act('forget_helper', { device_id: p.device_id }, `Forgot ${p.name || 'the phone'}.`);
-      },
-    }, 'trash-2')));
-}
-
-function helperCard(helper) {
-  const phones = helper?.phones || [];
-  if (!phones.length) return null;
-  return h('div.stack',
-    h('h2', 'juk3box Helper app'),
-    h('p.muted', 'Phones that play their Apple Music library through the app, over AirPlay. Beside Bluetooth, not instead of it.'),
-    ...phones.map(p => helperRow(p, helper)));
-}
-
 function render(data) {
   const on = data.bluetooth?.on !== false;
+  activeId = data.source?.active?.id || null;
   clear(body,
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
@@ -159,6 +136,5 @@ function render(data) {
     !on ? null : data.phones.length
       ? h('div.stack', data.phones.map(phoneRow))
       : emptyState('smartphone', 'No phones paired yet', 'Pair one below.'),
-    on ? pairingCard(data.pairing || { state: 'idle' }) : null,
-    helperCard(data.helper));
+    on ? pairingCard(data.pairing || { state: 'idle' }) : null);
 }

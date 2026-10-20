@@ -278,15 +278,15 @@ function watchPower() {
   });
 }
 
-// The phone badge: switch between paired phones (phones.js).
+// The Sources badge: switch phones, see the drives (phones.js).
 function phones() {
   openSwitcher();
 }
 
 function watchSystem() {
   // Only on a change: anything written to <html> can restyle the page.
-  store.watch(html, 'phone', p => {
-    const phone = p?.connected ? 'connected' : 'disconnected';
+  store.watch(html, 'source', s => {
+    const phone = s?.active?.connected ? 'connected' : 'disconnected';
     if (html.dataset.phone !== phone) html.dataset.phone = phone;
   });
   // Lets themes animate things (the EQ icon) while a song plays.

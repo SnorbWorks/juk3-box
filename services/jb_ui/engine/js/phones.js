@@ -1,8 +1,11 @@
 // Phones and Bluetooth on the cabinet (dev plan Phase 4 and the Phase 7
 // screens). jb-source-phone does the work; these are its screens.
 //
-//   The phone badge (top right): a quick switcher between phones already
-//   paired, plus "Add a phone", which goes to Settings > Bluetooth.
+//   The Sources badge (top right): which phone has the jukebox. Clicking it
+//   lists every phone to switch to, Bluetooth or the juk3box Helper app
+//   (jb-core chooses: phone_choice.py), and the drives plugged in, plus
+//   "Add a phone", which goes to Settings > Bluetooth. A phone arriving
+//   while another has the jukebox is offered: "… is here. Switch to it?"
 //   Settings > Bluetooth (the bluetooth block): Bluetooth on/off, every
 //   paired phone (connect, disconnect, forget) and pairing a new one, with
 //   the 6-digit code confirmed here.
@@ -26,7 +29,12 @@ let switching = false;
 const command = (action, extra = {}) => {
   if (!PREVIEW) publish('jukebox/jb-source-phone/cmd', { action, ...extra });
 };
+const core = (action, extra = {}) => {
+  if (!PREVIEW) publish('jukebox/jb-core/cmd', { action, ...extra });
+};
 const phones = () => store.get('phones') || [];
+const appPhones = () => store.get('helper')?.phones || [];
+const activeId = () => store.get('source')?.active?.id;
 const bluetoothOn = () => store.get('bluetooth')?.on !== false;
 
 export function initPhones(blockTemplates, watchRoot, opts = {}) {
@@ -35,6 +43,9 @@ export function initPhones(blockTemplates, watchRoot, opts = {}) {
   store.watch(watchRoot, 'phones', () => follow?.());
   store.watch(watchRoot, 'pairing', () => follow?.());
   store.watch(watchRoot, 'bluetooth', () => follow?.());
+  store.watch(watchRoot, 'helper', () => follow?.());
+  store.watch(watchRoot, 'drivesIn', () => follow?.());
+  store.watch(watchRoot, 'source', s => { follow?.(); offer(s); });
   // Switching reports back over the bus.
   store.watch(watchRoot, 'phoneSwitch', s => {
     if (!s || s.state === 'idle' || s.state === 'connecting' || !switching) return;
@@ -46,7 +57,7 @@ export function initPhones(blockTemplates, watchRoot, opts = {}) {
     if (n?.type !== 'phone_turned_away' || popupOpen()) return;
     openPopup('notice', {
       title: `${n.name} tried to connect`,
-      message: `${n.owner || 'Another phone'} has the jukebox. Switch phones from the phone badge.`,
+      message: `${n.owner || 'Another phone'} has the jukebox. Switch phones from the Sources button (top right).`,
     });
     setTimeout(() => closePopup('notice'), RESULT_MS + 2000);
   });
@@ -85,26 +96,84 @@ function phoneRows(prefix, onPick) {
   });
 }
 
+// Through jb-core, which phone has the jukebox (it connects the phone if
+// it isn't): an app phone may have it, with this one connected beside it.
 function connect(p) {
-  if (p.connected && p.active) return done();
+  if (p.connected && p.mac === activeId()) return done();
+  core('use_source', { id: p.mac });
+  if (p.connected) return result('Phones', `Switched to ${p.name}.`);
   switching = true;
-  command('switch', { mac: p.mac });
   follow = null;
   openPopup('notice', { title: 'Phones', message: `Connecting to ${p.name}…` });
 }
 
-// -- the badge: switch between paired phones -----------------------------
+// -- the Sources badge: every phone and drive ------------------------------
+
+function ago(t, word) {
+  if (!t) return 'Not connected yet';
+  const days = Math.floor((Date.now() / 1000 - t) / 86400);
+  return days < 1 ? `${word} today` : days < 2 ? `${word} yesterday` : days < 30 ? `${word} ${days} days ago` : `${word} a while ago`;
+}
+
+// One row per phone (the one with the jukebox first) and per drive in.
+function sources() {
+  const active = activeId();
+  const list = [];
+  if (bluetoothOn()) {
+    for (const p of phones()) {
+      list.push({
+        key: p.mac, kind: 'phone', name: p.name, phone: p,
+        status: `Bluetooth · ${p.mac === active ? (p.connected ? 'In use' : 'In use, connecting') : p.connected ? 'Connected' : ago(p.last_connected, 'Last used')}`,
+      });
+    }
+  }
+  for (const p of appPhones()) {
+    const id = `helper:${p.device_id}`;
+    list.push({
+      key: id, kind: 'helper', name: p.name || 'iPhone', phone: p,
+      status: `App · ${id === active ? (p.reachable ? 'In use' : 'In use, not here') : p.reachable ? 'Here' : ago(p.last_seen, 'Last seen')}`,
+    });
+  }
+  list.sort((a, b) => (b.key === active) - (a.key === active));
+  for (const d of store.get('drivesIn') || []) {
+    list.push({ key: `drive:${d.id}`, kind: 'drive', name: d.label || 'USB drive', drive: d,
+      status: `Drive · ${d.song_count} song${d.song_count === 1 ? '' : 's'}, always on the board` });
+  }
+  return list;
+}
+
+function pickSource(src) {
+  if (src.kind === 'drive') return result('Sources', `${src.name}'s songs are on the board while it's plugged in.`);
+  if (src.key === activeId()) return done();
+  core('use_source', { id: src.key });
+  if (src.kind === 'phone' && !src.phone.connected) {
+    switching = true;               // jb-source-phone connects it and says how it went
+    follow = null;
+    openPopup('notice', { title: 'Sources', message: `Connecting to ${src.name}…` });
+    return;
+  }
+  result('Sources', `Switched to ${src.name}. Its songs are on the board.`);
+}
 
 export function openSwitcher() {
   returnTo = currentStopKey();
   const data = () => ({
-    title: 'Phones', off: !bluetoothOn(), empty: bluetoothOn() && !phones().length,
+    title: 'Sources', off: !bluetoothOn(), empty: !sources().length,
     addLabel: bluetoothOn() ? 'Add a phone' : 'Bluetooth settings',
   });
   const render = () => {
     const holder = document.querySelector('.jb-popup-frame[data-popup="phones"] [data-slot="phones"]');
     if (!holder) return;
-    holder.replaceChildren(...(bluetoothOn() ? phoneRows('popup:phones', connect) : []));
+    const active = activeId();
+    holder.replaceChildren(...sources().map(src => {
+      const row = fromTemplate(templates['phone-row']).firstElementChild;
+      bind(row, { name: src.name, status: src.status });
+      row.dataset.kind = src.kind;
+      row.toggleAttribute('data-connected', src.key === active);
+      row.toggleAttribute('data-active', src.key === active);
+      makeStop(row, `popup:phones:${src.key}`, () => pickSource(src));
+      return row;
+    }));
     updatePopup('phones', data());
     refocus();
   };
@@ -115,9 +184,36 @@ export function openSwitcher() {
     },
   });
   render();
-  const first = bluetoothOn() && phones()[0];
-  focusKey(first ? `popup:phones:${first.mac}` : 'popup:phones:add');
+  const first = sources()[0];
+  focusKey(first ? `popup:phones:${first.key}` : 'popup:phones:add');
   follow = render;
+}
+
+// A phone arrived while another has the jukebox: offer it, once. It goes
+// if the phone leaves (or is chosen some other way) meanwhile.
+let offered = null;
+function offer(s) {
+  const o = s?.offer;
+  if (!o) {
+    if (offered && popupOpen() === 'confirm') { closePopup('confirm'); if (returnTo) focusKey(returnTo); }
+    offered = null;
+    return;
+  }
+  if (o.id === offered || popupOpen()) return;
+  offered = o.id;
+  returnTo = currentStopKey();
+  const holder = s.active?.connected ? s.active.name : null;
+  openPopup('confirm', {
+    title: `${o.name} is here`,
+    message: holder ? `Switch to its music? ${holder}'s songs leave the board.` : 'Switch to its music?',
+    yesLabel: 'Switch', noLabel: 'Not now',
+  }, {
+    stops: {
+      yes: () => { offered = null; core('use_source', { id: o.id }); result('Sources', `Switched to ${o.name}.`); },
+      no: () => { offered = null; core('decline_source'); done(); },
+    },
+  });
+  focusKey('popup:confirm:yes');
 }
 
 // -- Settings > Bluetooth (the bluetooth block) --------------------------

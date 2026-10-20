@@ -6,6 +6,7 @@ from shared import config, logging as jb_logging
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
+from services.jb_core.phone_choice import PhoneChoice
 from services.jb_core.pick_doctor import HELPER_ADVICE, PickDoctor
 from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
 from services.jb_core.sources import HELPER, LOCAL, ONE_SONG, PHONE, cmd_topic, playable, source_of
@@ -15,6 +16,7 @@ ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no dig
 ENTRY_TICK_S = 0.25
 
 SHUFFLE_BUFFER_TARGET = 20
+SETTLE_S = 2.0            # retained messages at startup, before choosing a phone (phone_choice.py)
 # Song-list states that hold the phone's songs back (see Queue.phone_ready).
 SYNC_WAIT = ("connecting", "syncing", "wrong_app")
 
@@ -63,6 +65,8 @@ class Queue:
         self.held = False
         # Watches each pick until it's heard playing (pick_doctor.py).
         self.doctor = PickDoctor()
+        # Which phone has the jukebox, Bluetooth or the app (phone_choice.py).
+        self.choice = PhoneChoice()
 
     @property
     def phone_ready(self) -> bool:
@@ -323,6 +327,43 @@ def drop_retries(q: Queue, log) -> None:
         q.manual = [t for t in q.manual if not t.get("retry")]
 
 
+async def apply_choice(bus: Bus, q: Queue, actions: list, log) -> None:
+    """Carries out what PhoneChoice decided: publish it, stop the old
+    phone's song and drop its queued ones, connect a Bluetooth phone."""
+    changed = False
+    for action in actions:
+        if action[0] == "changed":
+            changed = True
+        elif action[0] == "switched":
+            old, new = action[1], action[2]
+            log.info("the jukebox's phone: %s -> %s", old and old["name"], new and new["name"])
+            if old:
+                kind = HELPER if old["kind"] == "helper" else PHONE
+                theirs = (lambda t: str(t.get("item_path", "")).startswith(old["id"] + "/")) if kind == HELPER \
+                    else (lambda t: source_of(t) == PHONE)
+                if q.playing and q.active == kind:
+                    await source_action(bus, q, "stop")
+                    q.playing = False
+                    q.expected_title = None
+                q.manual = [t for t in q.manual if not theirs(t)]
+                q.shuffle_buffer = [t for t in q.shuffle_buffer if not theirs(t)]
+                if q.active == kind:
+                    q.active = HELPER if new and new["kind"] == "helper" else PHONE
+                await publish_queue(bus, q)
+        elif action[0] == "connect_bluetooth":
+            await bus.publish("jukebox/jb-source-phone/cmd", {"action": "switch", "mac": action[1]})
+    if changed:
+        await bus.publish("jukebox/jb-core/source", q.choice.state(), retain=True)
+
+
+async def choice_ticks(bus: Bus, q: Queue, log) -> None:
+    await asyncio.sleep(SETTLE_S)
+    await apply_choice(bus, q, q.choice.settled(time.monotonic()), log)
+    while True:
+        await asyncio.sleep(5)
+        await apply_choice(bus, q, q.choice.tick(time.monotonic()), log)
+
+
 async def check_picks(bus: Bus, q: Queue, log) -> None:
     while True:
         await asyncio.sleep(PICK_CHECK_S)
@@ -350,6 +391,7 @@ async def main() -> None:
         guard = EndGuard()
         asyncio.create_task(stop_after_last_song(bus, q, guard, log))
         asyncio.create_task(check_picks(bus, q, log))
+        asyncio.create_task(choice_ticks(bus, q, log))
 
         async for topic, payload in messages:
             if topic == "jukebox/jb-input/key":
@@ -373,7 +415,18 @@ async def main() -> None:
             elif topic == "jukebox/jb-library/tracks":
                 q.library_tracks = payload.get("tracks", [])
 
+            elif topic == "jukebox/jb-source-phone/phones":
+                q.choice.bluetooth_phones(payload.get("phones") or [])
+
+            elif topic == "jukebox/jb-source-phone/forgotten":
+                if payload.get("mac"):
+                    await apply_choice(bus, q, q.choice.forgotten(payload["mac"], time.monotonic()), log)
+
+            elif topic == "jukebox/jb-core/source":
+                q.choice.restore(payload, time.monotonic())   # ours, retained: after a restart
+
             elif topic == "jukebox/jb-source-phone/connected":
+                await apply_choice(bus, q, q.choice.bluetooth(payload, time.monotonic()), log)
                 was_connected = q.phone_connected
                 had_controls = q.doctor.phone.get("controls") is not False
                 q.phone_connected = bool(payload.get("connected"))
@@ -442,6 +495,7 @@ async def main() -> None:
                 was_ready = q.helper_ready
                 if topic.endswith("/connected"):
                     q.helper_connected = bool(payload.get("connected"))
+                    await apply_choice(bus, q, q.choice.helper(payload, time.monotonic()), log)
                 else:
                     q.helper_sync = payload.get("state")
                 if q.helper_ready and not was_ready and not q.playing and (
@@ -577,6 +631,11 @@ async def main() -> None:
                     await publish_queue(bus, q)
                 elif action == "power":
                     await apply_power(bus, q, menu.choose(payload.get("choice", "")), log)
+                elif action == "use_source" and isinstance(payload.get("id"), str):
+                    # The cabinet's Sources button, the offer popup, or the admin.
+                    await apply_choice(bus, q, q.choice.use(payload["id"], time.monotonic()), log)
+                elif action == "decline_source":
+                    await apply_choice(bus, q, q.choice.decline(), log)
                 else:
                     log.warning("unknown jb-core command: %r", action)
 

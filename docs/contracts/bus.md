@@ -58,17 +58,19 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-input/raw` | event | `control`, `state` |
 | `jb-input/status` | R state | `online`, `device`, `faults` |
 | `jb-core/queue` | R state | `shuffle_active`, `upcoming` |
+| `jb-core/source` | R state | which phone has the jukebox, Bluetooth or the helper app (`services/jb_core/phone_choice.py`): `active` (`kind` `phone`/`helper`, `id` a Bluetooth address or `helper:<device>`, `name`, `connected`) or null, and `offer` (a phone that arrived meanwhile, which the cabinet offers) or null. jb-library shows that phone's songs; jb-source-helper makes that app phone its source |
 | `jb-core/entry` | R state | `state`, `letter`, `reason` (keypad entry) |
 | `jb-core/power` | R state | `state` |
 | `jb-core/selection` | event | a keypad pick: slot `index`, `code` |
 | `jb-core/notice`, `rejected`, `skipped` | event | messages for the screen |
 | `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `wrong_app` (the phone is presenting another app, e.g. Messages, instead of Music; also sent as a `note` when the phone connects like that), `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, `stuck` (picks failing one after another: shuffle is turned off and the queue stops), or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
 | `jb-core/pick-log` | R state | `problems`: the last 20 pick problems, newest first, each with `at` (epoch seconds); the admin dashboard shows them |
-| `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power` |
+| `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power`, `use_source` (`id`: give the jukebox to that phone, connecting a Bluetooth one), `decline_source` (not now, for the offer) |
 | `jb-audio/state` | R state | `volume` 0..1, `muted` |
 | `jb-audio/cmd` | command | `volume_delta`, `mute`, `unmute`, `toggle_mute` |
 | `jb-display/state` | R state | `inset` (top, right, bottom, left px; the kiosk page fits itself inside them), `rotation`, `sleep_minutes`, `asleep`, `guide`, `output`, `limits`, `sway` |
 | `jb-display/cmd` | command | `inset` (`side` + `px`, or `inset`), `inset_reset`, `rotation` (`degrees`), `sleep` (`minutes`), `wake`, `guide` (`on`) |
+| `jb-library/drives-in` | R state | `drives`: the USB drives plugged in that have songs (`id`, `label`, `song_count`), for the cabinet's Sources |
 | `jb-library/tracks` | R state | `tracks`: title, artist, album, year, length, cover, added_at, last_played_at |
 | `jb-library/playlists` | R state | `playlists`: name, titles |
 | `jb-library/albums` | R state | `albums` |
@@ -76,14 +78,15 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-source-phone/connected` | R state | `connected`, `name`, `mac`, `app` (the app the phone presents: "Music", "Messages"...), `browsable` (its song list is offered), `controls: false` when connected for audio only |
 | `jb-source-phone/sync` | R state | where the phone's song list stands: `state` (`none`, `connecting`, `syncing`, `ready`, `failed`, `wrong_app`), `name`. jb-core holds the phone's songs while it's `connecting`, `syncing` or `wrong_app` and plays them when it's `ready`; the screen shows "Connecting and updating library" meanwhile |
 | `jb-source-phone/now-playing` | state | `title`, `artist`, `album`, `status`, `position`, `duration` |
-| `jb-source-helper/connected` | R state | the juk3box Helper app ([helper-protocol.md](helper-protocol.md)): `connected` (reachable: the app connected, or asleep but able to be woken over Bluetooth LE), `name`, `device_id`, `awake` (its WebSocket is up), `music` (`authorization`, `canPlay`, `route`), `phones` (every paired app phone) |
+| `jb-source-helper/connected` | R state | the juk3box Helper app ([helper-protocol.md](helper-protocol.md)): `connected` (reachable: the app connected, or asleep but able to be woken over Bluetooth LE), `name`, `device_id`, `awake` (its WebSocket is up), `music` (`authorization`, `canPlay`, `route`), `phones` (every paired app phone: `device_id`, `name`, `reachable`, `awake`, `songs`, `synced_at`, `last_seen`). `device_id` is null while a Bluetooth phone has the jukebox |
 | `jb-source-helper/sync` | R state | as the phone's: `state` (`none`, `syncing`, `ready`, `failed`), `name` |
 | `jb-source-helper/library` | R state | the active app phone's library: `device_id`, `name`, `hash`, `tracks` (title, artist, album, genre, album_track, duration_ms, year, added_at, artwork_key, item_path `helper:<device>/<item>`), `playlists` (name, titles) |
 | `jb-source-helper/now-playing` | state | as the phone's, plus `item_path`, and `ended: true` when a song finishes (the app stops after each song) |
 | `jb-source-helper/play-error` | event | `item_path`, `title`, `reason` (`no_answer`, `not_found`, `not_playable`, `no_subscription`, `not_authorized`, `offline`, `other`) |
 | `jb-source-helper/pairing` | R state | `state` (`code` or `none`), `code`, `device`, `expires`: the cabinet shows the code to type in the app |
+| `jb-source-helper/settings` | R state | the admin's Sources > App: `allow_pairing` (off once a phone pairs; unknown apps then get `pair_closed`), `ble` (wake-up), `name` (the jukebox's name in the app and as the AirPlay speaker) |
 | `jb-source-helper/forgotten` | event | `mac`: `helper:<device>` (jb-library forgets its songs) |
-| `jb-source-helper/cmd` | command | `play_item` (`item_path`), `play`, `pause`, `stop`, `forget` (`device_id`) |
+| `jb-source-helper/cmd` | command | `play_item` (`item_path`), `play`, `pause`, `stop`, `forget` (`device_id`), `rename` (`device_id`, `name`), `sync` (the active phone's library again, in full), `settings` (`allow_pairing`, `ble`, `name`) |
 | `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |
 | `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |
 | `jb-source-phone/lease`, `reconnect` | R state | source internals other modules may watch |

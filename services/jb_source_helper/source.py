@@ -4,7 +4,10 @@ library it sends, and jb-core's picks (docs/contracts/helper-protocol.md).
 On the bus it looks like the Bluetooth phone (jukebox/jb-source-helper/
 connected, sync, now-playing, play-error), so jb-core, the screen and the
 lights treat it the same way; its songs' item_path is
-"helper:<device>/<item>". One phone is the active one: the last to connect.
+"helper:<device>/<item>". One phone is the active one, the one jb-core
+chose (jukebox/jb-core/source: the cabinet's Sources button), or none while
+a Bluetooth phone has the jukebox. Every paired phone's own state is in
+connected's "phones", for that choice.
 """
 
 import asyncio
@@ -28,6 +31,8 @@ ARTWORK_SIZE = 600
 # Codes in a row before the cabinet stops asking (an app left open on the
 # pairing screen, or one nobody is answering): about 6 minutes.
 PAIR_ROUNDS = 3
+SETTINGS = {"allow_pairing": None, "ble": True, "name": None}   # None: see Helper.settings
+PAIR_CLOSED = "Pairing is off on {name}. Turn it on in the jukebox admin: Sources > App."
 
 
 class CommandError(Exception):
@@ -63,9 +68,11 @@ class Helper:
         self.came_back: dict[str, asyncio.Event] = {}
         self.sync_state = "none"
         self.failed_recently: dict[str, float] = {}
-        last = self._read("active.json")
-        if last.get("device_id") in self.phones.phones:
-            self.active = last["device_id"]
+        self.chosen: str | None = None          # jb-core's choice, a device id, until it's heard
+        self.on_rename = None                   # main.py: announce the new name
+        self._settings = {**SETTINGS, **self._read("settings.json")}
+        if self._settings["name"]:
+            self.jukebox_name = self._settings["name"]
 
     # -- files -----------------------------------------------------------
 
@@ -82,6 +89,23 @@ class Helper:
     def library_of(self, device_id: str) -> dict:
         return self._read(f"library-{device_id}.json")
 
+    def settings(self) -> dict:
+        """The admin's Sources > App switches. New phones may pair until one
+        has (then it's off until the owner turns it on again)."""
+        s = dict(self._settings)
+        if s["allow_pairing"] is None:
+            s["allow_pairing"] = not self.phones.phones
+        s["name"] = self.jukebox_name
+        return s
+
+    def _save_settings(self, **changes) -> None:
+        self._settings.update(changes)
+        self._write("settings.json", self._settings)
+
+    async def ble_update(self) -> None:
+        if self.ble:
+            await self.ble.ensure_running(bool(self.phones.phones) and self.settings()["ble"])
+
     # -- the bus -----------------------------------------------------------
 
     def reachable(self, device_id: str | None) -> bool:
@@ -94,21 +118,23 @@ class Helper:
 
     async def publish_state(self) -> None:
         d = self.active
-        phone = self.phones.phones.get(d) if d else None
+        name = self.phones.name_of(d) if d else None
         await self.bus.publish(f"{TOPIC}/connected", {
-            "connected": self.reachable(d), "name": (phone or {}).get("name"), "device_id": d,
+            "connected": self.reachable(d), "name": name, "device_id": d,
             "awake": d in self.sessions, "music": self.music.get(d) or None,
-            "phones": self.phones.listing(),
+            "phones": [{**p, "reachable": self.reachable(p["device_id"]), "awake": p["device_id"] in self.sessions,
+                        "songs": len(self.library_of(p["device_id"]).get("tracks") or []),
+                        "synced_at": self.library_of(p["device_id"]).get("at")}
+                       for p in self.phones.listing()],
         }, retain=True)
-        await self.bus.publish(f"{TOPIC}/sync", {"state": self.sync_state, "name": (phone or {}).get("name")},
-                               retain=True)
+        await self.bus.publish(f"{TOPIC}/sync", {"state": self.sync_state, "name": name}, retain=True)
+        await self.bus.publish(f"{TOPIC}/settings", self.settings(), retain=True)
 
     async def publish_library(self) -> None:
         d = self.active
         lib = self.library_of(d) if d else {}
-        phone = self.phones.phones.get(d) if d else None
         await self.bus.publish(f"{TOPIC}/library", {
-            "v": 1, "device_id": d, "name": (phone or {}).get("name"), "hash": lib.get("hash"),
+            "v": 1, "device_id": d, "name": self.phones.name_of(d) if d else None, "hash": lib.get("hash"),
             "tracks": lib.get("tracks") or [], "playlists": lib.get("playlists") or [],
         }, retain=True)
 
@@ -141,24 +167,26 @@ class Helper:
         if not device_id or len(device_id) > 64:
             return
         if not self.phones.known(device_id, p.get("token")):
+            if not self.settings()["allow_pairing"]:
+                self.log.info("%s wants to pair, but pairing is off", name)
+                await ws.send_str(protocol.message("pair_closed", {"message": PAIR_CLOSED.format(name=self.jukebox_name)}))
+                return
             if not await self._pair(ws, device_id, name, p.get("model")):
                 return
+            self._save_settings(allow_pairing=False)    # the next phone needs the owner's say-so
         session = Session(ws, device_id, name)
         old = self.sessions.get(device_id)
         if old:
             await old.ws.close()
         self.sessions[device_id] = session
         self.phones.seen(device_id, name)
-        others = [s for d, s in self.sessions.items() if d != device_id]
-        self.active = device_id
-        self._write("active.json", {"device_id": device_id})
-        if self.ble:
-            await self.ble.ensure_running(bool(self.phones.phones))
-        await session.send("welcome", {"deviceId": device_id, "active": True})
-        for s in others:
-            asyncio.create_task(self._send_quietly(s, "set_active", {"active": False}))
+        await self.ble_update()
+        # Not the source unless jb-core chose it: a phone arriving while
+        # another has the jukebox is offered on the cabinet instead.
+        await session.send("welcome", {"deviceId": device_id, "active": device_id == self.active})
         self.came_back.setdefault(device_id, asyncio.Event()).set()
-        self.log.info("%s connected", name)
+        self.log.info("%s connected%s", name, "" if device_id == self.active else " (not the source)")
+        await self.publish_state()
         asyncio.create_task(self.sync_library(device_id))
         try:
             async for msg in ws:
@@ -280,7 +308,7 @@ class Helper:
 
     # -- library -------------------------------------------------------------
 
-    async def sync_library(self, device_id: str) -> None:
+    async def sync_library(self, device_id: str, full: bool = False) -> None:
         session = self.sessions.get(device_id)
         if not session or device_id != self.active:
             return
@@ -288,8 +316,9 @@ class Helper:
         lib = self.library_of(device_id)
         self.sync_state = "syncing" if not lib else "ready"   # a known library plays on while it's checked
         await self.publish_state()
+        since = None if full else lib.get("hash")
         try:
-            await self._command(session, "request_library", {"since": lib.get("hash")} if lib.get("hash") else {},
+            await self._command(session, "request_library", {"since": since} if since else {},
                                 timeout=LIBRARY_WAIT_S)
         except CommandError as e:
             self.log.warning("library from %s: %s", session.name, e.reason)
@@ -398,10 +427,63 @@ class Helper:
                     self.sync_state = "none"
                     await self.publish_library()
                 await self.bus.publish(f"{TOPIC}/forgotten", {"mac": protocol.PREFIX + device_id})
-                if self.ble:
-                    await self.ble.ensure_running(bool(self.phones.phones))
+                await self.ble_update()
                 await self.publish_state()
                 self.log.info("forgot %s", device_id)
+        elif action == "rename":
+            device_id, name = cmd.get("device_id"), clean_name(cmd.get("name"))
+            if device_id in self.phones.phones and name:
+                self.phones.rename(device_id, name)
+                await self.publish_state()
+                if device_id == self.active:
+                    await self.publish_library()
+                self.log.info("renamed %s to %s", device_id, name)
+        elif action == "sync":
+            if self.active:
+                self.log.info("syncing %s's library again, in full", self.phones.name_of(self.active))
+                await self.sync_library(self.active, full=True)
+        elif action == "settings":
+            changes = {k: bool(cmd[k]) for k in ("allow_pairing", "ble") if k in cmd}
+            name = clean_name(cmd.get("name")) if "name" in cmd else None
+            if name and name != self.jukebox_name:
+                changes["name"] = self.jukebox_name = name
+                self._write_airplay_name(name)
+                if self.on_rename:
+                    await self.on_rename(name)
+            if changes:
+                self._save_settings(**changes)
+                self.log.info("settings: %s", changes)
+                await self.ble_update()
+            await self.publish_state()
+
+    def _write_airplay_name(self, name: str) -> None:
+        """jb-airplay's speaker name (its unit reads this file; jb-admin
+        restarts it), so the AirPlay picker and the app agree."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        write_atomic(self.data_dir / "airplay.env", f'JB_AIRPLAY_NAME="{name}"\n')
+
+    async def follow_choice(self, source: dict) -> None:
+        """jukebox/jb-core/source: the phone jb-core chose. One of ours, or
+        none (a Bluetooth phone has the jukebox)."""
+        active = (source or {}).get("active") or {}
+        want = None
+        if active.get("kind") == "helper" and str(active.get("id", "")).startswith(protocol.PREFIX):
+            want = active["id"][len(protocol.PREFIX):]
+            if want not in self.phones.phones:
+                want = None
+        if want == self.active:
+            return
+        self.active = want
+        lib = self.library_of(want) if want else {}
+        self.sync_state = "ready" if lib else ("syncing" if want in self.sessions else "none")
+        self.playing = None
+        self.log.info("the source is now %s", self.phones.name_of(want) if want else "not the app")
+        for d, s in self.sessions.items():
+            asyncio.create_task(self._send_quietly(s, "set_active", {"active": d == want}))
+        await self.publish_state()
+        await self.publish_library()
+        if want:
+            asyncio.create_task(self.sync_library(want))
 
     async def play(self, path, title) -> None:
         split = protocol.split_item_path(path)
@@ -411,11 +493,16 @@ class Helper:
         device_id, item_id = split
         try:
             s = await self.session_for(device_id)
-            if device_id != self.active:
-                self.active = device_id
-                self._write("active.json", {"device_id": device_id})
-                await self.publish_state()
             self.log.info("playing %s", path)
             await self._command(s, "play", {"itemId": item_id, "kind": "song"})
         except CommandError as e:
             await self._play_failed(device_id, item_id, e.reason, title)
+
+
+def clean_name(name) -> str | None:
+    """A name typed in the admin: shown on the cabinet, announced over
+    Bonjour and AirPlay (and written into airplay.env, so no quotes)."""
+    if not isinstance(name, str):
+        return None
+    name = " ".join("".join(c for c in name if c.isprintable() and c not in '"\\$`').split())[:40]
+    return name or None

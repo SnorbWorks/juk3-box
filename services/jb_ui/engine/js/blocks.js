@@ -439,17 +439,20 @@ function fillHeader(el, node, ctx) {
   store.watch(el, 'collection', render);
 }
 
-// The phone connection badge. Clicking it will manage phones (connect,
-// switch, forget) once the phone connection manager is built; for now it
-// shows the connected phone.
+// The Sources badge (top right): the phone that has the jukebox, Bluetooth
+// or the app (jukebox/jb-core/source). Clicking it opens Sources: the other
+// phones to switch to, and the drives plugged in (phones.js).
 function fillConnection(el, node, ctx) {
   el.append(fromTemplate(ctx.blocks.connection));
   makeStop(el, 'connection', () => ctx.actions.phones());
-  store.watch(el, 'phone', p => {
-    el.toggleAttribute('data-connected', !!p?.connected);
+  store.watch(el, 'source', s => {
+    const a = s?.active;
+    el.toggleAttribute('data-connected', !!a?.connected);
+    if (a) el.dataset.kind = a.kind;
+    else delete el.dataset.kind;
     bind(el, {
-      status: p?.connected ? 'Connected' : 'Not connected',
-      name: p?.connected ? p.name : 'Connect a phone',
+      status: !a ? 'Not connected' : a.connected ? (a.kind === 'helper' ? 'Connected · app' : 'Connected') : 'Not connected',
+      name: a ? a.name : 'Connect a phone',
       icon: ctx.icons.connection,
       moreIcon: ctx.icons.dropdown,
     });

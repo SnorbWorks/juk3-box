@@ -149,11 +149,13 @@ class Admin:
         "jukebox/jb-audio/airplay": "airplay",
         "jukebox/jb-display/state": "display",
         "jukebox/jb-source-helper/connected": "helper",
+        "jukebox/jb-source-helper/settings": "helper_settings",
+        "jukebox/jb-core/source": "source",
+        "jukebox/jb-library/drives-in": "drives_in",
     }
 
     # What the Phones page may ask jb-source-phone to do.
-    PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget",
-                     "forget_helper"}
+    PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
     DRIVES_TOPIC = "jukebox/jb-source-local/library"
@@ -380,10 +382,77 @@ class Admin:
             "pairing": self.live.get("pairing") or {"state": "idle"},
             "switch": self.live.get("phone_switch") or {"state": "idle"},
             "bluetooth": self.live.get("bluetooth") or {"on": True},
-            # Phones paired with the juk3box Helper app (jb-source-helper).
-            "helper": self.live.get("helper") or {"phones": []},
+            "source": self.live.get("source") or {"active": None},
             "bus": self.bus is not None,
         })
+
+    # Sources: which phone has the jukebox, and the app's settings ----------------
+
+    async def get_sources(self, request):
+        return web.json_response({
+            "source": self.live.get("source") or {"active": None, "offer": None},
+            "phones": (self.live.get("phones") or {}).get("phones") or [],
+            "bluetooth": self.live.get("bluetooth") or {"on": True},
+            "helper": self.live.get("helper") or {"phones": []},
+            "helper_settings": self.live.get("helper_settings") or {},
+            "drives": (self.live.get("drives_in") or {}).get("drives") or [],
+            "bus": self.bus is not None,
+        })
+
+    async def use_source(self, request):
+        """Give the jukebox to this phone (jb-core's phone_choice.py)."""
+        pid = (await json_body(request)).get("id")
+        if not isinstance(pid, str) or not (
+                re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", pid) or re.fullmatch(r"helper:[A-Za-z0-9-]{1,64}", pid)):
+            raise error(400, "Which phone?")
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-core/cmd", {"action": "use_source", "id": pid})
+        self.log.info("sources: use %s", pid)
+        return web.json_response({"ok": True})
+
+    HELPER_ACTIONS = {"forget", "rename", "sync", "settings"}
+
+    async def helper_action(self, request):
+        """The app's phones and switches, carried out by jb-source-helper."""
+        action = request.match_info["action"]
+        if action not in self.HELPER_ACTIONS:
+            raise web.HTTPNotFound()
+        body = await json_body(request)
+        cmd = {"action": action}
+        if action in ("forget", "rename"):
+            device_id = body.get("device_id")
+            if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", device_id):
+                raise error(400, "Which phone?")
+            cmd["device_id"] = device_id
+        name = None
+        if action == "rename" or (action == "settings" and "name" in body):
+            name = body.get("name")
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40:
+                raise error(400, "A name of 1 to 40 characters, please.")
+            cmd["name"] = name.strip()
+        if action == "settings":
+            for k in ("allow_pairing", "ble"):
+                if k in body:
+                    cmd[k] = bool(body[k])
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        old_name = (self.live.get("helper_settings") or {}).get("name")
+        await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
+        self.log.info("helper app: %s %s", action, cmd.get("device_id", ""))
+        if action == "settings" and name and name.strip() != old_name:
+            # The AirPlay speaker takes the new name on a restart, once
+            # jb-source-helper has written it (airplay.env).
+            for _ in range(30):
+                if (self.live.get("helper_settings") or {}).get("name") != old_name:
+                    break
+                await asyncio.sleep(0.1)
+            try:
+                await self.modules.ctl("unit", "restart", "jb-airplay")
+            except ModuleError as e:
+                self.log.warning("couldn't restart jb-airplay: %s", e)
+                raise error(500, f"Renamed, but the AirPlay speaker keeps its old name until the jukebox restarts ({e}).")
+        return web.json_response({"ok": True})
 
     async def phone_action(self, request):
         action = request.match_info["action"]
@@ -391,15 +460,6 @@ class Admin:
             raise web.HTTPNotFound()
         body = await json_body(request)
         cmd = {"action": action}
-        if action == "forget_helper":
-            device_id = body.get("device_id")
-            if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", device_id):
-                raise error(400, "Which phone?")
-            if self.bus is None:
-                raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
-            await self.bus.publish("jukebox/jb-source-helper/cmd", {"action": "forget", "device_id": device_id})
-            self.log.info("phones: forget helper app phone %s", device_id)
-            return web.json_response({"ok": True})
         if action in ("switch", "disconnect", "forget"):
             mac = body.get("mac")
             if not isinstance(mac, str) or not re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", mac):
@@ -1122,6 +1182,9 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/phones", admin.get_phones)
     r.add_get("/api/extensions", admin.get_extensions)
     r.add_post("/api/phones/{action}", admin.phone_action)
+    r.add_get("/api/sources", admin.get_sources)
+    r.add_post("/api/sources/use", admin.use_source)
+    r.add_post("/api/helper/{action}", admin.helper_action)
     r.add_get("/api/audio", admin.get_audio)
     r.add_post("/api/audio/{action}", admin.audio_action)
     r.add_get("/api/display", admin.get_display)

@@ -91,8 +91,8 @@ async def send_library(app, request):
     await app.send("ack", {}, request["id"])
 
 
-async def pair(client, helper, bus):
-    app = await connect(client)
+async def pair(client, helper, bus, device="dev-1"):
+    app = await connect(client, device=device)
     challenge = await app.get()
     assert challenge["type"] == "pair_challenge"
     code = bus.last("pairing")["code"]
@@ -102,8 +102,18 @@ async def pair(client, helper, bus):
     await app.send("pair_response", {"code": code})
     paired = await app.get()
     assert paired["type"] == "paired"
-    assert (await app.get())["type"] == "welcome"
+    welcome = await app.get()
+    assert welcome["type"] == "welcome" and welcome["payload"]["active"] is False   # until jb-core chooses it
+    await choose(helper, app, device)
     return app, paired["payload"]["token"]
+
+
+async def choose(helper, app, device="dev-1"):
+    """jb-core picks this phone (jukebox/jb-core/source); the app hears set_active."""
+    await helper.follow_choice({"active": {"kind": "helper", "id": f"helper:{device}", "name": "x"}})
+    m = await app.get()
+    assert m["type"] == "set_active" and m["payload"] == {"active": True}
+    await app.send("ack", {}, m["id"])
 
 
 def test_a_phone_pairs_with_the_code_on_the_screen_and_its_library_reaches_the_bus(tmp_path):
@@ -135,7 +145,8 @@ def test_a_paired_phone_comes_back_with_its_token_and_an_unchanged_library_is_ke
         await asyncio.sleep(0.1)
         assert not bus.last("connected")["awake"]
         app = await connect(client, token)
-        assert (await app.get())["type"] == "welcome"
+        welcome = await app.get()
+        assert welcome["type"] == "welcome" and welcome["payload"]["active"] is True
         request = await app.get()
         assert request["payload"] == {"since": "h1"}
         await app.send("library_done", {"hash": "h1", "counts": {}})
@@ -264,4 +275,66 @@ def test_the_cabinet_stops_asking_after_a_few_codes(tmp_path, monkeypatch):
         assert closed.type.name in ("CLOSE", "CLOSED", "CLOSING")
         await asyncio.sleep(0.1)
         assert bus.last("pairing") == {"state": "none"} and not helper.phones.phones
+    run(tmp_path, check)
+
+
+def test_pairing_turns_off_once_a_phone_pairs_and_a_stranger_is_told(tmp_path):
+    async def check(client, helper, bus):
+        assert helper.settings()["allow_pairing"]             # nothing paired yet
+        await pair(client, helper, bus)
+        assert not helper.settings()["allow_pairing"]
+        stranger = await connect(client, device="dev-2")
+        closed = await stranger.get()
+        assert closed["type"] == "pair_closed" and "Sources > App" in closed["payload"]["message"]
+        assert bus.last("pairing") == {"state": "none"}       # nothing on the cabinet
+        await helper.command({"action": "settings", "allow_pairing": True})
+        assert bus.last("settings")["allow_pairing"]
+        again = await connect(client, device="dev-2")
+        assert (await again.get())["type"] == "pair_challenge"
+    run(tmp_path, check)
+
+
+def test_a_second_phone_waits_for_the_cabinet_and_takes_over_when_chosen(tmp_path):
+    async def check(client, helper, bus):
+        first, _ = await pair(client, helper, bus)
+        await send_library(first, await first.get())
+        await first.get()                                     # request_artwork
+        await helper.command({"action": "settings", "allow_pairing": True})
+        second = await connect(client, device="dev-2")
+        assert (await second.get())["type"] == "pair_challenge"
+        await second.send("pair_response", {"code": bus.last("pairing")["code"]})
+        assert (await second.get())["type"] == "paired"
+        assert (await second.get())["payload"]["active"] is False
+        await asyncio.sleep(0.1)
+        listing = {p["device_id"]: p for p in bus.last("connected")["phones"]}
+        assert listing["dev-2"]["reachable"] and listing["dev-1"]["songs"] == 2
+        assert bus.last("connected")["device_id"] == "dev-1"  # still the first one's
+        await helper.follow_choice({"active": {"kind": "helper", "id": "helper:dev-2"}})
+        msgs = {(await first.get())["type"], }
+        assert msgs == {"set_active"}
+        m = await second.get()
+        assert m["type"] == "set_active" and m["payload"] == {"active": True}
+        assert bus.last("connected")["device_id"] == "dev-2"
+        # A Bluetooth phone chosen: no app phone is the source.
+        await helper.follow_choice({"active": {"kind": "phone", "id": "AA:BB:CC:DD:EE:FF"}})
+        assert bus.last("connected")["device_id"] is None and bus.last("library")["tracks"] == []
+    run(tmp_path, check)
+
+
+def test_the_owner_renames_a_phone_and_the_jukebox(tmp_path):
+    async def check(client, helper, bus):
+        renamed = []
+
+        async def on_rename(name):
+            renamed.append(name)
+        helper.on_rename = on_rename
+        app, token = await pair(client, helper, bus)
+        await helper.command({"action": "rename", "device_id": "dev-1", "name": "  Shawn's  phone "})
+        assert bus.last("connected")["name"] == "Shawn's phone"
+        helper.phones.seen("dev-1", "iPhone")                 # the app's own name doesn't win
+        assert helper.phones.name_of("dev-1") == "Shawn's phone"
+        await helper.command({"action": "settings", "name": 'The "Bar" $Box', "ble": False})
+        assert renamed == ["The Bar Box"] and bus.last("settings")["name"] == "The Bar Box"
+        assert (tmp_path / "airplay.env").read_text() == 'JB_AIRPLAY_NAME="The Bar Box"\n'
+        assert not bus.last("settings")["ble"]
     run(tmp_path, check)

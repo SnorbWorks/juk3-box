@@ -23,6 +23,11 @@ const HANDLERS = {
   'jukebox/jb-source-local/event': e => store.set('driveEvent', { ...e, at: Date.now() }),
   'jukebox/jb-admin/drive-offers': o => store.set('driveOffers', o.offers || []),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
+  // Which phone has the jukebox, Bluetooth or the app (jb-core's phone_choice.py),
+  // and a phone that arrived meanwhile (offered); the app's phones; drives in.
+  'jukebox/jb-core/source': s => store.set('source', s),
+  'jukebox/jb-source-helper/connected': h => store.set('helper', h),
+  'jukebox/jb-library/drives-in': d => store.set('drivesIn', d.drives || []),
   'jukebox/jb-source-phone/sync': s => store.set('phoneSync', s),
   'jukebox/jb-core/queue': q => store.set('queue', q),
   'jukebox/jb-library/tracks': lib => {

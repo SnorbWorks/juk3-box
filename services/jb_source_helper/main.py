@@ -90,17 +90,29 @@ async def main() -> None:
         ble = Wake(jid, log) if cfg["ble"] else None
         helper = Helper(bus, phones, data_dir, log, jid, cfg["jukebox_name"], ble)
         commands = await bus.subscribe(f"{TOPIC}/cmd")
+        await bus.subscribe("jukebox/jb-core/source")      # which phone has the jukebox
         asyncio.create_task(bus.run_heartbeat())
-        if ble:
-            await ble.ensure_running(bool(phones.phones))
+        await helper.ble_update()
         await helper.start()
 
         runner = web.AppRunner(make_app(helper), access_log=None)
         await runner.setup()
         await web.TCPSite(runner, "0.0.0.0", cfg["port"]).start()
         announcement = avahi.Announcement(log)
-        await announcement.start(cfg["jukebox_name"], cfg["port"], avahi.txt(jid, cfg["jukebox_name"]))
+        await announcement.start(helper.jukebox_name, cfg["port"], avahi.txt(jid, helper.jukebox_name))
         log.info("listening on port %d", cfg["port"])
+
+        async def renamed(name):
+            await announcement.stop()
+            await announcement.start(name, cfg["port"], avahi.txt(jid, name))
+        helper.on_rename = renamed
+
+        async def refresh():
+            # "reachable" runs out on its own (REACHABLE_S): say so now and then.
+            while True:
+                await asyncio.sleep(300)
+                await helper.publish_state()
+        asyncio.create_task(refresh())
 
         async def run(cmd):
             try:
@@ -109,7 +121,10 @@ async def main() -> None:
                 log.exception("failed to handle command: %r", cmd)
 
         try:
-            async for _topic, payload in commands:
+            async for topic, payload in commands:
+                if topic == "jukebox/jb-core/source":
+                    await helper.follow_choice(payload)
+                    continue
                 # A pick can wait for a sleeping app: never hold up the next command.
                 asyncio.create_task(run(payload))
         finally:

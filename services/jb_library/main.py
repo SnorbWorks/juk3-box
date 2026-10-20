@@ -737,6 +737,9 @@ class Snapshots:
         if serialized != self._last_drives:
             await self.bus.publish("jukebox/jb-library/drives", drives, retain=True)
             self._last_drives = serialized
+            await self.bus.publish("jukebox/jb-library/drives-in", {"drives": [
+                {"id": d["id"], "label": d["label"], "song_count": d["song_count"]}
+                for d in drives["drives"] if d["attached"] and d["song_count"]]}, retain=True)
 
 
 async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:
@@ -940,6 +943,9 @@ async def main() -> None:
         await bus.subscribe("jukebox/jb-source-helper/connected")
         await bus.subscribe("jukebox/jb-source-helper/forgotten")
         await bus.subscribe("jukebox/jb-source-helper/now-playing")
+        # Whose songs the board shows: the phone that has the jukebox, Bluetooth
+        # or the app (jb-core's phone_choice.py: the cabinet's Sources button).
+        await bus.subscribe("jukebox/jb-core/source")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -984,6 +990,13 @@ async def main() -> None:
                     log.info("favorite %s: %s (%d rows)", "on" if payload.get("value") else "off", payload["title"], n)
                     await snapshots.publish()
                 continue
+            if topic == "jukebox/jb-core/source":
+                active = (payload or {}).get("active") or {}
+                if active.get("id") and active["id"] != snapshots.mac:
+                    snapshots.mac = active["id"]
+                    log.info("showing the library of %s (%s)", active.get("name") or active["id"], active.get("kind"))
+                    await snapshots.publish()
+                continue
             if topic.startswith("jukebox/jb-source-helper/"):
                 device = payload.get("device_id")
                 mac = f"helper:{device}" if device else None
@@ -997,10 +1010,6 @@ async def main() -> None:
                         wake.set()   # covers and popularity for new songs
                 elif topic.endswith("/connected"):
                     helper_plays.mac = mac if payload.get("connected") else None
-                    if payload.get("connected") and mac and mac != snapshots.mac:
-                        snapshots.mac = mac
-                        log.info("showing the library of %s (helper app)", payload.get("name") or mac)
-                        await snapshots.publish()
                 elif topic.endswith("/forgotten"):
                     mac = payload.get("mac")
                     if isinstance(mac, str) and mac.startswith("helper:"):
@@ -1014,10 +1023,6 @@ async def main() -> None:
                 continue
             if topic.endswith("/connected"):
                 plays.on_connected(payload)
-                if payload.get("connected") and payload.get("mac") and payload["mac"] != snapshots.mac:
-                    snapshots.mac = payload["mac"]
-                    log.info("showing the library of %s", payload.get("name") or snapshots.mac)
-                    await snapshots.publish()
                 continue
             if topic.endswith("/forgotten"):
                 mac = payload.get("mac")

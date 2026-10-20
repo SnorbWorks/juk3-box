@@ -494,6 +494,30 @@ def test_phones_page_sends_only_phone_commands(tmp_path):
     run(tmp_path, check)
 
 
+def test_sources_page_switches_phones_and_sets_up_the_app(tmp_path):
+    async def check(client, admin):
+        admin.live["source"] = {"active": {"kind": "phone", "id": "88:51:F2:56:4B:2B", "name": "Lena's iPhone"}, "offer": None}
+        admin.live["helper_settings"] = {"allow_pairing": False, "ble": True, "name": "JUKE.BOX"}
+        data = await (await client.get("/api/sources", headers=H)).json()
+        assert data["source"]["active"]["name"] == "Lena's iPhone" and data["helper_settings"]["name"] == "JUKE.BOX"
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/sources/use", json={"id": "helper:dev-1"}, headers=H)).status == 200
+        assert (await client.post("/api/sources/use", json={"id": "drive:x"}, headers=H)).status == 400
+        assert (await client.post("/api/helper/rename", json={"device_id": "dev-1", "name": " Bar phone "}, headers=H)).status == 200
+        assert (await client.post("/api/helper/rename", json={"device_id": "dev-1", "name": "  "}, headers=H)).status == 400
+        assert (await client.post("/api/helper/forget", json={"device_id": "../x"}, headers=H)).status == 400
+        assert (await client.post("/api/helper/settings", json={"allow_pairing": 1}, headers=H)).status == 200
+        assert (await client.post("/api/helper/sync", json={}, headers=H)).status == 200
+        assert (await client.post("/api/helper/reboot", json={}, headers=H)).status == 404
+        assert admin.bus.sent == [
+            ("jukebox/jb-core/cmd", {"action": "use_source", "id": "helper:dev-1"}),
+            ("jukebox/jb-source-helper/cmd", {"action": "rename", "device_id": "dev-1", "name": "Bar phone"}),
+            ("jukebox/jb-source-helper/cmd", {"action": "settings", "allow_pairing": True}),
+            ("jukebox/jb-source-helper/cmd", {"action": "sync"}),
+        ]
+    run(tmp_path, check)
+
+
 def test_sound_page_sends_only_audio_commands(tmp_path):
     async def check(client, admin):
         admin.live["volume"] = {"volume": 0.2, "muted": False,

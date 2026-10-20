@@ -6,10 +6,9 @@ import { button, clear, field, h, icon, loadIcons, showError, toast } from './ui
 
 const PAGES = [
   { id: 'dashboard', label: 'Dashboard', icon: 'gauge', load: () => import('./pages/dashboard.js') },
-  { id: 'phones', label: 'Bluetooth', icon: 'bluetooth', load: () => import('./pages/phones.js') },
+  { id: 'sources', label: 'Sources', icon: 'cable', load: () => import('./pages/sources.js') },
   { id: 'sound', label: 'Sound', icon: 'volume-2', load: () => import('./pages/sound.js') },
   { id: 'displays', label: 'Displays', icon: 'monitor', load: () => import('./pages/displays.js') },
-  { id: 'drives', label: 'Drives', icon: 'usb', load: () => import('./pages/drives.js') },
   { id: 'builder', label: 'Page Builder', icon: 'layout-template', load: () => import('./pages/builder.js') },
   { id: 'themes', label: 'Themes', icon: 'palette', load: () => import('./pages/themes.js') },
   { id: 'appearance', label: 'Appearance', icon: 'swatch-book', load: () => import('./pages/appearance.js') },
@@ -108,6 +107,12 @@ function showShell() {
 async function route() {
   if (!app.classList.contains('shell')) return;
   const [, id = 'dashboard', ...rest] = location.hash.split('/');
+  // Bluetooth and Drives moved under Sources (old bookmarks).
+  const moved = { phones: 'bluetooth', drives: 'drives', app: 'app' }[id];
+  if (moved) {
+    location.replace(`#/sources/${[moved, ...rest].join('/')}`);
+    return;
+  }
   const page = PAGES.find(p => p.id === id) || PAGES[0];
   for (const a of document.querySelectorAll('.side-link[data-page]')) a.toggleAttribute('aria-current', a.dataset.page === page.id);
   app.classList.remove('nav-open');
