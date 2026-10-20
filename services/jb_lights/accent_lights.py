@@ -12,7 +12,7 @@ Looks crossfade; in eq and ribbon a drop flashes the whole chain white for a
 moment (the show flashes on its own cues). Without
 the analyzer (or a feed) the city simply stays on.
 
-The chain shares its controller with the buttons (pwm_chains), and the
+The chain shares its controller with the buttons (chains.py), and the
 accent branch's 6A cap is applied every frame (accent_diner.limit).
 """
 
@@ -21,7 +21,7 @@ import time
 
 from rpi_ws281x import Color
 
-from services.jb_lights import accent, pwm_chains
+from services.jb_lights import accent, chains
 from services.jb_lights.show.parts import AccentShow
 from services.jb_lights.themes.accent_city import BRIGHTNESS, City
 from services.jb_lights.themes.accent_diner import limit
@@ -85,7 +85,7 @@ class Looks:
 
 def run(stop=None, feed=None):
     stop = stop or threading.Event()
-    chain = pwm_chains.get().accent
+    chain = chains.get().accent
     looks = Looks(accent.positions())
     city_only = feed is None
     start = last = time.monotonic()

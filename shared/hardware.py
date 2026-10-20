@@ -2,8 +2,7 @@
 
 The hardware is chosen in setup (detected here, confirmed by the owner;
 dev plan roadmap item 2) and the right drivers and settings follow from
-it. Nothing uses this yet: it's the groundwork for the Pi 5 move
-(docs/pi5-move.md).
+it. jb-lights picks its LED driver from it (docs/pi5-move.md).
 """
 
 from pathlib import Path
@@ -22,8 +21,8 @@ FAMILIES = {
     },
     "pi5": {
         "name": "Raspberry Pi 5",
-        # rpi_ws281x can't drive the RP1 I/O chip; the PIO block can
-        # (Adafruit-Blinka-Raspberry-Pi5-Neopixel, /dev/pio0).
+        # rpi_ws281x can't drive the RP1 I/O chip; the kernel's PIO
+        # driver can (ws2812-pio overlays, jb_lights/pio_chains.py).
         "led_driver": "pio",
         # No hardware H.264 on the Pi 5; its CPU decodes 720p H.264 easily.
         "video_codec": "h264",

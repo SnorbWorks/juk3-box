@@ -8,8 +8,9 @@ Drives every LED chain:
 While music plays, all of them put on one light show from jb-analyzer's
 stream through the shared AudioFeed: its director picks a style for the
 song and cues each part (show/, docs/Light Show Styles.md).
-The buttons and the accent chain share one rpi_ws281x controller
-(pwm_chains); the level bar is on SPI.
+The buttons and the accent chain share one rpi_ws281x controller on a
+Pi 4 (pwm_chains) and use the kernel's PIO driver on a Pi 5 (pio_chains);
+the level bar is on SPI on both.
 
 Runs as root (rpi_ws281x needs it), via deploy/systemd/jb-lights.service.
 systemd stops services with SIGTERM, which would skip cleanup and leave the
@@ -24,7 +25,7 @@ import sys
 import threading
 import traceback
 
-from services.jb_lights import accent_lights, levelbar
+from services.jb_lights import accent_lights, levelbar, pio_chains
 from services.jb_lights.audio_feed import AudioFeed
 from services.jb_lights.themes import buttons_theme1
 from shared import hardware
@@ -33,12 +34,13 @@ BAR_THEME = 5   # idle colour stripes beside the city (user, 2026-10-19); music 
 
 
 def main():
-    # rpi_ws281x can't drive a Pi 5's LEDs (its I/O goes through the RP1
-    # chip). Until the Pi 5 driver is in (docs/pi5-move.md), stay idle
-    # rather than fail and be restarted over and over.
+    # A Pi 5 drives the chains through the PIO overlays in config.txt's
+    # [pi5] section (pio_chains). Without them, stay idle rather than fail
+    # and be restarted over and over.
     board = hardware.board()
-    if board["family"] == "pi5":
-        print(f"jb-lights: {board['model']} needs the Pi 5 LED driver, not built yet; lights stay off", flush=True)
+    if board["family"] == "pi5" and not pio_chains.available():
+        print(f"jb-lights: {board['model']}: no /dev/leds-buttons, /dev/leds-accent "
+              "(the ws2812-pio overlays, docs/pi5-move.md); lights stay off", flush=True)
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
         threading.Event().wait()
         return

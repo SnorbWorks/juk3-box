@@ -35,9 +35,10 @@ def index(key: str) -> int:
 
 def open_strip():
     """The buttons' chain, from the controller it shares with the accent
-    chain (pwm_chains: both PWM channels share one DMA engine)."""
-    from services.jb_lights import pwm_chains   # here, not at the top: pwm_chains imports this module
-    return pwm_chains.get().buttons
+    chain (pwm_chains: both PWM channels share one DMA engine; pio_chains
+    on a Pi 5)."""
+    from services.jb_lights import chains   # here, not at the top: the drivers import this module
+    return chains.get().buttons
 
 
 def close_strip(strip) -> None:
@@ -46,4 +47,5 @@ def close_strip(strip) -> None:
         strip.setPixelColor(i, Color(0, 0, 0, 0))
     strip.show()
     strip.show()
-    subprocess.run(["pinctrl", "set", str(GPIO), "op", "dh"], check=False)
+    if getattr(strip, "parks_pin", True):     # not on a Pi 5: the pin belongs to PIO
+        subprocess.run(["pinctrl", "set", str(GPIO), "op", "dh"], check=False)
