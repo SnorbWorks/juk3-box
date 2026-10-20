@@ -19,6 +19,7 @@ MPV = ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--ao=pipewire",
        "--audio-display=no", "--volume=100", "--gapless-audio=no", "--cache=yes",
        "--demuxer-max-bytes=4MiB", f"--input-ipc-server={SOCKET}"]
 WATCH = ["pause", "time-pos", "duration", "idle-active"]
+START_WAIT_S = 30.0      # mpv's socket should appear by now (a busy Pi can take a while)
 
 
 class Player:
@@ -44,6 +45,10 @@ class Player:
                 self.log.warning("mpv exited (%s); restarting", self.proc.returncode)
             except Exception:
                 self.log.exception("mpv failed")
+            # Never leave a half-started mpv behind: starting another on top of it
+            # leaked one per retry until the Pi ran out of memory and netwatch
+            # rebooted it, over and over (2026-10-19).
+            await self._stop_proc()
             self.ready.clear()
             if self.path:
                 self.path = None
@@ -54,8 +59,8 @@ class Player:
         SOCKET.unlink(missing_ok=True)
         self.proc = await asyncio.create_subprocess_exec(*MPV, stdout=asyncio.subprocess.DEVNULL,
                                                          stderr=asyncio.subprocess.DEVNULL)
-        for _ in range(100):
-            if SOCKET.exists():
+        for _ in range(int(START_WAIT_S / 0.05)):
+            if SOCKET.exists() or self.proc.returncode is not None:
                 break
             await asyncio.sleep(0.05)
         reader, self.writer = await asyncio.open_unix_connection(str(SOCKET))
@@ -64,6 +69,17 @@ class Player:
         self.reader_task = asyncio.create_task(self._read(reader))
         self.ready.set()
         self.log.info("mpv ready")
+
+    async def _stop_proc(self) -> None:
+        if self.reader_task:
+            self.reader_task.cancel()
+            self.reader_task = None
+        if self.writer:
+            self.writer.close()
+            self.writer = None
+        if self.proc and self.proc.returncode is None:
+            self.proc.kill()
+            await self.proc.wait()
 
     async def _send(self, msg: dict) -> None:
         self._req += 1

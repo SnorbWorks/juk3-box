@@ -676,3 +676,36 @@ def test_page_builder_leaves_the_navigation_bar_to_settings(tmp_path):
         blocks = await (await c.get("/api/blocks")).json()
         assert blocks["blocks"]["now-playing"]["nav_managed"] and blocks["blocks"]["up-next"]["nav_managed"]
     run(tmp_path, check)
+
+
+def test_videos_are_optimized_one_at_a_time(tmp_path, monkeypatch):
+    """A drive full of videos must not start an ffmpeg each at once (it ran the Pi out of memory)."""
+    import asyncio
+    import logging
+    import sys
+    from services.jb_admin import media_lib
+    log = tmp_path / "runs.log"
+    script = ("import sys, time; open(sys.argv[-2], 'a').write('start\\n'); time.sleep(0.3); "
+              "open(sys.argv[-2], 'a').write('end\\n'); open(sys.argv[-1], 'wb').write(b'x')")
+    monkeypatch.setattr(media_lib.ui_media, "encode_command",
+                        lambda src, part: [sys.executable, "-c", script, "-i", str(log), str(part)])
+
+    async def no_duration(path):
+        return 1.0
+    monkeypatch.setattr(media_lib, "probe_duration", no_duration)
+    monkeypatch.setattr(media_lib.shutil, "which", lambda name: "/usr/bin/" + name)
+
+    async def go():
+        lib = media_lib.MediaLibrary(tmp_path / "media", logging.getLogger("test"))
+        lib.incoming.mkdir(parents=True)
+        for k in range(3):
+            src = lib.incoming / f"clip{k}.mp4.src"
+            src.write_bytes(b"video")
+            lib.start_video(f"clip{k}.mp4", src)
+        await lib.wait()
+        return lib
+
+    lib = asyncio.run(go())
+    assert log.read_text().split() == ["start", "end"] * 3          # never two at once
+    assert sorted(p.name for p in (tmp_path / "media").glob("clip*")) == ["clip0.mp4", "clip1.mp4", "clip2.mp4"]
+    assert not lib.jobs

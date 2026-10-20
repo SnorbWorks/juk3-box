@@ -60,6 +60,10 @@ class MediaLibrary:
         self.log = log
         self.jobs: dict[str, dict] = {}            # final name -> {"progress", "error"}
         self._tasks: dict[str, asyncio.Task] = {}
+        # One ffmpeg at a time. A USB drive's videos (and the restart that
+        # resumes them) used to start one each at once: eight GoPro clips ran
+        # the Pi out of memory, and it froze and rebooted in a loop (2026-10-19).
+        self._encoder = asyncio.Semaphore(1)
 
     # Listing -----------------------------------------------------------------
 
@@ -143,19 +147,8 @@ class MediaLibrary:
         try:
             if shutil.which("ffmpeg") is None:
                 raise RuntimeError("ffmpeg isn't installed on the jukebox")
-            duration = await probe_duration(src)
-            cmd = ui_media.encode_command(src, part)
-            # Progress on stdout, as key=value lines.
-            cmd[cmd.index("-i"):cmd.index("-i")] = ["-progress", "pipe:1", "-nostats"]
-            self.log.info("optimizing uploaded video %s", name)
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            async for line in proc.stdout:
-                key, _, value = line.decode(errors="replace").strip().partition("=")
-                if key == "out_time_us" and duration and value.isdigit():
-                    self.jobs[name]["progress"] = min(0.99, int(value) / 1e6 / duration)
-            err = await proc.stderr.read()
-            if await proc.wait() != 0:
-                raise RuntimeError(err.decode(errors="replace").strip()[-300:] or "the video couldn't be read")
+            async with self._encoder:                 # waits its turn, still listed as optimizing
+                await self._run_ffmpeg(name, src, part)
             part.replace(self.folder / name)
             src.unlink(missing_ok=True)
             self.jobs.pop(name, None)
@@ -170,6 +163,21 @@ class MediaLibrary:
             src.unlink(missing_ok=True)
         finally:
             self._tasks.pop(name, None)
+
+    async def _run_ffmpeg(self, name: str, src: Path, part: Path) -> None:
+        duration = await probe_duration(src)
+        cmd = ui_media.encode_command(src, part)
+        # Progress on stdout, as key=value lines.
+        cmd[cmd.index("-i"):cmd.index("-i")] = ["-progress", "pipe:1", "-nostats"]
+        self.log.info("optimizing uploaded video %s", name)
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        async for line in proc.stdout:
+            key, _, value = line.decode(errors="replace").strip().partition("=")
+            if key == "out_time_us" and duration and value.isdigit():
+                self.jobs[name]["progress"] = min(0.99, int(value) / 1e6 / duration)
+        err = await proc.stderr.read()
+        if await proc.wait() != 0:
+            raise RuntimeError(err.decode(errors="replace").strip()[-300:] or "the video couldn't be read")
 
     async def wait(self) -> None:
         """For tests: wait for every running job."""
