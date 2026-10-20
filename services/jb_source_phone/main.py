@@ -40,6 +40,7 @@ def remember_bluetooth(on: bool) -> None:
 DBUS_RETRY_ATTEMPTS = 5
 DBUS_RETRY_DELAY_S = 0.5
 BUSY_WAIT_S = 60
+PLAY_BUSY_WAIT_S = 60     # a pick waits this long for a busy BlueZ (a library sync takes 20-50 s)
 
 # A whole library crawl normally takes well under a minute. BlueZ calls have
 # no timeout of their own, and a crawl that hung when the phone switched
@@ -236,7 +237,19 @@ class Phone:
         item_intro = await self.system_bus.introspect(BLUEZ, item_path)
         item_obj = self.system_bus.get_proxy_object(BLUEZ, item_path, item_intro)
         item_iface = item_obj.get_interface("org.bluez.MediaItem1")
-        await item_iface.call_play()
+        # "Busy" means BlueZ is still fetching a folder listing from the phone
+        # (a library sync running): wait it out, it isn't a stale path. A pick
+        # made during a sync got "busy", was taken for stale, and the re-sync
+        # piled on top knocked the phone's controls off (2026-10-19).
+        deadline = asyncio.get_running_loop().time() + PLAY_BUSY_WAIT_S
+        while True:
+            try:
+                await item_iface.call_play()
+                return
+            except DBusError as e:
+                if "busy" not in str(e).lower() or asyncio.get_running_loop().time() >= deadline:
+                    raise
+            await asyncio.sleep(0.5)
 
     async def transport(self, action: str):
         method = {
@@ -629,6 +642,10 @@ async def main() -> None:
         if action in ("play", "pause", "next", "previous"):
             await phone.transport(action)
         elif action == "play_item":
+            if sync_lock.locked():
+                # Reading the song list keeps BlueZ busy: the pick waits for it
+                # (Phone.play_item), and the screen says so.
+                await pick_problem(bus, cmd, "busy", retrying=True)
             try:
                 await phone.play_item(cmd["item_path"])
             except Exception as e:
@@ -687,13 +704,14 @@ async def main() -> None:
 
     async def play_fresh_copy(pick: dict) -> bool:
         """Play the pick's song from the latest crawl, by title and copy."""
-        title, copy, stale = pick["title"], pick["copy"], pick["stale"]
+        title, copy = pick["title"], pick["copy"]
         fresh = [t["item_path"] for t in last_tracks if t["title"] == title]
         if not fresh or phone is None:
             return False
         path = fresh[min(copy, len(fresh) - 1)]
-        if path == stale:
-            return False  # the path was current; something else is wrong
+        # The same path can be right: an iPhone's song paths survive a
+        # reconnect, and the first try may have failed for another reason
+        # (busy, no controls). Try it.
         try:
             await phone.play_item(path)
         except Exception:

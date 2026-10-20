@@ -156,3 +156,10 @@ def test_a_pick_given_up_on_the_wrong_app():
     v = d.failed({"title": "Bad Dreams", "reason": "wrong_app"}, 90.0)
     assert v["problem"] == "wrong_app" and not v["retry"]
     assert d.log[0]["headline"] == "Your phone is giving the jukebox Messages, not Music"
+
+
+def test_a_pick_during_a_song_list_read_says_one_moment():
+    d = doctor()
+    note = d.source_says({"title": "Bad Dreams", "reason": "busy", "retrying": True}, 1.0)
+    assert note["headline"] == "One moment" and note["problem"] == "retrying"
+    assert d.check(START_S + 30) is None                       # waiting out the read

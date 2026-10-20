@@ -138,7 +138,9 @@ class PickDoctor:
         if "retrying" in p.noted:
             return None
         p.noted.add("retrying")
-        if p.reason == "no_controls":
+        if p.reason == "busy":
+            headline, advice = "One moment", "The jukebox is reading the songs on your phone. Your pick plays as soon as it's done."
+        elif p.reason == "no_controls":
             headline, advice = "Reconnecting to your phone", "It stopped letting the jukebox control it. Your song will play in a moment."
         elif p.reason == "no_answer":
             headline, advice = "Trying that again", "Your phone was slow to answer. Your song will play in a moment."
