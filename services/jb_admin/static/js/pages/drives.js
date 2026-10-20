@@ -124,9 +124,12 @@ function driveCard(d) {
       h('div.drv-stats',
         stat('Songs', String(d.song_count ?? 0), d.plays ? `${d.plays} plays on this jukebox` : 'Not played yet'),
         stat('Pictures & videos', `${d.pictures || 0} + ${d.videos || 0}`,
-          imp ? `${imp.imported} imported${imp.waiting ? `, ${imp.waiting} waiting` : ''}` : '—'),
+          imp ? `${imp.imported} imported${imp.importing ? `, ${imp.importing} importing` : imp.waiting ? `, ${imp.waiting} new` : ''}` : '—'),
         stat('Space', d.total ? `${bytes(d.used)} of ${bytes(d.total)}` : '—', [d.fstype, used != null ? `${used}% full` : null].filter(Boolean).join(' · '))),
       d.total ? h('div.drv-bar', h('span', { style: `width:${used}%` })) : null,
+      imp?.waiting && !imp.importing && !d.scanning ? h('div',
+        button(`Import ${imp.waiting} new ${imp.waiting === 1 ? 'picture or video' : 'pictures and videos'}`,
+          { variant: 'primary', onclick: () => act('import', { id: d.id }, 'Importing. They show up in the Media library as they\'re ready.') }, 'image')) : null,
       songSkips.length || mediaSkips.length ? h('details.drv-skips',
         h('summary', `${songSkips.length + mediaSkips.length} not added`),
         h('ul', [...songSkips.map(s => skipRow(d, s, false)), ...mediaSkips.map(s => skipRow(d, s, true))])) : null));
@@ -158,16 +161,14 @@ function historyRow(d) {
 }
 
 function importCard() {
-  const s = data.settings || { auto: true, cap_mb: 2048 };
-  let auto = s.auto;
+  const s = data.settings || { cap_mb: 2048 };
   const cap = h('input', { type: 'number', min: 0, step: 256, value: s.cap_mb });
   return h('div.card',
     h('div.card-head', h('h2', 'Pictures and videos')),
     h('div.card-pad.stack',
-      h('p.muted', 'Pictures and videos on a drive are copied into the Media library, made right for the screen. Each is copied once: one you delete there doesn\'t come back.'),
-      switchControl(auto, v => { auto = v; }, 'Import them automatically'),
+      h('p.muted', 'When a drive has new pictures or videos, the jukebox asks before copying them into the Media library (on its screen, or with Import above), made right for the screen. Each is copied once: one you delete there doesn\'t come back.'),
       field('Media library limit (MB)', cap, 'Importing stops when the Media library reaches this size. Music is never copied: it plays from the drive.'),
-      h('div', button('Save', { variant: 'primary', onclick: () => act('settings', { auto, cap_mb: Number(cap.value) }, 'Saved.') }, 'check'))));
+      h('div', button('Save', { variant: 'primary', onclick: () => act('settings', { cap_mb: Number(cap.value) }, 'Saved.') }, 'check'))));
 }
 
 // -- Songs -----------------------------------------------------------------

@@ -19,6 +19,7 @@ const HANDLERS = {
   'jukebox/jb-source-phone/now-playing': np => nowPlayingFrom('phone', np),
   'jukebox/jb-source-local/now-playing': np => nowPlayingFrom('local', np),
   'jukebox/jb-source-local/event': e => store.set('driveEvent', { ...e, at: Date.now() }),
+  'jukebox/jb-admin/drive-offers': o => store.set('driveOffers', o.offers || []),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
   'jukebox/jb-source-phone/sync': s => store.set('phoneSync', s),
   'jukebox/jb-core/queue': q => store.set('queue', q),

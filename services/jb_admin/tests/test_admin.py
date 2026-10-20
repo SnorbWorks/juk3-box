@@ -569,7 +569,7 @@ def test_drives_page_combines_the_drive_and_the_library_and_sends_only_drive_com
         assert here["state"] == "plugged in" and here["used"] == 250 and here["pictures"] == 1
         assert here["songs"][0]["title"] == "Moon River" and here["songs"][0]["tags"]["title"] == "track01"
         assert old["state"] == "not plugged in" and "songs" not in old
-        assert data["settings"] == {"auto": True, "cap_mb": 2048}
+        assert data["settings"] == {"cap_mb": 2048}
         assert (await client.post("/api/drives/eject", json={"id": "6AD0"}, headers=H)).status == 503
         admin.bus = RecordingBus()
         assert (await client.post("/api/drives/eject", json={"id": "6AD0"}, headers=H)).status == 200
@@ -579,14 +579,37 @@ def test_drives_page_combines_the_drive_and_the_library_and_sends_only_drive_com
         assert (await client.post("/api/drives/edit", json={"item_path": "/etc/passwd"}, headers=H)).status == 400
         assert (await client.post("/api/drives/forget", json={"id": "OLD1"}, headers=H)).status == 200
         assert (await client.post("/api/drives/format", json={}, headers=H)).status == 404
-        assert (await client.post("/api/drives/settings", json={"auto": False, "cap_mb": 512}, headers=H)).status == 200
-        assert (await (await client.get("/api/drives", headers=H)).json())["settings"] == {"auto": False, "cap_mb": 512}
+        assert (await client.post("/api/drives/settings", json={"cap_mb": 512}, headers=H)).status == 200
+        assert (await (await client.get("/api/drives", headers=H)).json())["settings"] == {"cap_mb": 512}
         assert admin.bus.sent == [
             ("jukebox/jb-source-local/cmd", {"action": "eject", "id": "6AD0"}),
             ("jukebox/jb-library/cmd", {"action": "edit_drive_song", "item_path": "drive:6AD0/t.wav",
                                         "fields": {"artist": "Andy Williams"}}),
             ("jukebox/jb-library/cmd", {"action": "forget_drive", "id": "OLD1"}),
         ]
+    run(tmp_path, check)
+
+
+def test_drive_pictures_are_imported_only_when_the_owner_says_so(tmp_path):
+    async def check(client, admin):
+        admin.bus = RecordingBus()
+        drives = {"drives": [{"id": "6AD0", "label": "juk3box HD", "images": [{"path": "a.png", "size": 1}],
+                              "videos": [{"path": "b.mp4", "size": 2}]},
+                             {"id": "ADC1", "label": "Stick", "images": [{"path": "c.png", "size": 3}], "videos": []}]}
+        admin.drive_import.heard(drives)
+        await admin.publish_offers()
+        await admin.publish_offers()                   # unchanged: not sent again
+        offers = [o["id"] for o in admin.bus.sent[0][1]["offers"]]
+        assert admin.bus.sent[0][0] == "jukebox/jb-admin/drive-offers" and offers == ["6AD0", "ADC1"]
+        assert len(admin.bus.sent) == 1 and admin.drive_import.queue.empty()
+        await admin.heard_cmd({"action": "decline_drive", "id": "ADC1"})      # "Not now" at the cabinet
+        await admin.heard_cmd({"action": "import_drive", "id": "6AD0"})       # "Import" at the cabinet
+        assert admin.drive_import.queue.qsize() == 2
+        assert admin.bus.sent[-1] == ("jukebox/jb-admin/drive-offers", {"offers": []})
+        # The Drives page's Import button: the declined drive, after all.
+        assert (await client.post("/api/drives/import", json={"id": "ADC1"}, headers=H)).status == 200
+        assert admin.drive_import.queue.qsize() == 3
+        assert (await client.post("/api/drives/import", json={"id": "ADC1"}, headers=H)).status == 400
     run(tmp_path, check)
 
 

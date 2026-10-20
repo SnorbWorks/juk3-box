@@ -88,6 +88,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `analysis/audio/fast`, `slow`, `events`, `status` | stream, R state, event, R state | see [audio-analysis.md](audio-analysis.md) |
 | `<module>/heartbeat` | event | liveness, every module |
 | `jb-admin/changed` | event | the owner changed settings, layouts or the theme: `{"what": [...], "at": ...}` (see [configuration.md](configuration.md)) |
+| `jb-admin/drive-offers` | R state | drives with new pictures or videos, to ask before importing them: `{"offers": [{"id", "label", "pictures", "videos"}]}`. A drive answered "not now" leaves the list until it's plugged in again |
+| `jb-admin/cmd` | command | the cabinet's answer: `{"action": "import_drive" or "decline_drive", "id": drive id}` |
 
 ## Proving notes
 

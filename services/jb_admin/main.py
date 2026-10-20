@@ -115,6 +115,7 @@ class Admin:
         self.drive_import = DriveImport(self.media, Path(cfg["admin_dir"]) / "drive-imports.json", log,
                                         cfg["drive_media_cap_mb"], cfg["max_upload_mb"])
         self._import_task = None
+        self._offers_sent = None
         self.auth = Auth(Path(cfg["admin_dir"]))
         self.extensions = Extensions(REPO_DIR / "deploy" / "extensions.json")
         self.registry = Registry([Path(d) for d in cfg["module_dirs"]])
@@ -154,6 +155,31 @@ class Admin:
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
     DRIVES_TOPIC = "jukebox/jb-source-local/library"
+    # Drives with new pictures or videos, for the cabinet to ask "Import
+    # them?" (retained), and the cabinet's answers.
+    DRIVE_OFFERS_TOPIC = "jukebox/jb-admin/drive-offers"
+    CMD_TOPIC = "jukebox/jb-admin/cmd"
+
+    async def publish_offers(self) -> None:
+        """The drive offers, when they changed (or on a new connection)."""
+        offers = self.drive_import.offers()
+        if self.bus is None or offers == self._offers_sent:
+            return
+        await self.bus.publish(self.DRIVE_OFFERS_TOPIC, {"offers": offers}, retain=True)
+        self._offers_sent = offers
+
+    async def heard_cmd(self, payload) -> None:
+        """The cabinet's answer to "Import them?": {"action": "import_drive"
+        or "decline_drive", "id": drive id}."""
+        if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
+            return
+        if payload.get("action") == "import_drive":
+            n = self.drive_import.import_drive(payload["id"])
+            self.log.info("drives: importing %d files from %s (asked at the cabinet)", n, payload["id"])
+        elif payload.get("action") == "decline_drive":
+            self.drive_import.decline(payload["id"])
+            self.log.info("drives: not importing from %s for now", payload["id"])
+        await self.publish_offers()
 
     def heard_library(self, topic: str, payload) -> None:
         """Keeps only the names out of jb-library's snapshots."""
@@ -177,11 +203,13 @@ class Admin:
             try:
                 async with Bus(SERVICE_NAME, self.cfg["mqtt_host"], self.cfg["mqtt_port"]) as bus:
                     self.bus = bus
+                    self._offers_sent = None
                     self.log.info("connected to the bus")
                     heartbeat = asyncio.create_task(bus.run_heartbeat())
                     try:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
-                                      self.DRIVES_TOPIC, "jukebox/jb-library/drives", *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
+                                      self.DRIVES_TOPIC, "jukebox/jb-library/drives", self.CMD_TOPIC,
+                                      *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
                             await bus._client.subscribe(topic)
                         messages = bus._iter_messages()
                         async for topic, payload in messages:
@@ -192,6 +220,9 @@ class Admin:
                             elif topic == self.DRIVES_TOPIC:
                                 self.live["drives_local"] = payload
                                 self.drive_import.heard(payload)
+                                await self.publish_offers()
+                            elif topic == self.CMD_TOPIC:
+                                await self.heard_cmd(payload)
                             elif topic == "jukebox/jb-library/drives":
                                 self.live["drives_library"] = payload
                             else:
@@ -458,7 +489,7 @@ class Admin:
 
     # USB drives -----------------------------------------------------------------
 
-    DRIVE_ACTIONS = {"rescan", "eject", "mount", "forget", "edit", "settings", "reimport"}
+    DRIVE_ACTIONS = {"rescan", "eject", "mount", "forget", "edit", "settings", "reimport", "import"}
 
     async def get_drives(self, request):
         """Everything the Drives page shows: each drive (plugged in, ejected or
@@ -492,7 +523,8 @@ class Admin:
             view["pictures"] = len(mounted.get("images") or [])
             view["videos"] = len(mounted.get("videos") or [])
             view["songs"] = [{**s, "tags": tags.get(s.get("item_path"))} for s in d.get("songs") or []]
-            view["import"] = self.drive_import.status.get(d["id"])
+            status = self.drive_import.status.get(d["id"])
+            view["import"] = {**status, "importing": self.drive_import.importing(d["id"])} if status else None
         elif ejected:
             view["label"] = ejected.get("label") or view["label"]
         return view
@@ -507,15 +539,22 @@ class Admin:
                 cap = int(body.get("cap_mb"))
             except (TypeError, ValueError):
                 raise error(400, "The size limit should be a number of MB.")
-            return web.json_response(self.drive_import.save_settings(bool(body.get("auto")), cap))
+            return web.json_response(self.drive_import.save_settings(cap))
         drive_id = body.get("id")
-        if action in ("eject", "mount", "forget", "reimport") and (
+        if action in ("eject", "mount", "forget", "reimport", "import") and (
                 not isinstance(drive_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", drive_id)):
             raise error(400, "Which drive?")
         if action == "reimport":
             if not self.drive_import.reimport(drive_id, str(body.get("path") or "")):
                 raise error(400, "That file isn't on a drive that's plugged in.")
             return web.json_response({"ok": True})
+        if action == "import":
+            n = self.drive_import.import_drive(drive_id)
+            if not n:
+                raise error(400, "Nothing new to import from that drive.")
+            self.log.info("drives: importing %d files from %s", n, drive_id)
+            await self.publish_offers()
+            return web.json_response({"ok": True, "queued": n})
         if self.bus is None:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
         if action in ("rescan", "eject", "mount"):

@@ -1,10 +1,14 @@
 """Pictures and videos from USB drives, into the media library.
 
 jb-source-local lists what's on each drive it has scanned (pictures and
-videos with their sizes); this copies each new one into the owner's media
-library through the same door an upload uses (media_lib.add: pictures made
-right for the screen, videos re-encoded for the Pi). One at a time, in the
-background.
+videos with their sizes); when the owner says so, this copies each new one
+into the owner's media library through the same door an upload uses
+(media_lib.add: pictures made right for the screen, videos re-encoded for
+the Pi). One at a time, in the background.
+
+- Nothing is imported on its own: a drive with new pictures or videos is
+  offered (offers(); the cabinet asks "Import them?", the Drives page has
+  an Import button). "Not now" holds until the drive is plugged in again.
 
 - Each file is imported once, ever: the record (drive, path, size) is kept,
   so a picture the owner deleted from the library doesn't come back the
@@ -37,25 +41,24 @@ class DriveImport:
         self.file_limit = file_limit_mb * 1024 * 1024
         self.queue: asyncio.Queue = asyncio.Queue()
         self.pending: set[str] = set()
+        self.declined: set[str] = set()       # drive ids the owner said "not now" to, while plugged in
         self.status: dict[str, dict] = {}     # drive id -> {label, imported, waiting, skipped}
         try:
             self.done: dict = json.loads(state_path.read_text())
         except (OSError, ValueError):
             self.done = {}
 
-    # The owner's choices (the Drives page): import automatically, and the cap.
+    # The owner's choice (the Drives page): the cap.
     def settings(self) -> dict:
         try:
             s = json.loads(self.settings_path.read_text())
         except (OSError, ValueError):
             s = {}
         cap = s.get("cap_mb")
-        return {"auto": s.get("auto", True) is not False,
-                "cap_mb": cap if isinstance(cap, int) and cap >= 0 else self.default_cap_mb}
+        return {"cap_mb": cap if isinstance(cap, int) and cap >= 0 else self.default_cap_mb}
 
-    def save_settings(self, auto: bool, cap_mb: int) -> dict:
-        write_atomic(self.settings_path, json.dumps({"auto": bool(auto), "cap_mb": max(0, int(cap_mb))}))
-        self.heard(self.last)              # turned on: start on what's waiting
+    def save_settings(self, cap_mb: int) -> dict:
+        write_atomic(self.settings_path, json.dumps({"cap_mb": max(0, int(cap_mb))}))
         return self.settings()
 
     @property
@@ -90,14 +93,66 @@ class DriveImport:
         folder = self.media.folder
         return sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else 0
 
+    def _drives(self) -> list[dict]:
+        drives = self.last.get("drives") if isinstance(self.last, dict) else None
+        return [d for d in drives or [] if isinstance(d, dict) and d.get("id")]
+
+    def _new(self, drive: dict) -> list[dict]:
+        """A drive's pictures and videos not imported yet (nor on their way)."""
+        files = [i for i in (drive.get("images") or []) + (drive.get("videos") or [])
+                 if isinstance(i, dict) and i.get("path")]
+        return [i for i in files if self.key(drive["id"], i) not in self.done]
+
+    def offers(self) -> list[dict]:
+        """Drives to ask about: read, with new pictures or videos, none of
+        them on their way already, and not turned down while plugged in."""
+        out = []
+        for drive in self._drives():
+            if drive.get("scanning") or drive["id"] in self.declined:
+                continue
+            skipped = {s["path"] for s in (self.status.get(drive["id"]) or {}).get("skipped", [])}
+            new = [i for i in self._new(drive) if i["path"] not in skipped]
+            if not new or self.importing(drive["id"]):
+                continue
+            videos = {i["path"] for i in drive.get("videos") or [] if isinstance(i, dict)}
+            n_videos = sum(1 for i in new if i["path"] in videos)
+            out.append({"id": drive["id"], "label": drive.get("label") or "",
+                        "pictures": len(new) - n_videos, "videos": n_videos})
+        return out
+
+    def import_drive(self, drive_id: str) -> int:
+        """The owner said yes: queue the drive's new pictures and videos.
+        How many were queued (0: not plugged in, or nothing new)."""
+        self.declined.discard(drive_id)
+        queued = 0
+        for drive in self._drives():
+            if drive["id"] != drive_id or drive.get("scanning"):
+                continue
+            for item in self._new(drive):
+                k = self.key(drive_id, item)
+                if k not in self.pending:
+                    self.pending.add(k)
+                    self.queue.put_nowait((drive_id, item))
+                    queued += 1
+        return queued
+
+    def importing(self, drive_id: str) -> int:
+        """How many of the drive's files are on their way."""
+        return sum(1 for k in self.pending if k.startswith(f"{drive_id}/"))
+
+    def decline(self, drive_id: str) -> None:
+        """"Not now": don't ask again until the drive is plugged in again."""
+        self.declined.add(drive_id)
+
     def heard(self, payload: dict) -> None:
-        """jukebox/jb-source-local/library: queue what's new on each drive
-        (unless the owner turned automatic import off)."""
+        """jukebox/jb-source-local/library: what's new on each drive. Nothing
+        is queued here: the owner is asked first (offers())."""
         drives = payload.get("drives") if isinstance(payload, dict) else None
         if not isinstance(drives, list):
             return
         self.last = payload
-        auto = self.settings()["auto"]
+        # Unplugged: a "not now" is forgotten, so plugging it in asks again.
+        self.declined &= {d.get("id") for d in drives if isinstance(d, dict)}
         for drive in drives:
             drive_id = drive.get("id")
             if not drive_id or drive.get("scanning"):
@@ -109,13 +164,6 @@ class DriveImport:
             self.status[drive_id] = {"label": drive.get("label") or "", "files": len(files),
                                      "imported": len(files) - len(new), "waiting": len(new),
                                      "skipped": [s for s in skipped if any(i["path"] == s["path"] for i in new)]}
-            if not auto:
-                continue
-            for item in new:
-                k = self.key(drive_id, item)
-                if k not in self.pending:
-                    self.pending.add(k)
-                    self.queue.put_nowait((drive_id, item))
 
     async def run(self) -> None:
         while True:

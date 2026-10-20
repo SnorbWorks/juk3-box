@@ -43,23 +43,49 @@ def drain(imp):
     asyncio.run(go())
 
 
-def test_a_drives_pictures_and_videos_are_imported_once(tmp_path, monkeypatch):
+def test_nothing_is_imported_until_the_owner_says_so(tmp_path, monkeypatch):
     imp, media = setup(tmp_path, monkeypatch)
     imp.heard(library(scanning=True))
-    assert imp.queue.empty()                       # not until the scan is done
+    assert imp.offers() == []                      # not until the scan is done
     imp.heard(library())
+    assert imp.queue.empty()
+    assert imp.offers() == [{"id": "6AD0", "label": "juk3box HD", "pictures": 1, "videos": 1}]
+    assert imp.import_drive("6AD0") == 2
+    assert imp.offers() == []                      # on their way: not asked again
     drain(imp)
     assert media.added == ["crowd.png", "spin.mp4"]
+    assert imp.offers() == []
+
+
+def test_not_now_holds_until_the_drive_is_plugged_in_again(tmp_path, monkeypatch):
+    imp, media = setup(tmp_path, monkeypatch)
+    imp.heard(library())
+    imp.decline("6AD0")
+    imp.heard(library())                           # a rescan: still not now
+    assert imp.offers() == []
+    imp.heard({"drives": []})                      # unplugged
+    imp.heard(library())                           # and back
+    assert [o["id"] for o in imp.offers()] == ["6AD0"]
+    assert imp.queue.empty()
+
+
+def test_a_drives_pictures_and_videos_are_imported_once(tmp_path, monkeypatch):
+    imp, media = setup(tmp_path, monkeypatch)
+    imp.heard(library())
+    imp.import_drive("6AD0")
+    drain(imp)
     (media.folder / "crowd.png").unlink()          # the owner deletes one
     again = di.DriveImport(media, tmp_path / "imports.json", logging.getLogger("t"), 10, 600)
     again.heard(library())                         # drive plugged in again, after a restart
-    drain(again)
+    assert again.offers() == [] and again.import_drive("6AD0") == 0
     assert media.added == ["crowd.png", "spin.mp4"]
 
 
 def test_the_media_library_cap_is_kept(tmp_path, monkeypatch):
     imp, media = setup(tmp_path, monkeypatch, cap_mb=0)
     imp.heard(library())
+    imp.import_drive("6AD0")
     drain(imp)
     assert media.added == []
     assert [s["reason"] for s in imp.status["6AD0"]["skipped"]] == ["media library full"] * 2
+    assert imp.offers() == []                      # skipped: not asked about again

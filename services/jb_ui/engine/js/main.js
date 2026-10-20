@@ -337,6 +337,51 @@ function watchSystem() {
     setTimeout(() => closePopup('notice'), NOTICE_MS);
   });
 
+  // A drive with new pictures or videos (jb-admin/drive-offers): ask before
+  // importing them into the media library. Asked once per drive here; the
+  // answer goes to jb-admin, which offers it again only after a replug.
+  // Waits for the screen to be free (a notice, a menu), checking again
+  // every few seconds.
+  const asked = new Set();
+  let showing = null;                         // the drive being asked about
+  const offerImport = () => {
+    const offers = store.get('driveOffers') || [];
+    for (const id of asked) if (!offers.some(o => o.id === id)) asked.delete(id);
+    // Unplugged (or imported from the admin) while asking: stop asking.
+    if (showing && !offers.some(o => o.id === showing.id)) showing.close();
+    const o = offers.find(o => !asked.has(o.id));
+    if (!o || currentMode() !== 'select' || popupOpen()) return;
+    asked.add(o.id);
+    const count = (n, one, many) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+    const what = [o.pictures ? count(o.pictures, 'picture', 'pictures') : null,
+      o.videos ? count(o.videos, 'video', 'videos') : null].filter(Boolean).join(' and ');
+    let answered = false;
+    const back = currentStopKey();
+    const answer = yes => {
+      if (answered) return;
+      answered = true;
+      if (yes !== null) publish('jukebox/jb-admin/cmd', { action: yes ? 'import_drive' : 'decline_drive', id: o.id });
+      closePopup('confirm');
+      focusKey(back);
+    };
+    showing = { id: o.id, close: () => answer(null) };
+    openPopup('confirm', {
+      title: 'Would you like to import?',
+      message: `${o.label || 'This USB drive'} has ${what}. Copy them into the media library?`,
+      yesLabel: 'Import',
+    }, {
+      stops: { yes: () => answer(true), no: () => answer(false) },
+      // Closed some other way (another popup): ask again later.
+      onClose: () => {
+        showing = null;
+        if (!answered) asked.delete(o.id);
+      },
+    });
+    focusKey('popup:confirm:no');
+  };
+  store.watch(html, 'driveOffers', offerImport);
+  setInterval(offerImport, 5000);
+
   // A pick that didn't play: jb-core's pick doctor says why and what to
   // do ("Turn Bluetooth off and on again on your phone"), or that it's
   // already trying again. Shown over another notice, not over a menu.
