@@ -9,7 +9,7 @@ to the default theme OVERLAY_HOLD_S after the last change. The starting
 volume is read from PipeWire directly, since jb-audio's state isn't retained
 and startup must not trigger the overlay.
 
-Theme 0 (idle, all white) is the default. In the service the music picks the
+Theme 0 (idle, all white) and 5 (colour stripes) are idle looks. In the service the music picks the
 look (MusicLooks, from jb-analyzer via the shared AudioFeed); run standalone,
 themes 1-3 play on fake audio.
 
@@ -35,6 +35,7 @@ from services.jb_lights.themes import (
     volume_bar_theme3 as theme3,
 )
 from services.jb_lights.themes.volume_bar_idle import Idle
+from services.jb_lights.themes.volume_bar_stripes import Stripes
 from services.jb_lights.themes.volume_bar_theme4 import VolumeFill
 from services.jb_lights.ws2812_spi import WS2812SPI
 
@@ -76,7 +77,7 @@ class Theme3:
         return _scale(self.analyzer.frame(theme3.fake_spectrum(t), dt), theme3.BRIGHTNESS)
 
 
-THEMES = {0: Idle, 1: Theme1, 2: Theme2, 3: Theme3}
+THEMES = {0: Idle, 1: Theme1, 2: Theme2, 3: Theme3, 5: Stripes}   # 4 is the volume fill
 
 DROP_FLASH_S = 0.8
 DROP_FLASH = 0.6

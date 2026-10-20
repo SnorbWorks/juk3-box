@@ -2,7 +2,7 @@ import time
 
 from services.jb_lights import accent, matrix
 from services.jb_lights.accent_lights import Looks
-from services.jb_lights.audio_feed import AudioFeed, LookPicker, Snapshot
+from services.jb_lights.audio_feed import WAVES_LOOK, AudioFeed, LookPicker, Snapshot
 from services.jb_lights.levelbar import MusicLooks
 from services.jb_lights.themes.volume_bar_idle import Idle
 
@@ -45,7 +45,7 @@ def test_idle_rides_over_gaps_between_songs():
     p = LookPicker("auto")
     _, t = play(p, 0, 20, 0.7)
     assert p.update(t + 2, False, 0.7) == "eq"
-    assert p.update(t + 5, False, 0.7) == "idle"
+    assert p.update(t + 5, False, 0.7) == WAVES_LOOK          # idle starts on the waves
 
 
 def test_pinned_look():
@@ -63,7 +63,7 @@ def test_feed_turns_the_stream_into_snapshots():
     assert feed.snapshot(now=1.2).drop_age < 0.2
     quiet = feed.snapshot(now=3.0)                    # no fast frames: no sound
     assert quiet.level == 0.0 and quiet.bands == [0.0] * 32
-    assert feed.snapshot(now=10.0).look == "idle"
+    assert feed.snapshot(now=10.0).look == WAVES_LOOK
 
 
 def test_resample_keeps_the_shape():
@@ -121,26 +121,38 @@ def test_malformed_messages_are_ignored():
     feed = AudioFeed()
     for payload in (b"not json", b"[1, 2]", b'{"level": null}', b'{"bands": "x", "level": "loud"}'):
         feed._on_message(None, None, Msg("jukebox/analysis/audio/fast", payload))
-    assert feed.snapshot().look == "idle"
+    assert feed.snapshot().look == WAVES_LOOK
 
 
-def test_idle_washes_into_the_ribbon_every_few_minutes_then_back():
-    from services.jb_lights.audio_feed import INTERLUDE_EVERY_S, INTERLUDE_S
+def test_idle_starts_on_the_waves_then_the_city_and_round_again():
+    from services.jb_lights.audio_feed import IDLE_CITY_S, IDLE_WAVES_S
     p = LookPicker("auto")
-    assert p.update(0, False, None) == "idle"
-    assert p.update(INTERLUDE_EVERY_S - 1, False, None) == "idle"
-    assert p.update(INTERLUDE_EVERY_S + 1, False, None) == "ribbon"
-    assert p.update(INTERLUDE_EVERY_S + INTERLUDE_S - 1, False, None) == "ribbon"
-    assert p.update(INTERLUDE_EVERY_S + INTERLUDE_S + 1, False, None) == "idle"
+    assert p.update(0, False, None) == "ribbon"
+    assert p.update(IDLE_WAVES_S - 1, False, None) == "ribbon"
+    assert p.update(IDLE_WAVES_S + 1, False, None) == "idle"
+    assert p.update(IDLE_WAVES_S + IDLE_CITY_S - 1, False, None) == "idle"
+    assert p.update(IDLE_WAVES_S + IDLE_CITY_S + 1, False, None) == "ribbon"
 
 
-def test_music_during_the_wash_takes_over_and_the_idle_clock_restarts_after():
-    from services.jb_lights.audio_feed import IDLE_AFTER_S, INTERLUDE_EVERY_S
+def test_music_during_the_waves_takes_over_and_the_idle_clock_restarts_after():
+    from services.jb_lights.audio_feed import IDLE_AFTER_S, IDLE_WAVES_S
     p = LookPicker("auto")
-    p.update(0, False, None)
-    assert p.update(INTERLUDE_EVERY_S + 5, False, None) == "ribbon"
-    look, t = play(p, INTERLUDE_EVERY_S + 10, 2, 0.8)
+    assert p.update(5, False, None) == "ribbon"
+    look, t = play(p, 10, 2, 0.8)
     assert look == "eq"                                   # a lively song starts lively
     quiet = t + IDLE_AFTER_S
-    assert p.update(quiet + 1, False, 0.8) == "idle"
-    assert p.update(quiet + INTERLUDE_EVERY_S - 5, False, 0.8) == "idle"
+    assert p.update(quiet + 1, False, 0.8) == "ribbon"     # back on the waves
+    assert p.update(quiet + IDLE_WAVES_S + 5, False, 0.8) == "idle"
+
+
+def test_the_bar_idles_on_colour_stripes_across_all_36_strips():
+    from services.jb_lights.levelbar import THEMES
+    from services.jb_lights.main import BAR_THEME
+    from services.jb_lights.themes.volume_bar_stripes import Stripes
+    assert THEMES[BAR_THEME] is Stripes
+    f = Stripes().frame(0, 0.02)
+    assert len(f) == matrix.NUM_PIXELS
+    first = [f[matrix.index(c, 0)] for c in range(matrix.COLS)]
+    assert first[:6] == [(51, 0, 0), (0, 51, 0), (0, 0, 51), (51, 34, 0), (0, 51, 51), (51, 0, 51)]
+    assert first[6:12] == first[:6] and first[35] == (51, 0, 51)
+    assert all(f[matrix.index(c, r)] == first[c] for c in range(matrix.COLS) for r in range(matrix.ROWS))

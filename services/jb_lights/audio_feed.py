@@ -4,8 +4,8 @@
 One AudioFeed is shared by the accent chain and the level bar (each runs in
 its own thread), so both always agree on the look:
 
-  idle    nothing playing for a few seconds -> the idle looks (city, white bar);
-          every few minutes the whole cabinet washes into the ribbon for a minute
+  idle    nothing playing for a few seconds -> the flowing waves (the ribbon) for
+          3 minutes, then the idle looks (city, striped bar) for 3, and round again
   show    music playing -> the light show: the director (show/director.py) turns
           the whole stream -- drums, the beat clock, gaps, hits, sections,
           builds and drops -- into cues, in a style picked for the song's
@@ -40,9 +40,9 @@ START_SPLIT = 0.48        # first pick of a song: eq at or above this
 MIN_DWELL_S = 30.0        # a look stays at least this long before the mood may change it
 SETTLE_S = 12.0           # early in a song the mood is still settling (its window holds the last song):
                           # follow it directly until then
-INTERLUDE_EVERY_S = 120.0  # idle: after this long on the idle looks...
-INTERLUDE_S = 60.0         # ...the whole cabinet washes into the ribbon for this long, then back
-INTERLUDE_LOOK = "ribbon"
+IDLE_WAVES_S = 180.0      # idle: the whole cabinet starts on the waves for this long (user, 2026-10-19)...
+IDLE_CITY_S = 180.0       # ...then the idle looks for this long, and round again
+WAVES_LOOK = "ribbon"
 
 
 class LookPicker:
@@ -67,8 +67,8 @@ class LookPicker:
         elif self.quiet_since is None:
             self.quiet_since = now
         if not playing:
-            phase = (now - self.quiet_since) % (INTERLUDE_EVERY_S + INTERLUDE_S)
-            want = INTERLUDE_LOOK if phase >= INTERLUDE_EVERY_S else "idle"
+            phase = (now - self.quiet_since) % (IDLE_WAVES_S + IDLE_CITY_S)
+            want = WAVES_LOOK if phase < IDLE_WAVES_S else "idle"
         elif self.mode in ("show", "eq", "ribbon"):
             want = self.mode
         elif started or now - self.play_start < SETTLE_S:

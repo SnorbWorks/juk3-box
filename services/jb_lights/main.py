@@ -2,7 +2,7 @@
 
 Drives every LED chain:
   - buttons      buttons-theme1, in the main thread (reacts to jb-core)
-  - level bar    levelbar.run() in its own thread (idle white, volume fill)
+  - level bar    levelbar.run() in its own thread (idle stripes, volume fill)
   - accent chain accent_lights.run() in its own thread: the upper panel and
                  footlights, accent-city at idle
 While music plays, all of them put on one light show from jb-analyzer's
@@ -29,7 +29,7 @@ from services.jb_lights.audio_feed import AudioFeed
 from services.jb_lights.themes import buttons_theme1
 from shared import hardware
 
-BAR_THEME = 0   # idle white; while music plays the analyzer's mood picks the look
+BAR_THEME = 5   # idle colour stripes beside the city (user, 2026-10-19); music picks the rest
 
 
 def main():
