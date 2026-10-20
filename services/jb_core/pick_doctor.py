@@ -9,6 +9,10 @@ time, it checks what it knows, in order:
 
   no_controls  the phone is connected for audio only: it isn't letting the
                jukebox control it (its AVRCP session dropped)
+  wrong_app    the phone is giving the jukebox another app (Messages, after a
+               voice message) instead of Music: no song list, no playing.
+               Only playing something in Music fixes it, not a reconnect
+               (2026-10-19). Also said when the phone connects like that.
   no_answer    the phone didn't answer the play request
   not_found    the phone answered, but couldn't find the song
   no_start     the phone took the pick and never started it (another app
@@ -34,7 +38,11 @@ SOUND_S = 12.0            # once playing, sound should reach the cabinet by now
 LOG_LEN = 20
 STUCK_AFTER = 3           # this many picks failing in a row, with nothing playing between: stop
 
+MUSIC_APP = "Music"
+
 ADVICE = {
+    "wrong_app": ("Your phone is giving the jukebox {app}, not Music",
+                  "Open the Music app on your phone and play any song for a moment. Your pick plays after."),
     "no_controls": ("Your phone isn't letting the jukebox control it",
                     "Turn Bluetooth off and on again on your phone. Your song will play when it reconnects."),
     "no_answer": ("Your phone didn't answer",
@@ -62,6 +70,7 @@ class Pick:
     started_at: float | None = None
     retrying_at: float | None = None
     reason: str | None = None        # the source's own report (pick-problem)
+    noted: set = field(default_factory=set)   # notes already on the screen ("retrying", "wrong_app")
 
 
 @dataclass
@@ -72,6 +81,19 @@ class PickDoctor:
     sound_at: float | None = None                  # the last analyzer frame
     log: list = field(default_factory=list)
     in_row: int = 0                                # picks failed in a row (play-error), nothing playing between
+    warned_app: str | None = None                  # the wrong app last warned about on connecting
+
+    def connected(self, payload: dict) -> dict | None:
+        """jb-source-phone/connected. A note for the screen when the phone
+        connects presenting another app instead of Music (once per app)."""
+        self.phone = payload
+        if not wrong_app(payload):
+            self.warned_app = None
+            return None
+        if payload.get("app") == self.warned_app:
+            return None
+        self.warned_app = payload.get("app")
+        return self._note("wrong_app", {})
 
     def picked(self, track: dict, now: float):
         self.pick = Pick(track, now)
@@ -94,18 +116,28 @@ class PickDoctor:
     def source_says(self, payload: dict, now: float) -> dict | None:
         """The source's own report on a pick (jb-source-phone/pick-problem):
         what went wrong, and whether it's healing it. Returns a note for the
-        screen the first time it starts retrying."""
+        screen the first time it starts retrying, or straight away when the
+        phone is presenting the wrong app."""
         p = self.pick
         if not p or payload.get("title") not in (None, p.track.get("title")):
             return None
         if payload.get("reason"):
             p.reason = payload["reason"]
+        if payload.get("app"):
+            self.phone = {**self.phone, "app": payload["app"], "browsable": False}
+        if p.reason == "wrong_app":
+            # The source keeps the pick until Music is back: say how, now.
+            p.retrying_at = now
+            if "wrong_app" in p.noted:
+                return None
+            p.noted.add("wrong_app")
+            return self._note("wrong_app", p.track)
         if not payload.get("retrying"):
             return None
-        first = p.retrying_at is None
         p.retrying_at = now
-        if not first:
+        if "retrying" in p.noted:
             return None
+        p.noted.add("retrying")
         if p.reason == "no_controls":
             headline, advice = "Reconnecting to your phone", "It stopped letting the jukebox control it. Your song will play in a moment."
         elif p.reason == "no_answer":
@@ -114,7 +146,7 @@ class PickDoctor:
             headline, advice = "Finding that song again", "Your phone's song list had changed. One moment."
         return {"title": p.track.get("title"), "artist": p.track.get("artist"), "problem": "retrying",
                 "headline": headline, "advice": advice,
-                "retry": False}
+                "retry": False, "note": True}
 
     def failed(self, payload: dict, now: float) -> dict | None:
         """The source gave up on the pick (play-error): diagnose now."""
@@ -163,12 +195,26 @@ class PickDoctor:
             return "no_sound"
         if self.phone.get("connected") and self.phone.get("controls") is False:
             return "no_controls"
+        if wrong_app(self.phone) or self.pick.reason == "wrong_app":
+            return "wrong_app"
         if self.pick.reason in ADVICE:
             return self.pick.reason
         return "no_start"
 
+    def _words(self, problem: str) -> tuple[str, str]:
+        app = self.phone.get("app") or "another app"
+        headline, advice = ADVICE[problem]
+        return headline.format(app=app), advice.format(app=app)
+
+    def _note(self, problem: str, track: dict) -> dict:
+        headline, advice = self._words(problem)
+        if problem == "wrong_app" and not track:      # on connecting: no pick to promise
+            advice = "Open the Music app on your phone and play any song for a moment, so the jukebox can see your songs."
+        return {"title": track.get("title"), "artist": track.get("artist"), "problem": problem,
+                "headline": headline, "advice": advice, "retry": False, "note": True}
+
     def _verdict(self, problem: str, now: float) -> dict:
-        title, advice = ADVICE[problem]
+        title, advice = self._words(problem)
         verdict = {"title": self.pick.track.get("title"), "artist": self.pick.track.get("artist"),
                    "problem": problem, "headline": title, "advice": advice,
                    "retry": problem in RETRY_AFTER_RECONNECT, "track": self.pick.track}
@@ -176,3 +222,9 @@ class PickDoctor:
         self.log = [{"at": round(time.time()), **{k: v for k, v in verdict.items() if k != "track"}},
                     *self.log][:LOG_LEN]
         return verdict
+
+
+def wrong_app(phone: dict) -> bool:
+    """Connected, with no song list, and presenting an app that isn't Music."""
+    app = phone.get("app")
+    return bool(phone.get("connected") and phone.get("browsable") is False and app and app != MUSIC_APP)

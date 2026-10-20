@@ -114,3 +114,45 @@ def test_picks_failing_in_a_row_get_stuck_and_a_play_clears_it():
     v = d.stuck_verdict()
     assert v["problem"] == "stuck" and "Shuffle is off" in v["advice"]
     assert not d.stuck and d.log[0]["problem"] == "stuck"
+
+
+MESSAGES = {"connected": True, "name": "iPhone", "app": "Messages", "browsable": False}
+
+
+def test_connecting_with_the_wrong_app_is_said_once_per_app():
+    d = PickDoctor()
+    note = d.connected(MESSAGES)
+    assert note["problem"] == "wrong_app" and note["note"]
+    assert "Messages" in note["headline"] and "Music app" in note["advice"]
+    assert "Your pick" not in note["advice"]
+    assert d.connected(MESSAGES) is None                       # not again for the same app
+    assert d.connected({**MESSAGES, "app": "Music", "browsable": True}) is None
+    assert d.connected(MESSAGES) is not None                   # back on Messages later: say it again
+
+
+def test_music_still_bringing_its_song_list_is_not_the_wrong_app():
+    d = PickDoctor()
+    assert d.connected({**MESSAGES, "app": "Music"}) is None
+    assert d.connected({**MESSAGES, "app": None}) is None
+
+
+def test_a_pick_on_the_wrong_app_says_how_at_once_then_waits():
+    d = doctor()
+    d.connected(MESSAGES)
+    d.picked(SONG, 0.0)
+    note = d.source_says({"title": "Bad Dreams", "reason": "wrong_app", "retrying": True, "app": "Messages"}, 1.0)
+    assert note["problem"] == "wrong_app" and note["title"] == "Bad Dreams"
+    assert d.source_says({"title": "Bad Dreams", "reason": "wrong_app", "retrying": True}, 2.0) is None
+    assert d.check(START_S + 1) is None                        # waiting for Music
+    d.heard("Bad Dreams", "playing", 30.0)                     # the owner played something in Music
+    d.sound(31.0)
+    assert d.check(32.0) is None and d.pick is None
+
+
+def test_a_pick_given_up_on_the_wrong_app():
+    d = doctor()
+    d.connected(MESSAGES)
+    d.picked(SONG, 0.0)
+    v = d.failed({"title": "Bad Dreams", "reason": "wrong_app"}, 90.0)
+    assert v["problem"] == "wrong_app" and not v["retry"]
+    assert d.log[0]["headline"] == "Your phone is giving the jukebox Messages, not Music"

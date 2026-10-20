@@ -5,6 +5,7 @@ def test_policy_option_c():
     assert rc.window_for("boot") == 600
     assert rc.window_for("drop", was_playing=True) == 180
     assert rc.window_for("drop", was_playing=False) is None
+    assert rc.window_for("pick") == 180
 
 
 def test_retry_slows_after_the_first_minute():

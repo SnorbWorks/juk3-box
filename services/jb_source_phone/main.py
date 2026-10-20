@@ -71,6 +71,9 @@ PICK_RECONNECT_MIN_S = 120
 WAITING_PICK_S = 90
 
 
+MUSIC_APP = "Music"
+
+
 class BrowseLost(RuntimeError):
     """The phone's browse cursor is somewhere the Songs list can't be reached
     from (Playlists, NowPlaying, deep in another branch)."""
@@ -110,6 +113,7 @@ class Phone:
         self.player_iface = None
         self.player_props_iface = None
         self.name = None
+        self.app = None           # the app the phone is presenting ("Music", "Messages"...)
 
     async def setup(self):
         dev_intro = await self.system_bus.introspect(BLUEZ, self.device_path)
@@ -122,6 +126,10 @@ class Phone:
         player_obj = self.system_bus.get_proxy_object(BLUEZ, self.player_path, player_intro)
         self.player_iface = player_obj.get_interface("org.bluez.MediaPlayer1")
         self.player_props_iface = player_obj.get_interface("org.freedesktop.DBus.Properties")
+        try:
+            self.app = (await self.player_props_iface.call_get("org.bluez.MediaPlayer1", "Name")).value or None
+        except DBusError:
+            self.app = None
         # Browsing (MediaFolder1) is optional: iOS doesn't always offer it
         # when it connects -- seen live on a cold boot, where player0 had only
         # MediaPlayer1 for minutes. Playback control and now-playing work
@@ -135,6 +143,14 @@ class Phone:
     @property
     def can_browse(self) -> bool:
         return self.folder_iface is not None
+
+    @property
+    def wrong_app(self) -> bool:
+        """iOS hands the controls to whichever app last made a sound. When
+        that's Messages (a voice message, 2026-10-19) there's no song list and
+        nothing plays, and no reconnect helps: only playing something in
+        Music does."""
+        return not self.can_browse and self.app is not None and self.app != MUSIC_APP
 
     async def browse_state(self) -> tuple[str, int]:
         """(folder name, item count) as BlueZ reports them."""
@@ -329,7 +345,7 @@ async def main() -> None:
         """What went wrong with a pick, for jb-core's pick doctor."""
         await bus.publish(f"jukebox/{SERVICE_NAME}/pick-problem",
                           {"title": cmd.get("title"), "item_path": cmd.get("item_path"),
-                           "reason": reason, "retrying": retrying})
+                           "reason": reason, "retrying": retrying, "app": phone.app if phone else None})
 
     async def wait_for_phone(bus: Bus, pick: dict, reason: str):
         """Keep the pick, reconnect the phone, and play it after the
@@ -348,23 +364,28 @@ async def main() -> None:
                                   {**pick["cmd"], "reason": "no_controls" if phone is None else reason})
         asyncio.create_task(give_up())
 
+        if reason == "wrong_app":
+            log.info("keeping %r until the phone presents Music (it's on %r)", pick["title"], phone.app if phone else None)
+            return
         if last_pick_reconnect_at is not None and now() - last_pick_reconnect_at < PICK_RECONNECT_MIN_S:
             log.info("not reconnecting for %r: reconnected for a pick moments ago", pick["title"])
             return
-        if phone is not None:
-            path = phone.device_path
-        else:
-            audio = [d for d in await rc.phones(system_bus) if d[3]]
-            device = next((d for d in audio if d[0] == lock.owner), audio[0] if audio else None)
-            if device is None:
-                return
-            path = device[1]
+        audio = [d for d in await rc.phones(system_bus) if d[3]]
+        device = next((d for d in audio if d[0] == lock.owner), audio[0] if audio else None)
+        if device is None:
+            return
+        mac, path = device[0], device[1]
         last_pick_reconnect_at = now()
         log.info("reconnecting the phone to play %r (%s)", pick["title"], reason)
+        # Our own drop (drop_link marks it leaving, so the watcher doesn't take
+        # it for the owner's choice and give up), then the usual retrying
+        # reconnect: one attempt alone failed or hung (2026-10-19).
         try:
-            await rc.reconnect(system_bus, path)
+            await drop_link(mac, path)
         except Exception:
-            log.exception("reconnect for a pick failed")
+            log.exception("disconnect for a pick failed")
+        await asyncio.sleep(3)
+        start_reconnect(bus, "pick")
 
     async def sync_library_logged(bus: Bus):
         # Fired as a background task -- log failures instead of letting them
@@ -470,10 +491,13 @@ async def main() -> None:
                 log.exception("couldn't update the phone book")
             await bus.publish(
                 f"jukebox/{SERVICE_NAME}/connected",
-                {"connected": True, "name": phone.name, "mac": phone.mac},
+                {"connected": True, "name": phone.name, "mac": phone.mac,
+                 "app": phone.app, "browsable": phone.can_browse},
                 retain=True,
             )
-            if not phone.can_browse:
+            if phone.wrong_app:
+                log.info("phone is presenting %r, not Music: no song list until Music plays", phone.app)
+            elif not phone.can_browse:
                 log.info("phone has no browsing yet -- library sync will run when it appears")
             elif phone.player_path != synced_player_path:
                 asyncio.create_task(sync_library_logged(bus))
@@ -610,7 +634,8 @@ async def main() -> None:
             except Exception as e:
                 log.exception("play_item failed: %r", cmd["item_path"])
                 reason = "no_answer" if "timed out" in str(e).lower() or isinstance(e, asyncio.TimeoutError) else None
-                await pick_problem(bus, cmd, reason, retrying=True)
+                if not phone.wrong_app:
+                    await pick_problem(bus, cmd, reason, retrying=True)
                 if not await replay_after_resync(bus, cmd, reason or "no_answer"):
                     await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", {**cmd, "reason": reason or "not_found"})
         elif action == "crawl":
@@ -639,6 +664,9 @@ async def main() -> None:
         if phone is not None and not phone.can_browse and not lease:
             # No browsing to re-sync with, and it may never come on its own:
             # reconnect for a fresh session, and play the pick after its sync.
+            if phone.wrong_app:
+                asyncio.create_task(wait_for_phone(bus, pick, "wrong_app"))
+                return True
             log.info("play path looks stale and the phone isn't browsable; reconnecting to retry %r", title)
             asyncio.create_task(wait_for_phone(bus, pick, reason))
             return True
@@ -847,7 +875,7 @@ async def main() -> None:
                         return
                     by_mac = {d[0]: d for d in devs}
                     order = book.order(list(by_mac))
-                    if event == "drop" and lock.owner in by_mac:
+                    if event in ("drop", "pick") and lock.owner in by_mac:
                         order = [lock.owner]   # its place is held; no one else
                     for mac in order:
                         _, path, name, _ = by_mac[mac]

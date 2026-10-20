@@ -251,16 +251,27 @@ async def autoplay_after_failure(bus: Bus, q: Queue, log) -> None:
 async def report_pick(bus: Bus, q: Queue, verdict: dict, log) -> None:
     """A pick went wrong: say why on the screen and the keypad, keep a record
     (retained, for the admin), and if a reconnect could fix it, put the song
-    back at the front of the queue so it plays when the phone is back."""
-    if verdict["problem"] != "retrying":
+    back at the front of the queue so it plays when the phone is back.
+    A new pick drops it again (drop_retries): what was picked last wins."""
+    if not verdict.get("note"):
         log.warning("pick problem: %r: %s", verdict.get("title"), verdict["problem"])
         if verdict.get("retry"):
-            q.manual.insert(0, verdict["track"])
+            q.manual.insert(0, {**verdict["track"], "retry": True})
             q.expected_title = None
             q.playing = False
             await publish_queue(bus, q)
         await bus.publish("jukebox/jb-core/pick-log", {"problems": q.doctor.log}, retain=True)
     await bus.publish("jukebox/jb-core/pick-problem", {k: v for k, v in verdict.items() if k != "track"})
+
+
+def drop_retries(q: Queue, log) -> None:
+    """A song put back to retry (report_pick) gives way to a new pick: the
+    owner has moved on (2026-10-19: "Dissolve" picked, the retried "Take My
+    Breath" played instead)."""
+    dropped = [t["title"] for t in q.manual if t.get("retry")]
+    if dropped:
+        log.info("new pick: dropping the retry of %s", ", ".join(dropped))
+        q.manual = [t for t in q.manual if not t.get("retry")]
 
 
 async def check_picks(bus: Bus, q: Queue, log) -> None:
@@ -317,7 +328,11 @@ async def main() -> None:
                 was_connected = q.phone_connected
                 had_controls = q.doctor.phone.get("controls") is not False
                 q.phone_connected = bool(payload.get("connected"))
-                q.doctor.phone = payload
+                note = q.doctor.connected(payload)
+                if note:
+                    # Connected, but presenting Messages (say) instead of Music.
+                    log.info("phone connected presenting %r, not Music", payload.get("app"))
+                    await report_pick(bus, q, note, log)
                 # Back with controls after an audio-only spell (Bluetooth
                 # turned off and on at the phone) counts as coming back.
                 back = q.phone_connected and payload.get("controls") is not False and (
@@ -442,6 +457,7 @@ async def main() -> None:
                 if action == "select":
                     track = payload.get("track")
                     if track:
+                        drop_retries(q, log)
                         q.manual.append(track)
                         q.doctor.in_row = 0       # a fresh try
                         log.info("queued manual selection: %s", track.get("title"))
@@ -460,6 +476,7 @@ async def main() -> None:
                     # nothing is playing, else wait their turn.
                     tracks = [t for t in payload.get("tracks") or [] if t]
                     if tracks:
+                        drop_retries(q, log)
                         q.manual.extend(tracks)
                         q.doctor.in_row = 0
                         log.info("queued album %r: %d songs", payload.get("album"), len(tracks))

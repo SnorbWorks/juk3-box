@@ -62,7 +62,7 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-core/power` | R state | `state` |
 | `jb-core/selection` | event | a keypad pick: slot `index`, `code` |
 | `jb-core/notice`, `rejected`, `skipped` | event | messages for the screen |
-| `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, `stuck` (picks failing one after another: shuffle is turned off and the queue stops), or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
+| `jb-core/pick-problem` | event | a pick that didn't play, from the pick doctor (`services/jb_core/pick_doctor.py`): `title`, `artist`, `problem` (`no_controls`, `wrong_app` (the phone is presenting another app, e.g. Messages, instead of Music; also sent as a `note` when the phone connects like that), `no_answer`, `not_found`, `no_start`, `muted`, `no_sound`, `stuck` (picks failing one after another: shuffle is turned off and the queue stops), or `retrying` while the source heals it), `headline`, `advice`, `retry` (the song waits at the front of the queue for the phone to come back) |
 | `jb-core/pick-log` | R state | `problems`: the last 20 pick problems, newest first, each with `at` (epoch seconds); the admin dashboard shows them |
 | `jb-core/cmd` | command | `select` (`track`), `select_album`, `shuffle_on`, `shuffle_off`, `power` |
 | `jb-audio/state` | R state | `volume` 0..1, `muted` |
@@ -73,14 +73,14 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-library/playlists` | R state | `playlists`: name, titles |
 | `jb-library/albums` | R state | `albums` |
 | `jb-library/cmd` | command | `favorite` (`title`) |
-| `jb-source-phone/connected` | R state | `connected`, `name`, `mac` |
+| `jb-source-phone/connected` | R state | `connected`, `name`, `mac`, `app` (the app the phone presents: "Music", "Messages"...), `browsable` (its song list is offered), `controls: false` when connected for audio only |
 | `jb-source-phone/now-playing` | state | `title`, `artist`, `album`, `status`, `position`, `duration` |
 | `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |
 | `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |
 | `jb-source-phone/lease`, `reconnect` | R state | source internals other modules may watch |
 | `jb-source-phone/crawl-result` | R state | the deep library crawl |
 | `jb-source-phone/play-error` | event | a pick that failed: the `play_item` command, plus `reason` (`not_found`, `no_answer`, `no_controls`) |
-| `jb-source-phone/pick-problem` | event | what went wrong with a pick while the source deals with it: `title`, `item_path`, `reason` (or null), `retrying` (re-syncing, or reconnecting the phone with the pick kept) |
+| `jb-source-phone/pick-problem` | event | what went wrong with a pick while the source deals with it: `title`, `item_path`, `reason` (or null; `wrong_app` keeps the pick until Music is back, with no reconnect), `retrying`, `app` (re-syncing, or reconnecting the phone with the pick kept) |
 | `jb-source-phone/cmd` | command | play, pause, crawl... |
 | `jb-crawl/status`, `album` | R state | crawl progress |
 | `jb-crawl/cmd` | command | `crawl_now`, `album` |

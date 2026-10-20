@@ -35,6 +35,8 @@ def window_for(event: str, was_playing: bool = False):
         return BOOT_WINDOW_S
     if event == "drop" and was_playing:
         return DROP_WINDOW_S
+    if event == "pick":       # we dropped it ourselves, to make a pick play
+        return DROP_WINDOW_S
     return None
 
 
