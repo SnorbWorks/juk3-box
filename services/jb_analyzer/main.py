@@ -86,6 +86,7 @@ async def main() -> None:
         # USB drives (jb-source-local) too. Only one source plays at a time;
         # the song is whichever one last said it's playing.
         await bus.subscribe("jukebox/jb-source-local/now-playing")
+        await bus.subscribe("jukebox/jb-source-helper/now-playing")   # the juk3box Helper app
         playing_from = {"topic": "jukebox/jb-source-phone/now-playing"}
         last_slow = {"v": None}
 

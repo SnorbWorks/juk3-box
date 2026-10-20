@@ -49,6 +49,9 @@ DEFAULTS = {
     # Pictures the owner uploaded in the admin (the media library), for
     # image and logo blocks: "/media/<file>".
     "media_dir": "/var/lib/juk3-box/media",
+    # Album covers the juk3box Helper app uploaded (jb-source-helper), for
+    # its songs' artwork_url: "/covers/<key>.jpg".
+    "covers_dir": "/var/lib/juk3-box/helper/artwork",
     # The owner's published theme options (colors, fonts...), per theme:
     # <dir>/<theme>/custom.json (written by jb-admin).
     "owner_styles_dir": "/var/lib/juk3-box/styles",
@@ -122,6 +125,14 @@ def clean_nav(nav) -> list:
 # uploaded video to the Pi's profile (services/jb_admin/media_lib.py).
 MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4")
 MEDIA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+
+
+COVER_NAME_RE = re.compile(r"^[0-9a-f]{40}\.jpg$")
+
+
+def cover_path(folder: Path, name: str) -> Path | None:
+    """An uploaded album cover (40 hex characters + .jpg), or None."""
+    return folder / name if COVER_NAME_RE.match(name) else None
 
 
 def media_path(folder: Path, name: str) -> Path | None:
@@ -255,6 +266,13 @@ class App:
             raise web.HTTPNotFound()
         return web.FileResponse(path)
 
+    async def cover_file(self, request: web.Request) -> web.StreamResponse:
+        path = cover_path(Path(self.cfg["covers_dir"]), request.match_info["name"])
+        if path is None or not path.is_file():
+            raise web.HTTPNotFound()
+        # A key names one album's cover for good: the browser may keep it.
+        return web.FileResponse(path, headers={"Cache-Control": "max-age=86400"})
+
     async def theme_file(self, request: web.Request) -> web.StreamResponse:
         root = themes.find_theme_dir(request.match_info["theme_id"], self.theme_dirs)
         if root is None:
@@ -299,6 +317,7 @@ def build_app(cfg: dict, log) -> web.Application:
     app.router.add_post("/api/kiosk-painted", app_state.kiosk_painted)
     app.router.add_get("/themes/{theme_id}/{path:.+}", app_state.theme_file)
     app.router.add_get("/media/{name}", app_state.media_file)
+    app.router.add_get("/covers/{name}", app_state.cover_file)
     app.router.add_get("/modules/{module}/{path:.+}", app_state.module_file)
     app.router.add_static("/engine/", ENGINE_DIR)
     app.router.add_static("/legacy/", LEGACY_DIR)

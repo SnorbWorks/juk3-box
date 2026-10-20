@@ -18,6 +18,8 @@ export const PREVIEW = new URLSearchParams(location.search).has('preview');
 const HANDLERS = {
   'jukebox/jb-source-phone/now-playing': np => nowPlayingFrom('phone', np),
   'jukebox/jb-source-local/now-playing': np => nowPlayingFrom('local', np),
+  'jukebox/jb-source-helper/now-playing': np => nowPlayingFrom('helper', np),
+  'jukebox/jb-source-helper/pairing': p => store.set('helperPairing', p),
   'jukebox/jb-source-local/event': e => store.set('driveEvent', { ...e, at: Date.now() }),
   'jukebox/jb-admin/drive-offers': o => store.set('driveOffers', o.offers || []),
   'jukebox/jb-source-phone/connected': c => store.set('phone', c),
@@ -54,8 +56,9 @@ const HANDLERS = {
   },
 };
 
-// Two sources report now-playing: the phone and USB drives (jb-source-local).
-// Only one plays at a time (jb-core pauses the other), so the screen shows
+// Three sources report now-playing: the phone, USB drives (jb-source-local)
+// and the juk3box Helper app (jb-source-helper). Only one plays at a time
+// (jb-core pauses or stops the others), so the screen shows
 // the one playing -- or, when neither is, the last one that was.
 let npSource = 'phone';
 function nowPlayingFrom(source, np) {

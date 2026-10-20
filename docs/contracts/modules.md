@@ -66,7 +66,7 @@ Roles describe what a module does in the pipeline, never what hardware it uses. 
 
 | Role | Minimum contract (v1) | Reference module | Held open until |
 | --- | --- | --- | --- |
-| `source` | Publishes its songs (each with an `item_path` it can play), a `now-playing` state in the phone's shape, `play-error`, and accepts `play_item`, `play`, `pause`, `stop` on its `cmd` | `jb-source-phone` + `jb-library`; `jb-source-local` (USB drives) | Decided with the second source (Oct 14, 2026): each source keeps its own topics; jb-library merges the songs, jb-core sends each pick to its source by `item_path` (`drive:` = jb-source-local) and plays one source at a time, and subscribers show whichever source last reported `playing` |
+| `source` | Publishes its songs (each with an `item_path` it can play), a `now-playing` state in the phone's shape, `play-error`, and accepts `play_item`, `play`, `pause`, `stop` on its `cmd` | `jb-source-phone` + `jb-library`; `jb-source-local` (USB drives); `jb-source-helper` (the juk3box Helper app, Oct 20, 2026) | Decided with the second source (Oct 14, 2026): each source keeps its own topics; jb-library merges the songs, jb-core sends each pick to its source by `item_path` (`drive:` = jb-source-local) and plays one source at a time, and subscribers show whichever source last reported `playing` |
 | `analyzer` | Publishes under a role namespace (`analysis/<kind>/...`) with `v` | `jb-analyzer` | A second analyzer (e.g. video) |
 | `input` | Publishes events describing what a human did (`gesture`, `key`), not what should happen | `jb-input` | A non-keypad input (touchscreen, phone remote) |
 | `output` | Consumes state; publishes only its own state | `jb-ui` (kiosk), `jb-lights`, `jb-audio` | A second screen or a video output |

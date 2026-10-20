@@ -167,3 +167,11 @@ def test_kiosk_reports_its_splash_painted(tmp_path):
         assert (await client.post("/api/kiosk-painted")).status == 200
         assert (await (await client.get("/api/kiosk-painted")).json())["at"] > 0
     run(tmp_path, check)
+
+
+def test_only_plain_cover_keys_are_served(tmp_path):
+    from services.jb_ui.main import cover_path
+    key = "a" * 40
+    assert cover_path(tmp_path, f"{key}.jpg") == tmp_path / f"{key}.jpg"
+    for bad in ("../x.jpg", f"{key}.png", "A" * 40 + ".jpg", f"{key}.jpg/..", "x.jpg"):
+        assert cover_path(tmp_path, bad) is None

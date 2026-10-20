@@ -33,6 +33,7 @@ ENTRY = "jukebox/jb-core/entry"
 SOURCES = {
     "jukebox/jb-source-phone/now-playing": "phone",
     "jukebox/jb-source-local/now-playing": "local",
+    "jukebox/jb-source-helper/now-playing": "helper",
 }
 PHONE_CONNECTED = "jukebox/jb-source-phone/connected"
 

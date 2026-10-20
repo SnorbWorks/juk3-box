@@ -163,3 +163,15 @@ def test_a_pick_during_a_song_list_read_says_one_moment():
     note = d.source_says({"title": "Bad Dreams", "reason": "busy", "retrying": True}, 1.0)
     assert note["headline"] == "One moment" and note["problem"] == "retrying"
     assert d.check(START_S + 30) is None                       # waiting out the read
+
+
+def test_a_helper_app_pick_gets_the_apps_reason_and_advice_not_bluetooths():
+    d = PickDoctor()
+    d.phone = {"connected": True, "controls": False}       # the Bluetooth phone's trouble isn't the app's
+    d.audio = {"volume": 0.3, "muted": False}
+    d.picked({"title": "Moon River", "item_path": "helper:dev-1/i.1"}, 0.0)
+    v = d.failed({"item_path": "helper:dev-1/i.1", "reason": "no_subscription"}, 1.0)
+    assert v["problem"] == "no_subscription" and "Apple Music" in v["headline"]
+    d.picked({"title": "Moon River", "item_path": "helper:dev-1/i.1"}, 10.0)
+    v = d.failed({"item_path": "helper:dev-1/i.1", "reason": "no_answer"}, 11.0)
+    assert "juk3box Helper" in v["advice"] and "Bluetooth" not in v["advice"] and v["retry"]

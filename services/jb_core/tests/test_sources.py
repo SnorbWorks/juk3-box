@@ -1,5 +1,5 @@
 from services.jb_core.main import Queue
-from services.jb_core.sources import LOCAL, PHONE, playable, source_of
+from services.jb_core.sources import HELPER, LOCAL, PHONE, playable, source_of
 
 DRIVE_SONG = {"title": "Tunnel", "item_path": "drive:6AD0/Music/Tunnel.wav"}
 PHONE_SONG = {"title": "Animal", "item_path": "/org/bluez/hci0/dev_X/player0/Filesystem/item7"}
@@ -50,3 +50,19 @@ def test_shuffle_drops_phone_picks_when_the_phone_goes():
     q.shuffle_buffer = [PHONE_SONG] * 20
     q.phone_connected = False
     assert q.pop_next() is DRIVE_SONG
+
+
+HELPER_SONG = {"title": "Moon River", "item_path": "helper:dev-1/i.1"}
+
+
+def test_helper_app_songs_go_to_the_helper_source_and_need_it_reachable():
+    assert source_of(HELPER_SONG) == HELPER
+    assert not playable(HELPER_SONG, phone_ready=True)
+    assert playable(HELPER_SONG, phone_ready=False, helper_ready=True)
+    q = Queue()
+    q.manual = [HELPER_SONG, DRIVE_SONG]
+    assert q.pop_next() is DRIVE_SONG
+    q.helper_connected, q.helper_sync = True, "syncing"
+    assert q.pop_next() is None                    # its library is still being read
+    q.helper_sync = "ready"
+    assert q.pop_next() is HELPER_SONG

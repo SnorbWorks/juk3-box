@@ -1,0 +1,19 @@
+# JUKE.BOX's AirPlay receiver (shairport-sync, deploy/airplay/). Runs as
+# admin so it plays into admin's PipeWire, like everything else; the Debian
+# package's own system service is disabled (it would grab the ALSA device).
+# Install: deploy/airplay/install.sh
+[Unit]
+Description=juk3-box AirPlay receiver (shairport-sync)
+After=network-online.target avahi-daemon.service
+Wants=avahi-daemon.service
+
+[Service]
+Type=simple
+User=admin
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/bin/shairport-sync -c /opt/juk3-box/deploy/airplay/shairport-sync.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

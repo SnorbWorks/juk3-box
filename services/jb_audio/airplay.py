@@ -13,6 +13,10 @@ from dbus_next.aio import MessageBus
 AVAHI = "org.freedesktop.Avahi"
 BROWSER_IFACE = "org.freedesktop.Avahi.ServiceBrowser"
 IF_UNSPEC, PROTO_INET = -1, 0
+# Avahi's lookup-result flags: published on this machine. The jukebox's own
+# AirPlay receiver (jb-airplay, for the helper app) isn't a whole-home zone:
+# sending the cabinet to itself would loop.
+LOCAL, OUR_OWN = 8, 16
 
 log = logging.getLogger("jb-audio.airplay")
 
@@ -40,6 +44,8 @@ class Receivers:
         if msg.interface != BROWSER_IFACE or msg.member not in ("ItemNew", "ItemRemove"):
             return
         name = display_name(msg.body[2])
+        if msg.body[5] & (LOCAL | OUR_OWN):
+            return
         if msg.member == "ItemNew":
             self._services[name] = self._services.get(name, 0) + 1
         elif name in self._services:

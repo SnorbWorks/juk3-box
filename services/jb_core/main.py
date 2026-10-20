@@ -6,9 +6,9 @@ from shared import config, logging as jb_logging
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
-from services.jb_core.pick_doctor import PickDoctor
+from services.jb_core.pick_doctor import HELPER_ADVICE, PickDoctor
 from services.jb_core.power import MENU_TIMEOUT_S, PowerMenu
-from services.jb_core.sources import LOCAL, PHONE, cmd_topic, playable, source_of
+from services.jb_core.sources import HELPER, LOCAL, ONE_SONG, PHONE, cmd_topic, playable, source_of
 
 SERVICE_NAME = "jb-core"
 ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
@@ -49,6 +49,11 @@ class Queue:
         # wait while it's being read: a pick sent before the list is read in
         # this connection can't play (2026-10-19).
         self.phone_sync: str | None = None
+        # The same for the juk3box Helper app (jb-source-helper/connected,
+        # sync): connected means reachable, asleep included (it's woken over
+        # Bluetooth LE for a pick).
+        self.helper_connected = False
+        self.helper_sync: str | None = None
         # The source last told to play (sources.py): the one whose
         # now-playing counts, and the one pause/stop/resume go to. Only one
         # plays at a time -- starting the other pauses this one.
@@ -65,8 +70,15 @@ class Queue:
         failed read: try anyway, and jb-source-phone heals what it can.)"""
         return self.phone_connected and self.phone_sync not in SYNC_WAIT
 
+    @property
+    def helper_ready(self) -> bool:
+        return self.helper_connected and self.helper_sync not in SYNC_WAIT
+
+    def can_play(self, track: dict | None) -> bool:
+        return playable(track, self.phone_ready, self.helper_ready)
+
     def refill_shuffle(self) -> None:
-        pool = [t for t in self.library_tracks if playable(t, self.phone_ready)]
+        pool = [t for t in self.library_tracks if self.can_play(t)]
         if not self.shuffle_active or not pool:
             return
         while len(self.shuffle_buffer) < SHUFFLE_BUFFER_TARGET:
@@ -85,10 +97,10 @@ class Queue:
         for tier in (self.manual, self.shuffle_buffer if self.shuffle_active else []):
             if tier is self.shuffle_buffer:
                 # Shuffle picks are random anyway: drop any the phone left behind.
-                tier[:] = [t for t in tier if playable(t, self.phone_ready)]
+                tier[:] = [t for t in tier if self.can_play(t)]
                 self.refill_shuffle()
             for i, track in enumerate(tier):
-                if playable(track, self.phone_ready):
+                if self.can_play(track):
                     return tier.pop(i)
         return None
 
@@ -117,7 +129,7 @@ async def play_track(bus: Bus, q: Queue, track: dict) -> None:
     it's paused (the phone) or stopped (a drive) first: one at a time."""
     source = source_of(track)
     if source != q.active and q.playing:
-        await bus.publish(cmd_topic(q.active), {"action": "stop" if q.active == LOCAL else "pause"})
+        await bus.publish(cmd_topic(q.active), {"action": "stop" if q.active in ONE_SONG else "pause"})
     q.active = source
     await bus.publish(cmd_topic(source),
                       {"action": "play_item", "item_path": track["item_path"], "title": track["title"]})
@@ -280,8 +292,17 @@ async def explain_wait(bus: Bus, q: Queue, track: dict | None, log) -> None:
     """A pick that can't play yet keeps its place; say why on the screen.
     No phone: "connect a device". The song list being read: the screen
     already shows its overlay, and the pick plays when it's done. The wrong
-    app (Messages): how to fix it."""
-    if not q.phone_connected:
+    app (Messages): how to fix it. A song from the helper app that's out of
+    reach: open the app."""
+    if source_of(track) == HELPER:
+        if not q.helper_connected:
+            headline, advice = HELPER_ADVICE["no_answer"]
+            await report_pick(bus, q, {"title": (track or {}).get("title"), "artist": (track or {}).get("artist"),
+                                       "problem": "no_answer", "headline": headline, "advice": advice,
+                                       "retry": False, "note": True}, log)
+        else:
+            log.info("holding %r until the helper app's library is read", (track or {}).get("title"))
+    elif not q.phone_connected:
         await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
     elif q.phone_sync == "wrong_app":
         q.doctor.warned_app = None
@@ -380,7 +401,8 @@ async def main() -> None:
                 ):
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
-            elif topic in ("jukebox/jb-source-phone/play-error", "jukebox/jb-source-local/play-error"):
+            elif topic in ("jukebox/jb-source-phone/play-error", "jukebox/jb-source-local/play-error",
+                           "jukebox/jb-source-helper/play-error"):
                 # The commanded track never actually started (e.g. a stale
                 # item_path from a library snapshot crawled before the last
                 # AVRCP reconnect) -- don't sit believing it's "now playing"
@@ -414,6 +436,20 @@ async def main() -> None:
                     log.info("phone's song list is ready: playing what waited")
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
+            elif topic in ("jukebox/jb-source-helper/connected", "jukebox/jb-source-helper/sync"):
+                # The juk3box Helper app: whatever waited for it plays once
+                # it's reachable with its library read.
+                was_ready = q.helper_ready
+                if topic.endswith("/connected"):
+                    q.helper_connected = bool(payload.get("connected"))
+                else:
+                    q.helper_sync = payload.get("state")
+                if q.helper_ready and not was_ready and not q.playing and (
+                    q.manual or q.shuffle_active
+                ):
+                    log.info("the helper app is ready: playing what waited")
+                    asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
+
             elif topic == "jukebox/jb-source-phone/pick-problem":
                 note = q.doctor.source_says(payload, time.monotonic())
                 if note:
@@ -430,17 +466,19 @@ async def main() -> None:
             elif topic == "jukebox/analysis/audio/fast":
                 q.doctor.sound(time.monotonic())
 
-            elif topic == "jukebox/jb-source-local/now-playing":
-                # A drive song. When it ends, mpv just stops (no auto-advance
-                # to fight): play what's next, if anything.
-                if q.active != LOCAL:
+            elif topic in ("jukebox/jb-source-local/now-playing", "jukebox/jb-source-helper/now-playing"):
+                # A drive song, or one from the helper app. When it ends,
+                # it just stops (no auto-advance to fight): play what's
+                # next, if anything.
+                source = LOCAL if "/jb-source-local/" in topic else HELPER
+                if q.active != source:
                     if payload.get("ended"):
-                        log.info("drive song ended, but the phone is the source playing")
+                        log.info("%s song ended, but another source is playing", source)
                     continue
                 q.doctor.heard(payload.get("title"), payload.get("status"), time.monotonic())
                 q.playing = payload.get("status") == "playing"
                 if payload.get("ended"):
-                    log.info("drive song ended (%d queued)", len(q.upcoming()))
+                    log.info("%s song ended (%d queued)", source, len(q.upcoming()))
                     q.playing = False
                     q.expected_title = None
                     await try_autoplay(bus, q, log)
@@ -499,7 +537,7 @@ async def main() -> None:
                         q.manual.append(track)
                         q.doctor.in_row = 0       # a fresh try
                         log.info("queued manual selection: %s", track.get("title"))
-                        if not playable(track, q.phone_ready):
+                        if not q.can_play(track):
                             await explain_wait(bus, q, track, log)
                             await publish_queue(bus, q)
                         elif not q.playing:
@@ -518,7 +556,7 @@ async def main() -> None:
                         q.manual.extend(tracks)
                         q.doctor.in_row = 0
                         log.info("queued album %r: %d songs", payload.get("album"), len(tracks))
-                        if not playable(tracks[0], q.phone_ready):
+                        if not q.can_play(tracks[0]):
                             await explain_wait(bus, q, tracks[0], log)
                             await publish_queue(bus, q)
                         elif not q.playing:

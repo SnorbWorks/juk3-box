@@ -21,6 +21,10 @@ time, it checks what it knows, in order:
   no_sound     the song plays, but no sound reaches the cabinet (the phone
                is sending its audio somewhere else)
 
+A song from the juk3box Helper app (item_path "helper:...") gets the app's
+own reasons too (not_playable, no_subscription, not_authorized, offline)
+and advice that points at the app, not at Bluetooth (HELPER_ADVICE).
+
 Each problem comes with advice for the screen (jukebox/jb-core/pick-problem).
 The source tries to heal first (re-sync, reconnect): while it says it's
 retrying, the doctor waits a little longer.
@@ -58,6 +62,36 @@ ADVICE = {
     "stuck": ("Songs aren't playing",
               "Shuffle is off. Turn Bluetooth off and on again on your phone, then pick a song."),
 }
+
+# A song from the juk3box Helper app: it plays from Apple Music over AirPlay,
+# so Bluetooth isn't the cure (docs/contracts/helper-protocol.md).
+HELPER_ADVICE = {
+    "no_answer": ("juk3box Helper didn't answer",
+                  "Open juk3box Helper on your phone. Your song will play when it connects."),
+    "not_found": ("That song isn't in your Apple Music library",
+                  "Pick another song."),
+    "not_playable": ("Apple Music can't play that song",
+                     "It may not be available right now. Pick another song."),
+    "no_subscription": ("Apple Music needs a subscription",
+                        "juk3box Helper plays songs through Apple Music. Check your subscription on your phone."),
+    "not_authorized": ("juk3box Helper can't use Apple Music",
+                       "Open juk3box Helper on your phone and allow access to Apple Music."),
+    "offline": ("Your phone is offline",
+                "Apple Music needs the internet for that song. Check your phone's Wi-Fi."),
+    "no_start": ("Your phone didn't start the song",
+                 "Open juk3box Helper on your phone, then pick it again."),
+    "no_sound": ("No sound is reaching the jukebox",
+                 "In juk3box Helper, choose JUKE.BOX as the speaker."),
+    "stuck": ("Songs aren't playing",
+              "Shuffle is off. Open juk3box Helper on your phone, then pick a song."),
+}
+for _reason in ("not_playable", "no_subscription", "not_authorized", "offline"):
+    ADVICE.setdefault(_reason, HELPER_ADVICE[_reason])
+
+
+def from_helper(track: dict | None) -> bool:
+    return str((track or {}).get("item_path") or "").startswith("helper:")
+
 
 # What makes it worth giving the pick another go once the phone is back.
 RETRY_AFTER_RECONNECT = ("no_controls", "no_answer")
@@ -195,28 +229,29 @@ class PickDoctor:
             if self.audio.get("muted") or (self.audio.get("volume") is not None and self.audio["volume"] < 0.01):
                 return "muted"
             return "no_sound"
-        if self.phone.get("connected") and self.phone.get("controls") is False:
-            return "no_controls"
-        if wrong_app(self.phone) or self.pick.reason == "wrong_app":
-            return "wrong_app"
+        if not from_helper(self.pick.track):    # the Bluetooth phone's state says nothing about the app
+            if self.phone.get("connected") and self.phone.get("controls") is False:
+                return "no_controls"
+            if wrong_app(self.phone) or self.pick.reason == "wrong_app":
+                return "wrong_app"
         if self.pick.reason in ADVICE:
             return self.pick.reason
         return "no_start"
 
-    def _words(self, problem: str) -> tuple[str, str]:
+    def _words(self, problem: str, track: dict | None = None) -> tuple[str, str]:
         app = self.phone.get("app") or "another app"
-        headline, advice = ADVICE[problem]
+        headline, advice = (HELPER_ADVICE if from_helper(track) and problem in HELPER_ADVICE else ADVICE)[problem]
         return headline.format(app=app), advice.format(app=app)
 
     def _note(self, problem: str, track: dict) -> dict:
-        headline, advice = self._words(problem)
+        headline, advice = self._words(problem, track)
         if problem == "wrong_app" and not track:      # on connecting: no pick to promise
             advice = "Open the Music app on your phone and play any song for a moment, so the jukebox can see your songs."
         return {"title": track.get("title"), "artist": track.get("artist"), "problem": problem,
                 "headline": headline, "advice": advice, "retry": False, "note": True}
 
     def _verdict(self, problem: str, now: float) -> dict:
-        title, advice = self._words(problem)
+        title, advice = self._words(problem, self.pick.track)
         verdict = {"title": self.pick.track.get("title"), "artist": self.pick.track.get("artist"),
                    "problem": problem, "headline": title, "advice": advice,
                    "retry": problem in RETRY_AFTER_RECONNECT, "track": self.pick.track}

@@ -120,6 +120,36 @@ function powerCard(on, phones) {
     toggle);
 }
 
+// Phones paired with the juk3box Helper app: paired from the app itself
+// (a code on the cabinet), so only Forget here.
+function helperRow(p, helper) {
+  const active = helper.device_id === p.device_id;
+  const status = active && helper.awake ? 'Has the jukebox (app open)'
+    : active && helper.connected ? 'Has the jukebox (app asleep, woken for a pick)'
+      : p.last_seen ? `Last seen ${new Date(p.last_seen * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Paired';
+  return h('div.card.card-pad.phone-row',
+    h('div.stat-icon', icon('smartphone')),
+    h('div.phone-text', h('div.stat-value', p.name || 'iPhone'), h('div.stat-sub', status)),
+    h('div.phone-actions', button('Forget', {
+      variant: 'danger',
+      onclick: async () => {
+        const ok = await confirmDialog(`Forget ${p.name || 'this phone'}?`,
+          'The app is unpaired, and its songs, playlists and plays are removed from the jukebox. Pair it again from the app.',
+          { confirm: 'Forget', danger: true });
+        if (ok) act('forget_helper', { device_id: p.device_id }, `Forgot ${p.name || 'the phone'}.`);
+      },
+    }, 'trash-2')));
+}
+
+function helperCard(helper) {
+  const phones = helper?.phones || [];
+  if (!phones.length) return null;
+  return h('div.stack',
+    h('h2', 'juk3box Helper app'),
+    h('p.muted', 'Phones that play their Apple Music library through the app, over AirPlay. Beside Bluetooth, not instead of it.'),
+    ...phones.map(p => helperRow(p, helper)));
+}
+
 function render(data) {
   const on = data.bluetooth?.on !== false;
   clear(body,
@@ -129,5 +159,6 @@ function render(data) {
     !on ? null : data.phones.length
       ? h('div.stack', data.phones.map(phoneRow))
       : emptyState('smartphone', 'No phones paired yet', 'Pair one below.'),
-    on ? pairingCard(data.pairing || { state: 'idle' }) : null);
+    on ? pairingCard(data.pairing || { state: 'idle' }) : null,
+    helperCard(data.helper));
 }

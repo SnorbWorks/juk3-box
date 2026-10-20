@@ -76,6 +76,14 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-source-phone/connected` | R state | `connected`, `name`, `mac`, `app` (the app the phone presents: "Music", "Messages"...), `browsable` (its song list is offered), `controls: false` when connected for audio only |
 | `jb-source-phone/sync` | R state | where the phone's song list stands: `state` (`none`, `connecting`, `syncing`, `ready`, `failed`, `wrong_app`), `name`. jb-core holds the phone's songs while it's `connecting`, `syncing` or `wrong_app` and plays them when it's `ready`; the screen shows "Connecting and updating library" meanwhile |
 | `jb-source-phone/now-playing` | state | `title`, `artist`, `album`, `status`, `position`, `duration` |
+| `jb-source-helper/connected` | R state | the juk3box Helper app ([helper-protocol.md](helper-protocol.md)): `connected` (reachable: the app connected, or asleep but able to be woken over Bluetooth LE), `name`, `device_id`, `awake` (its WebSocket is up), `music` (`authorization`, `canPlay`, `route`), `phones` (every paired app phone) |
+| `jb-source-helper/sync` | R state | as the phone's: `state` (`none`, `syncing`, `ready`, `failed`), `name` |
+| `jb-source-helper/library` | R state | the active app phone's library: `device_id`, `name`, `hash`, `tracks` (title, artist, album, genre, album_track, duration_ms, year, added_at, artwork_key, item_path `helper:<device>/<item>`), `playlists` (name, titles) |
+| `jb-source-helper/now-playing` | state | as the phone's, plus `item_path`, and `ended: true` when a song finishes (the app stops after each song) |
+| `jb-source-helper/play-error` | event | `item_path`, `title`, `reason` (`no_answer`, `not_found`, `not_playable`, `no_subscription`, `not_authorized`, `offline`, `other`) |
+| `jb-source-helper/pairing` | R state | `state` (`code` or `none`), `code`, `device`, `expires`: the cabinet shows the code to type in the app |
+| `jb-source-helper/forgotten` | event | `mac`: `helper:<device>` (jb-library forgets its songs) |
+| `jb-source-helper/cmd` | command | `play_item` (`item_path`), `play`, `pause`, `stop`, `forget` (`device_id`) |
 | `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |
 | `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |
 | `jb-source-phone/lease`, `reconnect` | R state | source internals other modules may watch |

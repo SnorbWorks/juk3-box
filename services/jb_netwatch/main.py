@@ -29,9 +29,10 @@ KEEP_EVENTS = 500
 # If the graceful reboot hasn't happened by then (a hung driver can stall
 # shutdown), restart at once.
 FORCE_REBOOT_AFTER_S = 180
-# What's playing, from the phone or a USB drive (both report every few
+# What's playing, from the phone, a USB drive or the helper app (all report every few
 # seconds while a song plays).
-NOW_PLAYING_TOPICS = ["jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing"]
+NOW_PLAYING_TOPICS = ["jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/now-playing",
+                      "jukebox/jb-source-helper/now-playing"]
 
 log = logging.getLogger("jb-netwatch")
 

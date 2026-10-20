@@ -356,3 +356,28 @@ def test_a_new_drive_puts_only_its_newest_songs_in_new(db):
     assert db.execute("SELECT COUNT(*) FROM tracks WHERE first_seen = 1000").fetchone()[0] == 30
     lib.store_drive(db, "6AD0", songs + drive_songs("Fresh"), now=2000)   # added later: New
     assert db.execute("SELECT added_at FROM tracks WHERE title = 'Fresh'").fetchone()[0] == 2000
+
+
+def test_the_helper_apps_library_is_shown_with_its_own_tags_covers_albums_and_playlists(db):
+    import asyncio
+    mac = "helper:dev-1"
+    tracks = [
+        {"title": "Moon River", "artist": "Andy Williams", "album": "Moon River", "genre": "Pop", "album_track": 1,
+         "added_at": 1709294400.0, "artwork_key": "a" * 40, "item_path": f"{mac}/i.1"},
+        {"title": "Days of Wine", "artist": "Andy Williams", "album": "Moon River", "album_track": 2,
+         "added_at": None, "artwork_key": None, "item_path": f"{mac}/i.2"},
+    ]
+    lib.upsert_tracks(db, MAC, crawl("Bluetooth song"))
+    lib.store_helper(db, mac, tracks, [{"name": "Moons", "titles": ["Moon River"]}])
+    snaps = lib.Snapshots(FakeBus(), db, Log())
+    snaps.mac = mac
+    asyncio.run(snaps.publish())
+    shown = {t["title"]: t for t in snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]}
+    assert set(shown) == {"Moon River", "Days of Wine"}           # one phone's songs at a time
+    assert shown["Moon River"]["artist"] == "Andy Williams" and shown["Moon River"]["added_at"] == 1709294400.0
+    assert shown["Moon River"]["artwork_url"] == f"/covers/{'a' * 40}.jpg"
+    assert db.execute("SELECT enriched FROM tracks WHERE title = 'Moon River'").fetchone()[0] == 1
+    assert db.execute("SELECT enriched FROM tracks WHERE title = 'Days of Wine'").fetchone()[0] == 0   # iTunes cover
+    albums = snaps.bus.sent["jukebox/jb-library/albums"]
+    assert [s["title"] for s in albums["contents"]["Moon River"]] == ["Moon River", "Days of Wine"]
+    assert snaps.bus.sent["jukebox/jb-library/playlists"]["playlists"] == [{"name": "Moons", "titles": ["Moon River"]}]

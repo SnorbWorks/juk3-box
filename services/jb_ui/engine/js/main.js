@@ -382,6 +382,22 @@ function watchSystem() {
   store.watch(html, 'driveOffers', offerImport);
   setInterval(offerImport, 5000);
 
+  // Pairing the juk3box Helper app (jb-source-helper/pairing): the code to
+  // type on the phone, on screen until it's paired (or given up on).
+  // Shown over anything: the owner is standing at the cabinet waiting for it.
+  let pairingShown = false;
+  store.watch(html, 'helperPairing', p => {
+    if (p?.state === 'code') {
+      openPopup('notice', {
+        title: 'Pair juk3box Helper',
+        message: `Type ${p.code} in the app on ${p.device || 'your phone'}.`,
+      }, { onClose: () => { pairingShown = false; } });
+      pairingShown = true;
+    } else if (pairingShown) {
+      closePopup('notice');
+    }
+  });
+
   // A pick that didn't play: jb-core's pick doctor says why and what to
   // do ("Turn Bluetooth off and on again on your phone"), or that it's
   // already trying again. Shown over another notice, not over a menu.

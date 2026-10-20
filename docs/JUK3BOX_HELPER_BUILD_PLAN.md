@@ -225,6 +225,8 @@ A new Python service beside `jb-source-phone`, on the MQTT bus like the others (
 
 **Done when:** press a selection on the cabinet → that song plays from the phone over AirPlay, with the board highlighting it and showing artwork.
 
+**Status (Oct 20): built and deployed on the Pi 4**, waiting for the real app. `services/jb_source_helper` (the contract is `docs/contracts/helper-protocol.md`): Bonjour, WebSocket, pairing with a code on the kiosk (3 codes, then it stops asking), hashed tokens, the BLE wake service (advertising only while a phone is paired), library and artwork, picks, forget. jb-core, the pick doctor, jb-library (the board, with covers from `/covers/`), the kiosk's pairing popup, the admin's phone page, audio, display, analyzer and netwatch all know the new source. Rehearsed end to end with a pretend app on the Pi: pair, library on the board, cover, pick → `play`, `track_ended` → next, forget → back to the Bluetooth library. The AirPlay receiver is `jb-airplay` (shairport-sync, classic AirPlay; AirPlay 2 waits for the Pi 5). Not done: switching between two phones mid-song (one app at a time for now; the library shown is the last phone that connected, Bluetooth or app).
+
 ---
 
 ### Phase 6 — Setup wizard (hotspot onboarding)

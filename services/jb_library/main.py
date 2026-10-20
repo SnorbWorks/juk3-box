@@ -495,6 +495,38 @@ def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None,
     return removed
 
 
+def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: list, log=None) -> int:
+    """Stores the juk3box Helper app's library (jb-source-helper) under
+    phone_mac "helper:<device>". Like a drive's tags, the app's artist,
+    album, genre and track number are exact (phone_*), and its dateAdded is
+    the real Recently Added. Its covers are the app's own uploads, served
+    by jb-ui at /covers/<key>.jpg; songs without one get an iTunes lookup.
+    Playlists by title, as the deep crawl stores them. Returns how many
+    songs were removed."""
+    tracks = [t for t in tracks if t.get("title") and t.get("item_path")]
+    removed = upsert_tracks(conn, mac, tracks, log)
+    numbered = number_duplicates(tracks)
+    conn.executemany(
+        """
+        UPDATE tracks SET phone_artist = ?, phone_album = ?, phone_genre = ?, album_track = ?,
+               added_at = COALESCE(?, added_at),
+               artwork_url = COALESCE(?, artwork_url),
+               enriched = CASE WHEN ? IS NOT NULL THEN 1 ELSE enriched END
+        WHERE phone_mac = ? AND title = ? AND dup = ?
+        """,
+        [(t.get("artist"), t.get("album"), t.get("genre"), t.get("album_track"), t.get("added_at"),
+          f"/covers/{t['artwork_key']}.jpg" if t.get("artwork_key") else None, t.get("artwork_key"),
+          mac, title, dup) for t, (title, dup, _) in zip(tracks, numbered)],
+    )
+    conn.execute("DELETE FROM playlists WHERE phone_mac=?", (mac,))
+    conn.executemany(
+        "INSERT INTO playlists (phone_mac, name, position, title) VALUES (?, ?, ?, ?)",
+        [(mac, p["name"], i, title) for p in playlists if p.get("name")
+         for i, title in enumerate(p.get("titles") or [])])
+    conn.commit()
+    return removed
+
+
 EDIT_FIELDS = ("title", "artist", "album", "genre", "album_track")
 
 
@@ -692,7 +724,9 @@ class Snapshots:
             await self.bus.publish("jukebox/jb-library/playlists", playlists, retain=True)
             self._last_playlists = serialized
             self.log.info("published %d playlists", len(playlists["playlists"]))
-        albums = add_drive_albums(self.conn, read_albums(self.conn, self.mac), self.drives)
+        # The helper app's albums come from its songs' tags, as a drive's do.
+        from_tags = self.drives + ([self.mac] if (self.mac or "").startswith("helper:") else [])
+        albums = add_drive_albums(self.conn, read_albums(self.conn, self.mac), from_tags)
         serialized = json.dumps(albums)
         if serialized != self._last_albums:
             await self.bus.publish("jukebox/jb-library/albums", albums, retain=True)
@@ -900,6 +934,12 @@ async def main() -> None:
         # USB drives: their songs, and what they're playing (for play counts).
         await bus.subscribe("jukebox/jb-source-local/library")
         await bus.subscribe("jukebox/jb-source-local/now-playing")
+        # The juk3box Helper app (jb-source-helper): another phone, keyed
+        # "helper:<device>", with its library sent whole.
+        await bus.subscribe("jukebox/jb-source-helper/library")
+        await bus.subscribe("jukebox/jb-source-helper/connected")
+        await bus.subscribe("jukebox/jb-source-helper/forgotten")
+        await bus.subscribe("jukebox/jb-source-helper/now-playing")
         asyncio.create_task(bus.run_heartbeat())
 
         # Serve the cached library right away -- at boot there's usually no
@@ -913,6 +953,7 @@ async def main() -> None:
         asyncio.create_task(enrichment_loop(snapshots, wake, cfg.get("lastfm_api_key"), log))
         plays = PlayTracker(conn, log)
         drive_plays = PlayTracker(conn, log)   # its mac follows the song playing
+        helper_plays = PlayTracker(conn, log)
         last_drives: dict = {}
 
         async for topic, payload in messages:
@@ -942,6 +983,34 @@ async def main() -> None:
                     n = set_favorite(conn, payload["title"], payload.get("artist"), bool(payload.get("value")))
                     log.info("favorite %s: %s (%d rows)", "on" if payload.get("value") else "off", payload["title"], n)
                     await snapshots.publish()
+                continue
+            if topic.startswith("jukebox/jb-source-helper/"):
+                device = payload.get("device_id")
+                mac = f"helper:{device}" if device else None
+                if topic.endswith("/library"):
+                    if mac and isinstance(payload.get("tracks"), list):
+                        removed = store_helper(conn, mac, payload["tracks"], payload.get("playlists") or [], log)
+                        log.info("helper app %s: %d songs (removed %d)", payload.get("name") or device,
+                                 len(payload["tracks"]), removed)
+                        if snapshots.mac == mac:
+                            await snapshots.publish()
+                        wake.set()   # covers and popularity for new songs
+                elif topic.endswith("/connected"):
+                    helper_plays.mac = mac if payload.get("connected") else None
+                    if payload.get("connected") and mac and mac != snapshots.mac:
+                        snapshots.mac = mac
+                        log.info("showing the library of %s (helper app)", payload.get("name") or mac)
+                        await snapshots.publish()
+                elif topic.endswith("/forgotten"):
+                    mac = payload.get("mac")
+                    if isinstance(mac, str) and mac.startswith("helper:"):
+                        log.info("forgot helper phone %s: removed %d stored rows", mac, forget_phone(conn, mac))
+                        if snapshots.mac == mac:
+                            snapshots.mac = latest_phone(conn)
+                        await snapshots.publish()
+                elif topic.endswith("/now-playing"):
+                    if helper_plays.on_now_playing(payload):
+                        await snapshots.publish()
                 continue
             if topic.endswith("/connected"):
                 plays.on_connected(payload)

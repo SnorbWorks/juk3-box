@@ -148,10 +148,12 @@ class Admin:
         "jukebox/jb-source-phone/bluetooth": "bluetooth",
         "jukebox/jb-audio/airplay": "airplay",
         "jukebox/jb-display/state": "display",
+        "jukebox/jb-source-helper/connected": "helper",
     }
 
     # What the Phones page may ask jb-source-phone to do.
-    PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
+    PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget",
+                     "forget_helper"}
 
     LIBRARY_TOPICS = ("jukebox/jb-library/tracks", "jukebox/jb-library/playlists")
     DRIVES_TOPIC = "jukebox/jb-source-local/library"
@@ -378,6 +380,8 @@ class Admin:
             "pairing": self.live.get("pairing") or {"state": "idle"},
             "switch": self.live.get("phone_switch") or {"state": "idle"},
             "bluetooth": self.live.get("bluetooth") or {"on": True},
+            # Phones paired with the juk3box Helper app (jb-source-helper).
+            "helper": self.live.get("helper") or {"phones": []},
             "bus": self.bus is not None,
         })
 
@@ -387,6 +391,15 @@ class Admin:
             raise web.HTTPNotFound()
         body = await json_body(request)
         cmd = {"action": action}
+        if action == "forget_helper":
+            device_id = body.get("device_id")
+            if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", device_id):
+                raise error(400, "Which phone?")
+            if self.bus is None:
+                raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+            await self.bus.publish("jukebox/jb-source-helper/cmd", {"action": "forget", "device_id": device_id})
+            self.log.info("phones: forget helper app phone %s", device_id)
+            return web.json_response({"ok": True})
         if action in ("switch", "disconnect", "forget"):
             mac = body.get("mac")
             if not isinstance(mac, str) or not re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", mac):
