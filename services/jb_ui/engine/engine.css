@@ -457,3 +457,31 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 #jb-display-guide[data-side="bottom"]::before { bottom: 0; left: 0; right: 0; height: 1vmin; }
 #jb-display-guide[data-side="left"]::before { top: 0; bottom: 0; left: 0; width: 1vmin; }
 #jb-display-guide[data-side="right"]::before { top: 0; bottom: 0; right: 0; width: 1vmin; }
+
+/* The phone's song list being read (main.js, watchSystem): over the page
+   until it's done. Picks made meanwhile wait and then play. */
+#jb-sync-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-family: inherit;
+  text-align: center;
+}
+#jb-sync-overlay[hidden] { display: none; }
+#jb-sync-overlay .jb-sync-box { max-width: 70vw; display: flex; flex-direction: column; align-items: center; gap: 2.5vmin; }
+#jb-sync-overlay .jb-sync-title { font-size: 4.5vmin; font-weight: 700; }
+#jb-sync-overlay .jb-sync-message { font-size: 3vmin; opacity: 0.8; }
+#jb-sync-overlay .jb-sync-spinner {
+  width: 9vmin;
+  height: 9vmin;
+  border-radius: 50%;
+  border: 1vmin solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  animation: jb-sync-spin 1s linear infinite;
+}
+@keyframes jb-sync-spin { to { transform: rotate(360deg); } }

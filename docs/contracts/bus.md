@@ -74,6 +74,7 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-library/albums` | R state | `albums` |
 | `jb-library/cmd` | command | `favorite` (`title`) |
 | `jb-source-phone/connected` | R state | `connected`, `name`, `mac`, `app` (the app the phone presents: "Music", "Messages"...), `browsable` (its song list is offered), `controls: false` when connected for audio only |
+| `jb-source-phone/sync` | R state | where the phone's song list stands: `state` (`none`, `connecting`, `syncing`, `ready`, `failed`, `wrong_app`), `name`. jb-core holds the phone's songs while it's `connecting`, `syncing` or `wrong_app` and plays them when it's `ready`; the screen shows "Connecting and updating library" meanwhile |
 | `jb-source-phone/now-playing` | state | `title`, `artist`, `album`, `status`, `position`, `duration` |
 | `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |
 | `jb-source-local/now-playing` | event | as the phone's, plus `item_path`, and `ended: true` when a song finishes |

@@ -12,9 +12,9 @@ def test_drive_songs_go_to_the_local_source_and_the_rest_to_the_phone():
 
 
 def test_drive_songs_play_without_a_phone():
-    assert playable(DRIVE_SONG, phone_connected=False)
-    assert not playable(PHONE_SONG, phone_connected=False)
-    assert playable(PHONE_SONG, phone_connected=True)
+    assert playable(DRIVE_SONG, phone_ready=False)
+    assert not playable(PHONE_SONG, phone_ready=False)
+    assert playable(PHONE_SONG, phone_ready=True)
 
 
 def test_shuffle_without_a_phone_picks_only_drive_songs():

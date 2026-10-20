@@ -295,11 +295,37 @@ function watchSystem() {
     if (html.hasAttribute('data-playing') !== playing) html.toggleAttribute('data-playing', playing);
   });
 
-  // A notice from jb-core shows briefly, unless the knob is busy.
+  // A notice from jb-core shows briefly, unless the knob is busy: a pick
+  // with no phone connected.
   store.watch(html, 'notice', n => {
     if (n?.type !== 'connect_device' || currentMode() !== 'select' || popupOpen()) return;
-    openPopup('notice', { title: 'Connect your phone', message: 'Connect your phone over Bluetooth to play music.' });
+    openPopup('notice', { title: 'Please connect a device', message: 'Connect your phone over Bluetooth to play music.' });
     setTimeout(() => closePopup('notice'), NOTICE_MS);
+  });
+
+  // The phone connecting and its song list being read (jb-source-phone/sync):
+  // an overlay until it's done. Picks made meanwhile wait in the queue and
+  // play when it's ready (jb-core). If the read fails, say what to do.
+  const overlay = document.createElement('div');
+  overlay.id = 'jb-sync-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = '<div class="jb-sync-box"><div class="jb-sync-spinner"></div>'
+    + '<div class="jb-sync-title">Connecting and updating library…</div>'
+    + '<div class="jb-sync-message">Please wait. A song you pick now plays as soon as it\'s ready.</div></div>';
+  document.body.append(overlay);
+  let syncWas = null;
+  store.watch(html, 'phoneSync', s => {
+    const state = s?.state;
+    const busy = state === 'connecting' || state === 'syncing';
+    if (overlay.hidden === busy) overlay.hidden = !busy;
+    if (state === 'failed' && syncWas && syncWas !== 'failed' && currentMode() === 'select' && !popupOpen()) {
+      openPopup('notice', {
+        title: 'Couldn\'t read your phone\'s songs',
+        message: 'Turn Bluetooth off and on again on your phone.',
+      });
+      setTimeout(() => closePopup('notice'), NOTICE_MS * 2);
+    }
+    syncWas = state;
   });
 
   // A USB drive was plugged in and read (jb-source-local): its songs are

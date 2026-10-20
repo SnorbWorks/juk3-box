@@ -15,6 +15,8 @@ ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no dig
 ENTRY_TICK_S = 0.25
 
 SHUFFLE_BUFFER_TARGET = 20
+# Song-list states that hold the phone's songs back (see Queue.phone_ready).
+SYNC_WAIT = ("connecting", "syncing", "wrong_app")
 
 
 class Queue:
@@ -43,6 +45,10 @@ class Queue:
         # Whether the phone is there to play its songs (sources.playable);
         # a USB drive's songs are listed only while it's in, so they always can.
         self.phone_connected = False
+        # Where the phone's song list stands (jb-source-phone/sync). Its songs
+        # wait while it's being read: a pick sent before the list is read in
+        # this connection can't play (2026-10-19).
+        self.phone_sync: str | None = None
         # The source last told to play (sources.py): the one whose
         # now-playing counts, and the one pause/stop/resume go to. Only one
         # plays at a time -- starting the other pauses this one.
@@ -53,8 +59,14 @@ class Queue:
         # Watches each pick until it's heard playing (pick_doctor.py).
         self.doctor = PickDoctor()
 
+    @property
+    def phone_ready(self) -> bool:
+        """The phone can take a pick now. (Connected for audio only, or a
+        failed read: try anyway, and jb-source-phone heals what it can.)"""
+        return self.phone_connected and self.phone_sync not in SYNC_WAIT
+
     def refill_shuffle(self) -> None:
-        pool = [t for t in self.library_tracks if playable(t, self.phone_connected)]
+        pool = [t for t in self.library_tracks if playable(t, self.phone_ready)]
         if not self.shuffle_active or not pool:
             return
         while len(self.shuffle_buffer) < SHUFFLE_BUFFER_TARGET:
@@ -73,10 +85,10 @@ class Queue:
         for tier in (self.manual, self.shuffle_buffer if self.shuffle_active else []):
             if tier is self.shuffle_buffer:
                 # Shuffle picks are random anyway: drop any the phone left behind.
-                tier[:] = [t for t in tier if playable(t, self.phone_connected)]
+                tier[:] = [t for t in tier if playable(t, self.phone_ready)]
                 self.refill_shuffle()
             for i, track in enumerate(tier):
-                if playable(track, self.phone_connected):
+                if playable(track, self.phone_ready):
                     return tier.pop(i)
         return None
 
@@ -264,6 +276,22 @@ async def report_pick(bus: Bus, q: Queue, verdict: dict, log) -> None:
     await bus.publish("jukebox/jb-core/pick-problem", {k: v for k, v in verdict.items() if k != "track"})
 
 
+async def explain_wait(bus: Bus, q: Queue, track: dict | None, log) -> None:
+    """A pick that can't play yet keeps its place; say why on the screen.
+    No phone: "connect a device". The song list being read: the screen
+    already shows its overlay, and the pick plays when it's done. The wrong
+    app (Messages): how to fix it."""
+    if not q.phone_connected:
+        await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
+    elif q.phone_sync == "wrong_app":
+        q.doctor.warned_app = None
+        note = q.doctor.connected(q.doctor.phone)
+        if note:
+            await report_pick(bus, q, {**note, "title": (track or {}).get("title")}, log)
+    else:
+        log.info("holding %r until the phone's song list is read", (track or {}).get("title"))
+
+
 def drop_retries(q: Queue, log) -> None:
     """A song put back to retry (report_pick) gives way to a new pick: the
     owner has moved on (2026-10-19: "Dissolve" picked, the retried "Take My
@@ -376,6 +404,16 @@ async def main() -> None:
                     if not (verdict and verdict.get("retry")):
                         asyncio.create_task(autoplay_after_failure(bus, q, log))
 
+            elif topic == "jukebox/jb-source-phone/sync":
+                # The song list is read: whatever waited for it plays now.
+                was_ready = q.phone_ready
+                q.phone_sync = payload.get("state")
+                if q.phone_ready and not was_ready and not q.playing and (
+                    q.manual or q.shuffle_active
+                ):
+                    log.info("phone's song list is ready: playing what waited")
+                    asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
+
             elif topic == "jukebox/jb-source-phone/pick-problem":
                 note = q.doctor.source_says(payload, time.monotonic())
                 if note:
@@ -461,8 +499,8 @@ async def main() -> None:
                         q.manual.append(track)
                         q.doctor.in_row = 0       # a fresh try
                         log.info("queued manual selection: %s", track.get("title"))
-                        if not playable(track, q.phone_connected):
-                            await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
+                        if not playable(track, q.phone_ready):
+                            await explain_wait(bus, q, track, log)
                             await publish_queue(bus, q)
                         elif not q.playing:
                             # Idle jukebox: a selection starts playing now,
@@ -480,8 +518,8 @@ async def main() -> None:
                         q.manual.extend(tracks)
                         q.doctor.in_row = 0
                         log.info("queued album %r: %d songs", payload.get("album"), len(tracks))
-                        if not playable(tracks[0], q.phone_connected):
-                            await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
+                        if not playable(tracks[0], q.phone_ready):
+                            await explain_wait(bus, q, tracks[0], log)
                             await publish_queue(bus, q)
                         elif not q.playing:
                             await try_autoplay(bus, q, log)
@@ -494,7 +532,7 @@ async def main() -> None:
                     if q.shuffle_buffer:   # something it can play (sources.playable)
                         asyncio.create_task(shuffle_autoplay(bus, q, log))
                     else:
-                        await bus.publish("jukebox/jb-core/notice", {"type": "connect_device"})
+                        await explain_wait(bus, q, None, log)
                 elif action == "shuffle_off":
                     q.shuffle_active = False
                     q.shuffle_buffer = []

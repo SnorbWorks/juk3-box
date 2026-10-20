@@ -15,10 +15,11 @@ def source_of(track: dict | None) -> str:
     return LOCAL if isinstance(path, str) and path.startswith("drive:") else PHONE
 
 
-def playable(track: dict | None, phone_connected: bool) -> bool:
+def playable(track: dict | None, phone_ready: bool) -> bool:
     """A drive song is listed only while its drive is in, so it can play; a
-    phone song needs the phone connected."""
-    return source_of(track) == LOCAL or phone_connected
+    phone song needs the phone connected, with its song list read
+    (jb-core's Queue.phone_ready)."""
+    return source_of(track) == LOCAL or phone_ready
 
 
 def cmd_topic(source: str) -> str:

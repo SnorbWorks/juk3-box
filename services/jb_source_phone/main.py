@@ -310,11 +310,26 @@ async def main() -> None:
     # player and won't browse it): played once a reconnect's sync lands.
     waiting_pick: dict | None = None
     last_pick_reconnect_at = None
+    # Where the phone's song list stands, for jb-core (picks wait until it's
+    # "ready") and the screen (its "updating library" overlay): none,
+    # connecting, syncing, ready, failed, wrong_app. A pick sent before the
+    # list is read in this connection can't play (2026-10-19).
+    sync_state = {"state": None}
 
     def now() -> float:
         return asyncio.get_running_loop().time()
 
-    async def sync_library(bus: Bus):
+    async def publish_sync(bus: Bus, state: str):
+        if sync_state["state"] == state:
+            return
+        sync_state["state"] = state
+        log.info("song list: %s", state)
+        await bus.publish(f"jukebox/{SERVICE_NAME}/sync",
+                          {"state": state, "name": phone.name if phone else None}, retain=True)
+
+    async def sync_library(bus: Bus, final: bool = True):
+        """Read the phone's Songs list. final: a failure here is the last try
+        (sync_library_logged retries quietly first)."""
         nonlocal synced_player_path, last_tracks
         async with sync_lock:
             p = phone
@@ -327,8 +342,14 @@ async def main() -> None:
             if lease:
                 log.info("library sync skipped: %s holds the browse lease", lease["holder"])
                 return
-            await p.wait_until_browsable()
-            tracks = await asyncio.wait_for(p.crawl_songs(), CRAWL_TIMEOUT_S)
+            await publish_sync(bus, "syncing")
+            try:
+                await p.wait_until_browsable()
+                tracks = await asyncio.wait_for(p.crawl_songs(), CRAWL_TIMEOUT_S)
+            except BaseException:
+                if final and phone is p:
+                    await publish_sync(bus, "failed")
+                raise
             if phone is not p:
                 # Superseded mid-crawl by a reconnect/renegotiation -- these
                 # item_paths are already dead. The new player's own sync
@@ -345,6 +366,7 @@ async def main() -> None:
             synced_player_path = p.player_path
             last_tracks = tracks
             log.info("library sync complete: %d tracks from %s", len(tracks), p.name)
+            await publish_sync(bus, "ready")
         if waiting_pick:
             asyncio.create_task(play_waiting_pick(bus))
 
@@ -404,13 +426,15 @@ async def main() -> None:
         # Fired as a background task -- log failures instead of letting them
         # vanish with the unawaited task. Retries a failed sync a few times;
         # lost browsing goes straight to a browse reset instead.
-        for attempt, delay in enumerate((0, *SYNC_RETRY_DELAYS_S), start=1):
+        delays = (0, *SYNC_RETRY_DELAYS_S)
+        for attempt, delay in enumerate(delays, start=1):
             await asyncio.sleep(delay)
             try:
-                await sync_library(bus)
+                await sync_library(bus, final=attempt == len(delays))
                 return
             except BrowseLost as e:
                 log.warning("library sync: browsing is lost (%s); resetting the browse session", e)
+                await publish_sync(bus, "failed")
                 request_browse_reset(bus)
                 return
             except Exception:
@@ -477,6 +501,7 @@ async def main() -> None:
             # reboot, since the broker persists retained messages) never
             # ingests item_paths from a player that no longer exists.
             await bus.clear_retained(f"jukebox/{SERVICE_NAME}/crawl-result")
+            await publish_sync(bus, "none")
             return
         device_path, player_path = found
         # Right after (re)connect, BlueZ sometimes registers MediaPlayer1
@@ -510,14 +535,20 @@ async def main() -> None:
             )
             if phone.wrong_app:
                 log.info("phone is presenting %r, not Music: no song list until Music plays", phone.app)
+                await publish_sync(bus, "wrong_app")
             elif not phone.can_browse:
                 log.info("phone has no browsing yet -- library sync will run when it appears")
+                await publish_sync(bus, "connecting")
             elif phone.player_path != synced_player_path:
+                await publish_sync(bus, "syncing")
                 asyncio.create_task(sync_library_logged(bus))
+            else:
+                await publish_sync(bus, "ready")
             return
         log.error("phone setup failed after %d attempts, giving up", retries)
         phone = None
         await bus.publish(f"jukebox/{SERVICE_NAME}/connected", {"connected": False}, retain=True)
+        await publish_sync(bus, "none")
 
     async def publish_lease(bus: Bus, **extra):
         state = {"holder": lease["holder"] if lease else None,
