@@ -1,28 +1,41 @@
 # Virtual Jukebox — Development Plan
 
-Sep 24, 2026 · @shawn · updated Oct 11, 2026
+Sep 24, 2026 · @shawn · updated Oct 19, 2026
 
-## Status (Oct 12, 2026, late)
+## Status (Oct 19, 2026)
 
-The core jukebox works end to end on the bench: an iPhone streams over Bluetooth, the library syncs and shows on the themed UI, a keypad letter + digit plays that slot, songs queue and shuffle, the knob drives the UI and volume, and the button and level bar lights respond, all as boot services. What's left is mostly phone management, the admin side, the remaining LED hardware, and appliance hardening.
+The jukebox works as an appliance on the Pi 4: an iPhone streams over Bluetooth, the library syncs to the themed UI, keypad picks queue and play, the knob drives the UI and volume, the whole cabinet's lights put on a show from the music, and the house's AirPlay speakers can play along in sync. Next: the helper app's first steps and the Pi 5 move (see Next, below).
 
 | Phase | State |
 | --- | --- |
-| 0 Foundation, 1 Audio | Done |
+| 0 Foundation, 1 Audio | Done. **Whole-home audio** (Oct 18): the cabinet and an AirPlay zone ("Inside") at once, in sync (delay 1425 ms, tuned by ear with music); the house follows the cabinet's knob and mute (airplay_match 1.45); the AirPlay feed drops 30 s after the music stops and comes back with the next song. The cabinet remembers its volume |
 | 2a Pico input | Done except encoder detent tuning and the coin-return retrofit |
 | 2b jb-input | Service done; gestures beyond click built but off, mapping not wired |
-| 2c LED board | Rev E built; all three chains working (buttons via software inversion, bar via the U2 jumper fix, accent chain = upper panel 189 + footlights 160). Still to do: the all-chains + music tests and get_throttled under load |
-| 3 Phone link test | Answered (Q10: the Pi reconnects the phone itself by connecting the A2DP profile); only Q4's change counter untested |
-| 4 Phone source | Playback, picks, sync and reconnect work; the sync is hardened (waits out BlueZ, retries, resets itself when lost) and shares browsing through a lease. Reconnects by itself at boot and after a mid-song drop. Pairing, multi-phone and switching not started |
-| 5 Library | Done, plus the phone's playlists and its full album list (jb-crawl). An album's songs are fetched when someone first opens it (~50 s, then saved); albums sharing a name are kept apart. Real artists for every song and play counts are still open |
-| 6 Core | Queue, shuffle, picks, album picks (queue the whole album in order), Reset hold (cancel the song; reboot / shut-down menu) done. Up Next removal open |
-| 6b Lights | All three chains run in jb-lights: buttons theme 1 (with Reset feedback), the bar's idle white + volume fill, and the camera-mapped upper panel + footlights as a city at night. EQ and ribbon looks built; real audio levels and the playing look next |
-| 7 UI platform | Engine, Neon theme (now on a still stage photo), Home sections incl. Playlists, an album browser of cover cards, a page-turn swipe, the power menu. Phone screens, Settings screen, second test theme open |
-| 7b Admin, 7c Page builder, 8 Appliance, 9+ | Not started (8: services already restart on failure) |
+| 2c LED board | Rev E built; all three chains working. **Level bar: an intermittent joint between strips 19 and 20** (found Oct 19): when it lets go, strips 20-36 freeze or go full white. Reflow it while the cabinet is open for the Pi 5 |
+| 3 Phone link test | Answered; only Q4's change counter untested |
+| 4 Phone source | Phone management built (Oct 14: pairing, the phone list, switch, forget, the lock; a second phone with a library still to test). **Pick doctor** (Oct 18-19): a pick that never plays is noticed, the screen says why and what to do, the keypad flashes, the admin keeps a record, and the source heals what it can; it spots a phone giving the jukebox Messages instead of Music; picks wait for the song list after a reconnect, with "Connecting and updating library" on screen and "Please connect a device" when there's no phone; stops when picks keep failing (no more shuffle loops). Open: **Bluetooth reliability in the cabinet** (radio frame errors in bursts; a distance test, then maybe a USB adapter with an external antenna) |
+| 5 Library | Done, plus playlists and albums (jb-crawl). Real artists and play counts still open |
+| 6 Core | Queue, shuffle, picks, album picks, Reset hold done. Up Next removal open |
+| 6b Lights | **Light show** (Oct 18): jb-analyzer hears drums, the beat, gaps, hits, sections, builds and drops; the director picks a style by genre and every part plays its role ([docs/Light Show Styles.md](docs/Light%20Show%20Styles.md)). **Idle** (Oct 19): the flowing waves for 3 minutes, then the city at night with the bar in colour stripes for 3, and round again. Open: the Pi 5 LED driver |
+| 7 UI platform | Engine, Neon theme, Home sections, albums, playlists, Settings (Bluetooth, Displays, buttons, modules), installable modules (Weather, Weather Mix), media and video backgrounds; **displays** (Oct 18: picture area, rotation, screen sleep) |
+| 7b Admin, 7c Page builder | Admin built (login, themes, phones, drives, displays, extensions, the pick record); page builder built. Setup wizard, Settings, Maintenance open |
+| 8 Appliance | Restarts on failure, power-loss-safe writes, jb-netwatch (Oct 14). Live netwatch test, log rotation, read-only root, pull-the-plug tests open |
+| 9 Hard drive | Done (Oct 14): USB drives merged with the phone's library, media import |
+
+### Next (agreed Oct 19, 2026)
+
+One at a time:
+
+1. **Docs:** this status, and the helper app plan's revisions ([docs/JUK3BOX_HELPER_BUILD_PLAN.md](docs/JUK3BOX_HELPER_BUILD_PLAN.md)).
+2. **Bluetooth distance test**, then decide on a USB adapter with an external antenna (it would serve the Pi 5 too).
+3. **Pi 5 prep:** back up the SD card and data; the button and accent LED driver for the Pi 5's PIO; `[pi4]`/`[pi5]` settings ([docs/pi5-move.md](docs/pi5-move.md)).
+4. **Helper app Phase 0 and the sleep test:** the developer account is renewed (Oct 19) and an empty app builds signed; Xcode 26.3 is the newest this Intel MacBook Pro can run (Xcode 27 needs Apple silicon), which is fine for building to a phone; App Store uploads will need an Apple silicon Mac once Apple requires Xcode 27. Left: Xcode's first launch, Developer Mode on the phone, install, then the sleep test.
+5. **Pi 5 install**, with the cabinet open: swap the SD card, check every service, re-tune whole-home sync from 1425 ms, reflow the level bar's strip 19-20 joint.
+6. Then the helper app proper: its Phases 1-4 on the app side, then the AirPlay receiver and `jb-source-helper` on the Pi 5.
 
 ## Architecture
 
-The jukebox is a Bluetooth-only appliance: an iPhone pairs like it would to a car head unit, A2DP carries audio, and AVRCP handles library browsing and control. BlueZ runs Bluetooth, PipeWire routes audio to the DAC Pro, and WiFi is used only for SSH admin. AirPlay was evaluated and dropped because a receiver cannot query or select from the phone's library.
+The jukebox is a Bluetooth-only appliance: an iPhone pairs like it would to a car head unit, A2DP carries audio, and AVRCP handles library browsing and control. BlueZ runs Bluetooth, PipeWire routes audio to the DAC Pro, and WiFi is used only for SSH admin. AirPlay was evaluated and dropped as a *source* because a receiver cannot query or select from the phone's library. It's back in two roles: whole-home audio sends the cabinet's sound out to an AirPlay zone (Oct 18), and the planned helper app ([docs/JUK3BOX_HELPER_BUILD_PLAN.md](docs/JUK3BOX_HELPER_BUILD_PLAN.md)) gives the jukebox the library over Wi-Fi and plays to it over AirPlay 2, as a second phone source beside Bluetooth (Bluetooth stays).
 
 Music sources are pluggable. The phone is the first source adapter; library, core and UI talk to one source interface (browse, play item, now-playing, artwork), so Hard Drive and Spotify become new adapters, not rewrites.
 
@@ -72,9 +85,9 @@ A single Raspberry Pi Pico, presenting as a USB keyboard, reads every control on
 | 23× SK6812 RGBW pixels | One under each of the 20 keys, Single Play, Album Play and Reset | BTF 10 mm boards, natural white, GRBW, 5V, 60 mA max each. Chain order: K…A, Single, Album, 1…0, Reset |
 | WS2812B accent chain, 349 px (as built, Oct 12) | Accent lighting | One chain on GPIO13: the **upper panel** (pixels 1-189), then a jumper to the **footlights panel** (190-349), 4 rows of 40 facing down onto the front grill, serpentine, front row first: 190-229 left to right, 230-269 right to left, 270-309 left to right, 310-349 right to left. 5V, GRB; up to ~21A at full white (hence the 6A cap) |
 | LED board (custom PCB, Rev E) | One 5V input, five fused branches, two Adafruit Pixel Shifters for four LED data lines | Stacks on the DAC Pro; see LED and power board |
-| Mean Well LRS-200-5 | 5V supply for the Pi and all LEDs, 5V 40A (200W) | Fanless; set to 5.2–5.25V; one 12 AWG pair to the board |
+| Mean Well LRS-150F-5 | 5V supply for the Pi and all LEDs, 5V 22A (110W) | As built (the plan had the LRS-200-5); fanless; set to 5.2–5.25V; one 12 AWG pair to the board. The ~14A budget fits |
 | Monitor | Song board display | Size and resolution TBD |
-| USB Bluetooth dongle + extension | Fallback only | Only if in-cabinet range is weak |
+| USB Bluetooth dongle + extension | Fallback only | Only if in-cabinet range is weak. Being decided (Oct 19): the built-in radio drops frames in bursts; a distance test comes first |
 | Volume / level bar | Volume and sound-level meter | As built: 36 vertical strips × 5 WS2812B = 180 px (the original plan was 32 × 6), in a diffused aluminum channel. Strip 1 at the left, each strip bottom → top, no serpentine |
 | Fosi BT30D Pro | 2.1 amplifier (TPA3255) | Runs on its own 48V 5A brick inside the cabinet |
 | IEC inlet + internal power strip | One cord, one switch for the whole cabinet | Switched inlet with 5A slow-blow fuse; feeds the Mean Well and the amp brick |
@@ -90,7 +103,7 @@ One board, stacked on the DAC Pro, takes all LED and Pi power in at a single poi
 ### Cabinet power: one cord, one switch
 
 - Panel-mount IEC inlet with switch and 5A slow-blow fuse, feeding a small power strip inside the cabinet.
-- Mean Well LRS-200-5 (5V 40A, fanless), set to 5.2–5.25V, sends one short 12 AWG pair to the board's J2.
+- Mean Well LRS-150F-5 (5V 22A, fanless; the plan had the LRS-200-5), set to 5.2–5.25V, sends one short 12 AWG pair to the board's J2.
 - The Fosi BT30D Pro amp stays on its own 48V 5A brick. It needs 48V; at 5V it would make under 1W.
 
 ### Branches
@@ -310,15 +323,15 @@ The buttons and cabinet respond to what the jukebox is doing. Runs as `jb-lights
 - [ ] Optional: warm the natural white slightly with a touch of red
 
 **Level bar** (the user's design, Oct 11; replaced the fill/meter modes):
-- At idle: every pixel white at 60%. The limiter holds it at the 4A cap (about 37%), which the user approved by eye.
+- At idle: colour stripes beside the city (Oct 19: each strip its own colour, red, green, blue, amber, cyan, magenta, at 20%, ~0.7A, cooler than white), and the flowing ribbon during the idle waves. The old idle (all white at the 4A cap, about 37%) is still theme 0.
 - While the knob turns: the volume fill (white columns, left to right = volume) crossfades in, holds 3 s after the last change, then fades back.
-- While music plays (future): themes 1–3 picked dynamically by an **audio mood analyzer**: 1 center-out rainbow analyzer, 2 flowing light ribbon, 3 classic analyzer with falling peak caps. All three run on fake audio today.
+- While music plays: its part of the light show (Oct 18), from jb-analyzer's stream; see [docs/Light Show Styles.md](docs/Light%20Show%20Styles.md).
 
 - [x] Volume from jb-audio (`jukebox/jb-audio/state`); volume fill overlay (`themes/volume_bar_theme4.py`, `levelbar.py`)
 - [x] Matrix layout 36 × 5 (`matrix.py`, index = column × 5 + row)
-- [x] Idle all-white default (`themes/volume_bar_idle.py`), in the service
-- [ ] Sound level read from PipeWire (the same stream the DAC plays, so the meter stays in sync); feed per-column levels to themes 1–3
-- [ ] Audio mood analyzer: choose theme 1, 2 or 3 to fit the music
+- [x] Idle look in the service: colour stripes (`themes/volume_bar_stripes.py`); all-white (`themes/volume_bar_idle.py`) kept as theme 0
+- [x] Sound and mood from jb-analyzer, which listens inside the Pi (Oct 18)
+- [x] The light show picks the bar's scenes to fit the music (Oct 18)
 
 Done when: a full select, confirm and reset sequence plays on the keys within about 20 ms of each press.
 
@@ -417,7 +430,7 @@ Setup and management from a phone or laptop browser, like Sidecar's admin page. 
 - [ ] First-time setup wizard over a Wi-Fi hotspot: name the jukebox, join Wi-Fi, pair the first phone. Reuse Sidecar's lessons (WMM off for this Wi-Fi chip in AP mode; phones reset captive-portal pages, so progress is kept on the Pi)
 - [x] Themes: upload as a zip, check the format, strip scripts, preview, activate, delete
 - [ ] Settings: everything on the cabinet's Settings screen, plus sources, Browse card sorts, idle timeout, volume limits, New ordering, the pick-interrupts setting, API keys
-- [ ] Phones: pair, forget, switch, re-sync the library
+- [x] Phones: pair, forget, switch (Oct 14, the admin's Bluetooth page); re-sync from the admin still open
 - [ ] Maintenance: software updates, logs, restart, reboot
 - [ ] Later: an installer, so anyone can set up JUKE.BOX on their own Pi
 
@@ -507,7 +520,7 @@ Also on the list: the jb-netwatch live test (Phase 8), power-loss safety (settin
 | LED board header height | Phase 2c | Depends on DAC Pro jack height; measure first |
 | Level bar on GPIO10 (SPI) alongside the two PWM chains | Phase 2c | Works on the bench with the buttons running (Oct 11); still to test with audio and the accent strip. Fallback if GPIO10 conflicts with audio: chain the bar onto the end of the accent strip (\~65 fps max) |
 | Pixel Shifter output order | Next board revision | Decided: fix the footprint to G, D5, !D5, C5. Rev E works today via the U2 rework and the buttons' software inversion |
-| LED supply size | Phase 2c | Decided: LRS-200-5 (5V 40A) powers the Pi and all LEDs through the board; amp on its own 48V brick |
+| LED supply size | Phase 2c | Decided and built: LRS-150F-5 (5V 22A) powers the Pi and all LEDs through the board (the plan had the LRS-200-5); amp on its own 48V brick |
 | Key cap translucency | Phase 2c | Translucent = one pixel per key; opaque may need two or a light pipe |
-| Level bar display mode | Phase 6b | Decided (Oct 11): idle all white; volume fill while the knob turns; themes 1–3 while music plays, chosen by an audio mood analyzer (to build) |
+| Level bar display mode | Phase 6b | Decided (Oct 19): idle colour stripes (and the ribbon during the idle waves); volume fill while the knob turns; the light show while music plays |
 | Pi branch fuse: PTC or blade | Phase 2c | 5A PTC; switch to a 5A blade fuse if the Pi reports undervoltage |
