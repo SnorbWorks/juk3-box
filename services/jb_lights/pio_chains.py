@@ -72,6 +72,11 @@ def available(dev: Path = DEV) -> bool:
     return (dev / BUTTONS_DEV).exists() and (dev / ACCENT_DEV).exists()
 
 
+def present(dev: Path = DEV) -> set[str]:
+    """The chains whose devices are there: "buttons", "accent"."""
+    return {name for name, file in (("buttons", BUTTONS_DEV), ("accent", ACCENT_DEV)) if (dev / file).exists()}
+
+
 class Chain:
     """A PixelStrip-like view of one /dev/leds-* device."""
 
@@ -106,12 +111,16 @@ class Chain:
 
 
 class Chains:
+    """A chain whose device is missing (its overlay not loaded) is None."""
+
     def __init__(self, dev: Path = DEV, gpiomem: Path = GPIOMEM, log=print):
         lock = threading.Lock()
-        self.buttons = Chain(dev / BUTTONS_DEV, buttons.NUM_PIXELS, lock)
-        self.accent = Chain(dev / ACCENT_DEV, accent.NUM_PIXELS, lock)
-        before, after = invert_output(buttons.GPIO, gpiomem)
-        log(f"jb-lights: GPIO{buttons.GPIO} inverted for the buttons (CTRL {before:#010x} -> {after:#010x})")
+        have = present(dev)
+        self.buttons = Chain(dev / BUTTONS_DEV, buttons.NUM_PIXELS, lock) if "buttons" in have else None
+        self.accent = Chain(dev / ACCENT_DEV, accent.NUM_PIXELS, lock) if "accent" in have else None
+        if self.buttons:
+            before, after = invert_output(buttons.GPIO, gpiomem)
+            log(f"jb-lights: GPIO{buttons.GPIO} inverted for the buttons (CTRL {before:#010x} -> {after:#010x})")
 
 
 _chains = None

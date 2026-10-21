@@ -1,0 +1,8 @@
+# Runs jb-setupctl's waiting requests as root (docs/Setup Wizard — Plan.md).
+# Started by jb-setupctl.path when jb-admin drops a request.
+[Unit]
+Description=juk3-box setup wizard (privileged steps)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jb-setupctl serve

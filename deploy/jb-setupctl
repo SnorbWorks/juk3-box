@@ -1,0 +1,288 @@
+#!/usr/bin/python3
+"""jb-setupctl: the setup wizard's privileged steps (docs/Setup Wizard —
+Plan.md). Like jb-modctl: it runs as root, started by systemd when jb-admin
+drops a request in REQUESTS (jb-setupctl.path), and answers in RESPONSES.
+No sudo rule is involved. Everything it's asked is checked here again, and
+it only ever does these:
+
+    jb-setupctl psu 5000|unset            the Pi 5's PSU_MAX_CURRENT (board EEPROM, next boot)
+    jb-setupctl rtc-charge on|off         charge the official RTC battery (config.txt, next boot)
+    jb-setupctl fan 0..4|auto             spin the Pi 5's fan for the cooling check
+    jb-setupctl timezone Area/City        the clock's time zone
+    jb-setupctl wifi-country CC           the Wi-Fi regulatory country
+    jb-setupctl lights identify CHAIN SECONDS | load CHAINS SECONDS | stop
+                                          the light checks, with jb-lights paused
+    jb-setupctl serve                     answer every waiting request
+
+config.txt is only ever changed inside its own marked block at the end
+(after a dated backup, as docs/pi5-move.md did by hand). Installed copy:
+/usr/local/sbin/jb-setupctl, root-owned (deploy.sh copies it there).
+A request is {"verb": ..., "args": [...]}; its answer {"ok", "out", "error"}
+has the same file name.
+"""
+
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+CONFIG = Path("/boot/firmware/config.txt")
+MODEL = Path("/proc/device-tree/model")
+THERMAL = Path("/sys/class/thermal")
+ZONEINFO = Path("/usr/share/zoneinfo")
+REPO = Path("/opt/juk3-box")
+PYTHON = REPO / "venv" / "bin" / "python"
+REQUESTS = Path("/var/lib/juk3-box/setupctl/requests")
+RESPONSES = Path("/var/lib/juk3-box/setupctl/responses")
+REQ_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}\.json$")
+TZ_RE = re.compile(r"^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$")
+CHAINS = ("buttons", "accent", "levelbar")
+TEST_UNIT = "jb-lighttest"
+
+BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
+END = "# --- end juk3box setup ---"
+RTC_CHARGE = "dtparam=rtc_bbat_vchg=3000000"
+
+
+class Refused(Exception):
+    pass
+
+
+def die(msg: str):
+    raise Refused(msg)
+
+
+def run(*cmd, check=True, **kw):
+    return subprocess.run(cmd, check=check, capture_output=True, text=True, **kw)
+
+
+def is_pi5() -> bool:
+    try:
+        return "Raspberry Pi 5" in MODEL.read_text(errors="replace")
+    except OSError:
+        return False
+
+
+def write(path: Path, text: str, mode: int = 0o644):
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+# config.txt: our block --------------------------------------------------------
+
+def managed(text: str, lines: list[str]) -> str:
+    """config.txt with our block holding `lines` (under [pi5], then back to
+    [all] so anything appended later isn't caught by it), or without the
+    block when there are none. Everything outside the block is kept."""
+    out, inside = [], False
+    for line in text.splitlines():
+        if line.strip() == BEGIN:
+            inside = True
+            continue
+        if inside:
+            if line.strip() == END:
+                inside = False
+            continue
+        out.append(line)
+    while out and not out[-1].strip():
+        out.pop()
+    if lines:
+        out += ["", BEGIN, "[pi5]", *lines, "[all]", END]
+    return "\n".join(out) + "\n"
+
+
+def block_lines(text: str) -> list[str]:
+    lines, inside = [], False
+    for line in text.splitlines():
+        if line.strip() == BEGIN:
+            inside = True
+        elif line.strip() == END:
+            inside = False
+        elif inside and line.strip() and not line.startswith("[") and not line.startswith("#"):
+            lines.append(line.strip())
+    return lines
+
+
+def set_block_line(line: str, on: bool) -> str:
+    text = CONFIG.read_text()
+    lines = [x for x in block_lines(text) if x != line] + ([line] if on else [])
+    new = managed(text, lines)
+    if new == text:
+        return "unchanged"
+    backup = CONFIG.with_name(f"config.txt.bak-{datetime.date.today():%Y%m%d}")
+    if not backup.exists():
+        shutil.copy2(CONFIG, backup)
+    write(CONFIG, new, 0o755 if os.access(CONFIG, os.X_OK) else 0o644)
+    return "changed; applies on the next restart"
+
+
+# The EEPROM ----------------------------------------------------------------------
+
+def eeprom_with(text: str, value: str | None) -> str:
+    """The bootloader config with PSU_MAX_CURRENT set to `value`, or removed."""
+    lines = [x for x in text.splitlines() if not x.strip().startswith("PSU_MAX_CURRENT=")]
+    if value is not None:
+        lines.append(f"PSU_MAX_CURRENT={value}")
+    return "\n".join(lines).strip() + "\n"
+
+
+def cmd_psu(value: str) -> str:
+    if not is_pi5():
+        die("PSU_MAX_CURRENT is a Raspberry Pi 5 setting")
+    if value not in ("5000", "unset"):
+        die("psu takes 5000 or unset")
+    current = run("rpi-eeprom-config").stdout
+    new = eeprom_with(current, None if value == "unset" else value)
+    if new.strip() == current.strip():
+        return "unchanged"
+    with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as f:
+        f.write(new)
+        path = f.name
+    try:
+        run("rpi-eeprom-config", "--apply", path)
+    finally:
+        os.unlink(path)
+    return "changed; applies on the next restart"
+
+
+# The rest ------------------------------------------------------------------------
+
+def fan_device() -> Path:
+    for d in sorted(THERMAL.glob("cooling_device*")):
+        try:
+            if (d / "type").read_text().strip() == "pwm-fan":
+                return d
+        except OSError:
+            continue
+    die("no fan on the FAN connector")
+
+
+def cmd_fan(level: str) -> str:
+    d = fan_device()
+    top = int((d / "max_state").read_text().strip())
+    if level == "auto":
+        level = "0"       # the firmware's thermal governor takes over from here
+    if not level.isdigit() or not 0 <= int(level) <= top:
+        die(f"fan takes 0..{top} or auto")
+    (d / "cur_state").write_text(level)
+    return level
+
+
+def cmd_timezone(tz: str) -> str:
+    if not TZ_RE.match(tz) or ".." in tz or not (ZONEINFO / tz).is_file():
+        die("not a time zone")
+    run("timedatectl", "set-timezone", tz)
+    return tz
+
+
+def cmd_wifi_country(cc: str) -> str:
+    if not re.fullmatch(r"[A-Z]{2}", cc):
+        die("not a country code")
+    run("raspi-config", "nonint", "do_wifi_country", cc)
+    return cc
+
+
+def cmd_lights(args: list[str]) -> str:
+    """The checks run as a transient unit so this answers at once; when it
+    ends (done, stopped or failed) jb-lights is started again."""
+    if args == ["stop"]:
+        if run("systemctl", "is-active", "--quiet", TEST_UNIT, check=False).returncode == 0:
+            run("systemctl", "stop", TEST_UNIT)
+        run("systemctl", "start", "jb-lights")
+        return "stopped"
+    if len(args) != 3 or args[0] not in ("identify", "load"):
+        die("lights identify CHAIN SECONDS | load CHAINS SECONDS | stop")
+    mode, chains, seconds = args
+    names = chains.split(",")
+    if not names or any(n not in CHAINS for n in names) or len(set(names)) != len(names) \
+            or (mode == "identify" and len(names) != 1):
+        die("bad chain list")
+    if not seconds.isdigit() or not 1 <= int(seconds) <= 300:
+        die("seconds 1..300")
+    if run("systemctl", "is-active", "--quiet", TEST_UNIT, check=False).returncode == 0:
+        run("systemctl", "stop", TEST_UNIT)
+    run("systemctl", "reset-failed", TEST_UNIT, check=False)
+    run("systemctl", "stop", "jb-lights")
+    run("systemd-run", f"--unit={TEST_UNIT}", "--collect", "--no-block", "--quiet",
+        f"--working-directory={REPO}", "--setenv=PYTHONDONTWRITEBYTECODE=1",
+        "--property=ExecStopPost=/bin/systemctl start jb-lights",
+        str(PYTHON), "-m", "services.jb_lights.wizard_test", mode, ",".join(names), "--seconds", seconds)
+    return "started"
+
+
+def dispatch(a: list[str]) -> str:
+    if len(a) == 2 and a[0] == "psu":
+        return cmd_psu(a[1])
+    if len(a) == 2 and a[0] == "rtc-charge" and a[1] in ("on", "off"):
+        if not is_pi5():
+            die("the RTC battery is a Raspberry Pi 5 thing")
+        return set_block_line(RTC_CHARGE, a[1] == "on")
+    if len(a) == 2 and a[0] == "fan":
+        return cmd_fan(a[1])
+    if len(a) == 2 and a[0] == "timezone":
+        return cmd_timezone(a[1])
+    if len(a) == 2 and a[0] == "wifi-country":
+        return cmd_wifi_country(a[1])
+    if a and a[0] == "lights":
+        return cmd_lights(a[1:])
+    die("unknown command")
+
+
+def serve():
+    RESPONSES.mkdir(parents=True, exist_ok=True)
+    shutil.chown(RESPONSES, "admin", "admin")
+    for req in sorted(REQUESTS.glob("*.json")) if REQUESTS.is_dir() else []:
+        answer = {"ok": False, "out": "", "error": ""}
+        try:
+            if not REQ_NAME_RE.match(req.name) or req.is_symlink():
+                raise Refused("bad request file")
+            body = json.loads(req.read_text())
+            verb, args = body.get("verb"), body.get("args", [])
+            if not isinstance(verb, str) or not isinstance(args, list) or not all(isinstance(x, str) for x in args):
+                raise Refused("bad request")
+            answer["out"] = dispatch([verb, *args])
+            answer["ok"] = True
+        except Refused as e:
+            answer["error"] = str(e)
+        except subprocess.CalledProcessError as e:
+            answer["error"] = f"{' '.join(e.cmd[:3])} failed: {(e.stderr or '').strip()[-300:]}"
+        except (ValueError, OSError) as e:
+            answer["error"] = str(e)
+        finally:
+            req.unlink(missing_ok=True)
+        if REQ_NAME_RE.match(req.name):
+            path = RESPONSES / req.name
+            write(path, json.dumps(answer))
+            shutil.chown(path, "admin", "admin")
+
+
+def main():
+    if os.geteuid() != 0:
+        print("jb-setupctl: must run as root", file=sys.stderr)
+        sys.exit(2)
+    a = sys.argv[1:]
+    try:
+        if a == ["serve"]:
+            serve()
+        else:
+            print(dispatch(a))
+    except Refused as e:
+        print(f"jb-setupctl: {e}", file=sys.stderr)
+        sys.exit(2)
+    except subprocess.CalledProcessError as e:
+        print(f"jb-setupctl: {' '.join(e.cmd)} failed: {(e.stderr or '').strip()[-300:]}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

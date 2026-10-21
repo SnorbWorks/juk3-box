@@ -9,6 +9,9 @@ layouts (the page builder) and the media library. It is their only writer.
 Routes, all behind the login except the first group:
   /                         the admin app (static/)
   /api/session, /api/setup, /api/login
+  /setup                    the setup wizard's page (setup_wizard.py); its
+                            /api/wizard asks for the login once a password
+                            exists
   /api/...                  settings, themes, layouts, media, status
   /preview                  the real kiosk engine, in preview mode (drafts
                             shown, nothing published): /engine, /api/theme,
@@ -18,6 +21,7 @@ Routes, all behind the login except the first group:
 import asyncio
 import json
 import re
+import secrets
 import time
 from urllib.parse import unquote
 from pathlib import Path
@@ -33,6 +37,7 @@ from services.jb_admin.media_lib import MediaLibrary
 from services.jb_admin.drive_import import DriveImport
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
 from services.jb_admin.registry import Registry, read_manifests
+from services.jb_admin.setup_wizard import ANSWER_TOPIC, Wizard, WizardError
 from services.jb_ui import main as ui
 from services.jb_ui import customize, icons, media, module_blocks, themes
 
@@ -60,6 +65,11 @@ DEFAULTS = {
     "module_dirs": [str(REPO_DIR / "services"), str(DATA / "modules")],
     "module_settings_dir": str(DATA / "module-settings"),
     "modctl_dir": str(DATA / "modctl"),
+    # The setup wizard: its progress, the lights it was told about, and its
+    # privileged helper's folder (deploy/jb-setupctl).
+    "setup_path": str(DATA / "setup.json"),
+    "lights_path": str(DATA / "lights.json"),
+    "setupctl_dir": str(DATA / "setupctl"),
     "default_theme": "bare",
     "max_upload_mb": 600,
     # Pictures and videos imported from USB drives stop once the media
@@ -135,6 +145,9 @@ class Admin:
         self._library_playlists: list = []
         self.bus = None
         self._bus_task = None
+        self._wizard_task = None
+        self._pending = set()
+        self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]))
 
     # The bus ------------------------------------------------------------
 
@@ -154,7 +167,10 @@ class Admin:
         "jukebox/jb-source-helper/settings": "helper_settings",
         "jukebox/jb-core/source": "source",
         "jukebox/jb-library/drives-in": "drives_in",
+        "jukebox/jb-input/status": "input",
     }
+    # The setup wizard listens to these: the cabinet's yes/no and the knob step.
+    WIZARD_TOPICS = (ANSWER_TOPIC, "jukebox/jb-input/gesture", "jukebox/jb-input/key")
 
     # What the Phones page may ask jb-source-phone to do.
     PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}
@@ -210,12 +226,13 @@ class Admin:
                 async with Bus(SERVICE_NAME, self.cfg["mqtt_host"], self.cfg["mqtt_port"]) as bus:
                     self.bus = bus
                     self._offers_sent = None
+                    self.wizard._published = None       # tell the cabinet again on a new connection
                     self.log.info("connected to the bus")
                     heartbeat = asyncio.create_task(bus.run_heartbeat())
                     try:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
                                       self.DRIVES_TOPIC, "jukebox/jb-library/drives", self.CMD_TOPIC,
-                                      *self.LIVE_TOPICS, *self.LIBRARY_TOPICS):
+                                      *self.LIVE_TOPICS, *self.LIBRARY_TOPICS, *self.WIZARD_TOPICS):
                             await bus._client.subscribe(topic)
                         messages = bus._iter_messages()
                         async for topic, payload in messages:
@@ -229,6 +246,10 @@ class Admin:
                                 await self.publish_offers()
                             elif topic == self.CMD_TOPIC:
                                 await self.heard_cmd(payload)
+                            elif topic == ANSWER_TOPIC:
+                                self.wizard.heard_answer(payload)
+                            elif topic in self.WIZARD_TOPICS:
+                                self.wizard.heard_input(topic, payload)
                             elif topic == "jukebox/jb-library/drives":
                                 self.live["drives_library"] = payload
                             else:
@@ -252,6 +273,115 @@ class Admin:
             await self.bus.publish("jukebox/jb-admin/changed", {"what": list(what), "at": time.time()})
         except Exception as e:
             self.log.warning("couldn't announce the change: %s", e)
+
+    def publish_soon(self, topic: str, payload: dict, retain: bool = False) -> None:
+        """Publish without waiting (the setup wizard's cabinet topic); dropped
+        while the bus is away (it's sent again on reconnect)."""
+        if self.bus is None:
+            return
+        async def go():
+            try:
+                await self.bus.publish(topic, payload, retain=retain)
+            except Exception as e:
+                self.log.warning("couldn't publish %s: %s", topic, e)
+        task = asyncio.get_running_loop().create_task(go())
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def bus_cmd(self, topic: str, payload: dict) -> None:
+        if self.bus is None:
+            raise WizardError("The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish(topic, payload)
+
+    # The setup wizard's privileged helper and the things it asks of the platform.
+
+    async def setup_ctl(self, verb: str, *args: str, timeout: float = 60) -> str:
+        """A request to jb-setupctl (root), as module_mgr does for jb-modctl."""
+        folder = Path(self.cfg["setupctl_dir"])
+        if not (folder / "requests").is_dir():
+            raise WizardError("The setup helper isn't installed on this jukebox (deploy jb-admin again).")
+        name = f"{secrets.token_hex(8)}.json"
+        req, resp = folder / "requests" / name, folder / "responses" / name
+        tmp = req.with_name(f".{name}")
+        tmp.write_text(json.dumps({"verb": verb, "args": list(args)}))
+        tmp.replace(req)
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if resp.is_file():
+                answer = read_json(resp, {})
+                resp.unlink(missing_ok=True)
+                if not answer.get("ok"):
+                    raise WizardError(answer.get("error") or "The setup helper refused.")
+                return answer.get("out") or ""
+            await asyncio.sleep(0.2)
+        req.unlink(missing_ok=True)
+        raise WizardError("The setup helper didn't answer.")
+
+    async def restart_unit(self, unit: str) -> None:
+        try:
+            await self.modules.ctl("unit", "restart", unit)
+        except ModuleError as e:
+            raise WizardError(f"Couldn't restart {unit}: {e}")
+
+    async def set_module_enabled(self, module_id: str, on: bool) -> None:
+        m = next((m for m in self.registry.view() if m["id"] == module_id), None)
+        if m is None:
+            return
+        try:
+            await self.modules.ctl("unit", "enable" if on else "disable", unit_of(m))
+        except ModuleError as e:
+            raise WizardError(f"Couldn't turn {m.get('name') or module_id} {'on' if on else 'off'}: {e}")
+
+    async def reboot(self) -> None:
+        self.log.info("setup: restarting to apply the settings")
+        proc = await asyncio.create_subprocess_exec("systemctl", "reboot")
+        await proc.wait()
+
+    async def rename_jukebox(self, name: str) -> None:
+        """One name for the app, the AirPlay speaker and the cabinet: jb-source-helper's."""
+        if self.bus is None:
+            raise WizardError("The admin can't reach the jukebox right now. Try again in a moment.")
+        old_name = (self.live.get("helper_settings") or {}).get("name")
+        await self.bus.publish("jukebox/jb-source-helper/cmd", {"action": "settings", "name": name})
+        if name == old_name:
+            return
+        # The AirPlay speaker takes the new name on a restart, once
+        # jb-source-helper has written it (airplay.env).
+        for _ in range(30):
+            if (self.live.get("helper_settings") or {}).get("name") != old_name:
+                break
+            await asyncio.sleep(0.1)
+        try:
+            await self.modules.ctl("unit", "restart", "jb-airplay")
+        except ModuleError as e:
+            self.log.warning("couldn't restart jb-airplay: %s", e)
+            raise WizardError(f"Renamed, but the AirPlay speaker keeps its old name until the jukebox restarts ({e}).")
+
+    # The setup wizard's page --------------------------------------------------
+
+    async def setup_page(self, request):
+        return web.FileResponse(STATIC_DIR / "setup" / "index.html")
+
+    async def wizard_view(self, request):
+        return web.json_response(await self.wizard.view(request.query.get("step")))
+
+    async def wizard_submit(self, request):
+        body = await json_body(request)
+        try:
+            return web.json_response(await self.wizard.submit(request.match_info["step"], body))
+        except WizardError as e:
+            raise error(400, str(e))
+
+    async def wizard_action(self, request):
+        body = await json_body(request)
+        try:
+            return web.json_response(await self.wizard.action(request.match_info["step"], request.match_info["action"], body))
+        except WizardError as e:
+            raise error(400, str(e))
+
+    async def wizard_again(self, request):
+        await self.wizard.restart_wizard()
+        return web.json_response({"ok": True})
 
     # Helpers --------------------------------------------------------------
 
@@ -452,21 +582,17 @@ class Admin:
                     cmd[k] = bool(body[k])
         if self.bus is None:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
-        old_name = (self.live.get("helper_settings") or {}).get("name")
-        await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
-        self.log.info("helper app: %s %s", action, cmd.get("device_id", ""))
-        if action == "settings" and name and name.strip() != old_name:
-            # The AirPlay speaker takes the new name on a restart, once
-            # jb-source-helper has written it (airplay.env).
-            for _ in range(30):
-                if (self.live.get("helper_settings") or {}).get("name") != old_name:
-                    break
-                await asyncio.sleep(0.1)
+        if action == "settings" and name:
+            rest = {k: v for k, v in cmd.items() if k != "name"}
+            if len(rest) > 1:
+                await self.bus.publish("jukebox/jb-source-helper/cmd", rest)
             try:
-                await self.modules.ctl("unit", "restart", "jb-airplay")
-            except ModuleError as e:
-                self.log.warning("couldn't restart jb-airplay: %s", e)
-                raise error(500, f"Renamed, but the AirPlay speaker keeps its old name until the jukebox restarts ({e}).")
+                await self.rename_jukebox(cmd["name"])
+            except WizardError as e:
+                raise error(500, str(e))
+        else:
+            await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
+        self.log.info("helper app: %s %s", action, cmd.get("device_id", ""))
         return web.json_response({"ok": True})
 
     async def phone_action(self, request):
@@ -1160,7 +1286,8 @@ async def save_upload(request, folder: Path, suffix: str, limit: int) -> Path:
 ADMIN_KEY = web.AppKey("admin", object)
 
 
-PUBLIC = {("GET", "/"), ("GET", "/api/icons"), ("GET", "/api/session"), ("POST", "/api/setup"), ("POST", "/api/login")}
+PUBLIC = {("GET", "/"), ("GET", "/setup"), ("GET", "/api/icons"), ("GET", "/api/session"), ("POST", "/api/setup"),
+          ("POST", "/api/login")}
 
 
 def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
@@ -1169,7 +1296,10 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     @web.middleware
     async def guard(request, handler):
         path = request.path
-        public = (request.method, path) in PUBLIC or path.startswith("/static/")
+        public = (request.method, path) in PUBLIC or path.startswith(("/static/", "/engine/fonts/"))
+        # Before there's a password the wizard's page may read where it is
+        # (its first step is choosing one); nothing else.
+        public = public or (request.method == "GET" and path == "/api/wizard" and not admin.auth.has_password())
         # Changes need a header a page on another site can't send without
         # asking first (CORS), on top of the SameSite cookie.
         if request.method not in ("GET", "HEAD") and request.headers.get("X-JB-Admin") != "1":
@@ -1193,6 +1323,11 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/session", admin.session)
     r.add_post("/api/setup", admin.setup)
     r.add_post("/api/login", admin.login)
+    r.add_get("/setup", admin.setup_page)
+    r.add_get("/api/wizard", admin.wizard_view)
+    r.add_post("/api/wizard-again", admin.wizard_again)
+    r.add_post("/api/wizard/{step}", admin.wizard_submit)
+    r.add_post("/api/wizard/{step}/{action}", admin.wizard_action)
     r.add_post("/api/logout", admin.logout)
     r.add_post("/api/password", admin.change_password)
     r.add_get("/api/status", admin.status)
@@ -1257,6 +1392,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
         admin.media.resume()
         if bus_enabled:
             admin._bus_task = asyncio.create_task(admin.run_bus())
+            admin._wizard_task = asyncio.create_task(admin.wizard.run())
             admin._import_task = asyncio.create_task(admin.drive_import.run())
 
     async def stop_bus(app):
@@ -1264,6 +1400,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
             admin._bus_task.cancel()
         if admin._import_task:
             admin._import_task.cancel()
+        if admin._wizard_task:
+            admin._wizard_task.cancel()
 
     app.on_startup.append(start_bus)
     app.on_cleanup.append(stop_bus)

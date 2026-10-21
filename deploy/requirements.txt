@@ -7,3 +7,4 @@ rpi_ws281x
 numpy
 pillow
 tinytag
+segno

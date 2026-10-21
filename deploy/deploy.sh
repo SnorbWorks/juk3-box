@@ -51,6 +51,10 @@ ssh_pi "cd $REMOTE_DIR && python3 -m venv --system-site-packages venv 2>/dev/nul
 # in its own private folder. No sudo rule involved.
 ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/local/sbin/jb-modctl && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-modctl.service $REMOTE_DIR/deploy/systemd/jb-modctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/modctl $DATA_DIR/modctl/requests && systemctl daemon-reload && systemctl enable --now jb-modctl.path >/dev/null 2>&1"
 
+# The setup wizard's privileged steps (docs/Setup Wizard — Plan.md): the same
+# arrangement as jb-modctl, with its own folder.
+ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-setupctl /usr/local/sbin/jb-setupctl && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-setupctl.service $REMOTE_DIR/deploy/systemd/jb-setupctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupctl $DATA_DIR/setupctl/requests && systemctl daemon-reload && systemctl enable --now jb-setupctl.path >/dev/null 2>&1"
+
 # USB drives (jb-source-local): mounted read-only by a root-owned helper that
 # udev has systemd start when one is plugged in. The trigger mounts any
 # drive that's already there.

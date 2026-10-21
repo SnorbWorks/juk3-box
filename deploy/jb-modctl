@@ -6,7 +6,7 @@ RESPONSES. No sudo rule is involved. Everything it's asked is checked here
 again, and it only ever touches jb-* units, the modules' bus logins and
 their unit files.
 
-    jb-modctl unit start|stop|restart <unit>    a jb-* or jbmod-* service
+    jb-modctl unit start|stop|restart|enable|disable <unit>   a jb-* or jbmod-* service
     jb-modctl install <module-id>               bus login + topic rules + unit, start it
     jb-modctl remove <module-id>                stop it, remove all of that
     jb-modctl setup                             the bus's module listener (once)
@@ -194,11 +194,16 @@ WantedBy=multi-user.target
 
 
 def cmd_unit(action: str, unit: str):
-    if action not in ("start", "stop", "restart") or not UNIT_RE.match(unit):
-        die("usage: unit start|stop|restart <jb-* unit>")
+    if action not in ("start", "stop", "restart", "enable", "disable") or not UNIT_RE.match(unit):
+        die("usage: unit start|stop|restart|enable|disable <jb-* unit>")
     if not (UNITS / f"{unit}.service").is_file():
         die(f"no unit {unit}")
-    run("systemctl", action, f"{unit}.service")
+    # enable/disable also start/stop it, and last across restarts (the
+    # setup wizard's per-board suggestions).
+    if action in ("enable", "disable"):
+        run("systemctl", action, "--now", f"{unit}.service")
+    else:
+        run("systemctl", action, f"{unit}.service")
 
 
 def cmd_install(mid: str):

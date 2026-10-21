@@ -1,0 +1,8 @@
+[Unit]
+Description=juk3-box setup wizard requests
+
+[Path]
+DirectoryNotEmpty=/var/lib/juk3-box/setupctl/requests
+
+[Install]
+WantedBy=multi-user.target
