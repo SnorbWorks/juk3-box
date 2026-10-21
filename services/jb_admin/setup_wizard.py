@@ -430,6 +430,7 @@ class LightCheck(Step):
                 raise WizardError("Which lights?")
             await w.ctl("lights", "identify", chain, str(IDENTIFY_S))
             w.showing = chain
+            w.asked_at = time.time()
             w.answers_in.pop("lightcheck", None)
             w.publish()
             return {"showing": chain}
@@ -461,7 +462,8 @@ class LightCheck(Step):
 
     def ask(self, w):
         if w.showing:
-            return {"q": CHAIN_LOOK[w.showing][0], "yes": "Yes, they look right", "no": "No, something's off"}
+            return {"id": f"lightcheck-{w.asked_at}", "q": CHAIN_LOOK[w.showing][0],
+                    "yes": "Yes, they look right", "no": "No, something's off"}
         return None
 
 
@@ -518,7 +520,7 @@ class Sound(Step):
         return "Listen for a short chime. Answer on your phone, or with the knob." if w.played else super().cabinet(w)
 
     def ask(self, w):
-        return {"q": "Do you hear the chime?", "yes": "Yes", "no": "No"} if w.played else None
+        return {"id": f"sound-{w.asked_at}", "q": "Do you hear the chime?", "yes": "Yes", "no": "No"} if w.played else None
 
 
 class Screen(Step):
@@ -655,6 +657,7 @@ class Wizard:
         self.showing = None                 # the chain the cabinet is lighting for the check
         self.load_test = None
         self.played = False
+        self.asked_at = 0.0                 # when the open yes/no was asked: the cabinet's ask id
         self.answers_in: dict[str, dict] = {}     # the cabinet's yes/no answers, by step
         self.input_seen = {"turn": False, "click": False, "keys": []}
         self._published = None
@@ -866,6 +869,7 @@ class Wizard:
         path = Path(tempfile.gettempdir()) / "juk3box-chime.wav"
         chime(path)
         self.played = True
+        self.asked_at = time.time()
         self.answers_in.pop("sound", None)
         await self.system.run("pw-play", str(path), timeout=10, env={"XDG_RUNTIME_DIR": "/run/user/1000", "PATH": "/usr/bin:/bin"})
 

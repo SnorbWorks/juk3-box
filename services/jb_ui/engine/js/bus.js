@@ -53,6 +53,8 @@ const HANDLERS = {
   'jukebox/jb-display/state': d => store.set('display', d),
   'jukebox/jb-core/pick-problem': p => store.set('pickProblem', { ...p, at: Date.now() }),
   'jukebox/jb-input/gesture': knob,
+  // Setup is open on a phone or computer: the cabinet's setup screen (setup.js).
+  'jukebox/jb-admin/setup': s => store.set('setup', s),
   // The owner published a change in the admin (settings, layouts, theme):
   // start again with it. A preview is reloaded by the admin instead.
   // A module's own settings (what: ["module:<id>"]) are that module's

@@ -485,3 +485,52 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
   animation: jb-sync-spin 1s linear infinite;
 }
 @keyframes jb-sync-spin { to { transform: rotate(360deg); } }
+
+/* The cabinet during setup (setup.js): Juk3box's own look whatever the
+   theme, as on the setup page (docs/Setup Wizard — Plan.md, "The look").
+   Under the popups (a pairing code must show), over the page. */
+@font-face { font-family: "JB Setup Righteous"; src: url("/engine/fonts/Righteous.ttf") format("truetype"); }
+@font-face { font-family: "JB Setup Nunito"; src: url("/engine/fonts/Nunito.ttf") format("truetype"); font-weight: 200 1000; }
+#jb-setup {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: #7a3db0;
+  color: #ffffff;
+  font-family: "JB Setup Nunito", sans-serif;
+}
+#jb-setup[hidden] { display: none; }
+.jb-setup-screen { height: 100%; box-sizing: border-box; padding: 5vmin 6vmin; display: flex; gap: 6vmin; }
+.jb-setup-main { flex: 1 1 58%; display: flex; flex-direction: column; justify-content: center; gap: 2.2vmin; min-width: 0; }
+.jb-setup-side { flex: 0 1 36%; display: flex; flex-direction: column; gap: 3vmin; min-width: 0; justify-content: center; }
+.jb-setup-logo img { height: 22vmin; width: auto; display: block; }
+.jb-setup-kicker { font-weight: 800; font-size: 2.4vmin; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; margin-top: 2vmin; }
+.jb-setup-title { font-family: "JB Setup Righteous", sans-serif; font-size: 6.4vmin; line-height: 1.1; }
+.jb-setup-say { font-size: 3.3vmin; line-height: 1.4; opacity: 0.92; max-width: 60ch; }
+.jb-setup-live { display: flex; gap: 2vmin; flex-wrap: wrap; }
+.jb-setup-stat { background: rgba(255, 255, 255, 0.14); border-radius: 2vmin; padding: 1.6vmin 2.6vmin; min-width: 18vmin; }
+.jb-setup-stat .k { font-size: 2.2vmin; font-weight: 700; opacity: 0.8; }
+.jb-setup-stat .v { font-size: 5vmin; font-weight: 900; }
+.jb-setup-ask { background: #ffffff; color: #2a1640; border-radius: 3vmin; padding: 3vmin 3.4vmin; display: flex; flex-direction: column; gap: 2vmin; }
+.jb-setup-ask .jb-setup-say { color: #5d5470; opacity: 1; }
+.jb-setup-q { font-size: 3.8vmin; font-weight: 900; line-height: 1.25; }
+.jb-setup-buttons { display: flex; gap: 2vmin; }
+.jb-setup-button { flex: 1; text-align: center; font-size: 3vmin; font-weight: 800; padding: 2vmin 2.4vmin; border-radius: 99vmin;
+  border: 0.4vmin solid #7a3db0; color: #5b2491; background: #ffffff; }
+.jb-setup-button.primary { background: #7a3db0; color: #ffffff; }
+.jb-setup-button[data-focused] { box-shadow: 0 0 0 0.7vmin #ff63d5; }
+.jb-setup-button[data-pressed] { transform: scale(0.96); }
+.jb-setup-join { background: #ffffff; color: #2a1640; border-radius: 3vmin; padding: 2.6vmin; display: flex; flex-direction: column; align-items: center; gap: 1.6vmin; }
+.jb-setup-label { font-size: 2.4vmin; font-weight: 800; text-align: center; }
+.jb-setup-qr { width: 30vmin; height: 30vmin; image-rendering: pixelated; }
+.jb-setup-address { font-size: 2.6vmin; font-weight: 800; color: #5b2491; text-align: center; overflow-wrap: anywhere; }
+.jb-setup-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.6vmin 2.4vmin;
+  font-size: 2.2vmin; font-weight: 700; counter-reset: jb-setup; }
+.jb-setup-steps li { counter-increment: jb-setup; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-setup-steps li::before { content: counter(jb-setup) ". "; }
+.jb-setup-steps li.done { opacity: 0.9; }
+.jb-setup-steps li.done::before { content: "✓ "; }
+.jb-setup-steps li.now { opacity: 1; font-weight: 900; color: #ffe27a; }
+.jb-setup-restart { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vmin; text-align: center; }
+.jb-setup-spin { width: 8vmin; height: 8vmin; border-radius: 50%; border: 0.9vmin solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff; animation: jb-sync-spin 1s linear infinite; }

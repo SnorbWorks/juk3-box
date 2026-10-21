@@ -14,6 +14,7 @@ import { initPhones, openSwitcher } from './phones.js';
 import { initWholeHome } from './wholehome.js';
 import { initDisplay } from './display.js';
 import { initSources, SOURCE_SCREENS } from './sources.js';
+import { initSetup } from './setup.js';
 import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
@@ -492,6 +493,7 @@ async function start() {
   await applyTheme(theme);
   store.set('settings', theme.settings);
   initPopups(theme.blocks);
+  initSetup();  // before initDisplay, which fits it into the picture area
   initWholeHome(theme.blocks);
   initDisplay(theme.blocks);
   initSources(theme.blocks);

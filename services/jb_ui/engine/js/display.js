@@ -80,7 +80,7 @@ function fit() {
   const z = Math.min(w / W, h / H);
   const placed = whole ? '' : `position: fixed; left: ${left / z}px; top: ${top / z}px; right: auto; bottom: auto; `
     + `width: ${w / z}px; height: ${h / z}px; zoom: ${z};`;
-  for (const el of [document.getElementById('jb-root'), document.getElementById('jb-popup-layer')]) {
+  for (const el of ['jb-root', 'jb-popup-layer', 'jb-setup'].map(id => document.getElementById(id))) {
     if (el) el.style.cssText = placed;
   }
   guide.style.cssText = whole ? '' : `left: ${left}px; top: ${top}px; right: auto; bottom: auto; width: ${w}px; height: ${h}px;`;
