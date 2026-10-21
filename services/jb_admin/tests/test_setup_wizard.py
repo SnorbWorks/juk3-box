@@ -236,6 +236,20 @@ def test_optional_steps_can_be_skipped_and_finishing_marks_it_done(tmp_path):
     run(tmp_path, check)
 
 
+def test_the_admin_sees_where_setup_is_without_waking_the_cabinet(tmp_path):
+    async def check(client, admin, pi, calls):
+        r = await client.get("/api/wizard-status")
+        s = await r.json()
+        assert r.status == 200 and s["done"] is False and s["step"] == "Name your jukebox" and s["finished"] == 0
+        assert admin.wizard.cabinet() == {"active": False}
+        await submit(client, "finish")
+        s = await (await client.get("/api/wizard-status")).json()
+        assert s["done"] is True and s["summary"][0]["k"] == "Name"
+        assert (await client.post("/api/wizard-again", json={}, headers=H)).status == 200
+        assert (await (await client.get("/api/wizard-status")).json())["done"] is False
+    run(tmp_path, check)
+
+
 def test_the_cabinet_says_which_step_and_carries_its_yes_no(tmp_path):
     async def check(client, admin, pi, calls):
         await client.post("/api/wizard/lightcheck/show", json={"chain": "accent"}, headers=H)

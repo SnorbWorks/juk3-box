@@ -379,6 +379,9 @@ class Admin:
         except WizardError as e:
             raise error(400, str(e))
 
+    async def wizard_status(self, request):
+        return web.json_response(self.wizard.status())
+
     async def wizard_again(self, request):
         await self.wizard.restart_wizard()
         return web.json_response({"ok": True})
@@ -1325,6 +1328,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/login", admin.login)
     r.add_get("/setup", admin.setup_page)
     r.add_get("/api/wizard", admin.wizard_view)
+    r.add_get("/api/wizard-status", admin.wizard_status)
     r.add_post("/api/wizard-again", admin.wizard_again)
     r.add_post("/api/wizard/{step}", admin.wizard_submit)
     r.add_post("/api/wizard/{step}/{action}", admin.wizard_action)

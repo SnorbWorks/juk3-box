@@ -892,6 +892,15 @@ class Wizard:
             rows.append({"k": "Power check", "v": f"{lt['min_volts']:.2f} V lowest"})
         return rows
 
+    def status(self) -> dict:
+        """For the admin's Setup page: where setup is, without counting as the
+        setup page being open (that would bring up the cabinet's setup screen)."""
+        steps = [s for s in self.steps() if s.id != "password"]
+        step = self.current()
+        return {"done": self.done, "step": None if self.done else step.title,
+                "finished": sum(1 for s in steps if self.completed(s)), "of": len(steps),
+                "summary": self.summary()}
+
     # The cabinet --------------------------------------------------------------------------
 
     def cabinet_answer(self, step_id: str):

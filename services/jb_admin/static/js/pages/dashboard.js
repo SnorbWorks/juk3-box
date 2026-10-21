@@ -7,7 +7,13 @@ let timer = null;
 
 export async function show(main) {
   const body = h('div.stack');
-  clear(main, pageHeader('Dashboard', 'Your jukebox at a glance.'), body);
+  const setup = h('div');
+  clear(main, pageHeader('Dashboard', 'Your jukebox at a glance.'), setup, body);
+  // Setup not finished: a way back into it.
+  get('/api/wizard-status').then(w => {
+    if (!w.done) clear(setup, h('a.notice', { href: '#/setup', style: { marginBottom: '16px', color: 'inherit', textDecoration: 'none' } },
+      icon('wand-sparkles'), h('span', `Finish setting up your jukebox: ${w.finished} of ${w.of} steps done.`)));
+  }).catch(() => {});
   const refresh = async () => {
     let s;
     try {

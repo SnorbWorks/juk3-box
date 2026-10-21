@@ -638,3 +638,9 @@ body.builder-open .content { min-height: 0; display: flex; }
 .source-link:hover { border-color: var(--accent); }
 .source-link > .icon:last-child { color: var(--text-3); }
 .source-phone + .source-phone { padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* Setup page: what the wizard knows. */
+.setup-summary { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }
+.setup-summary dt { color: var(--text-2); font-weight: 600; }
+.setup-summary dd { margin: 0; }
+a.btn { text-decoration: none; }
