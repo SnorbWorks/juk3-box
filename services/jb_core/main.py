@@ -51,7 +51,7 @@ class Queue:
         # wait while it's being read: a pick sent before the list is read in
         # this connection can't play (2026-10-19).
         self.phone_sync: str | None = None
-        # The same for the juk3box Helper app (jb-source-helper/connected,
+        # The same for the Juk3box Helper app (jb-source-helper/connected,
         # sync): connected means reachable, asleep included (it's woken over
         # Bluetooth LE for a pick).
         self.helper_connected = False
@@ -490,7 +490,7 @@ async def main() -> None:
                     asyncio.create_task(try_autoplay(bus, q, log, delay=RECONNECT_AUTOPLAY_DELAY_S))
 
             elif topic in ("jukebox/jb-source-helper/connected", "jukebox/jb-source-helper/sync"):
-                # The juk3box Helper app: whatever waited for it plays once
+                # The Juk3box Helper app: whatever waited for it plays once
                 # it's reachable with its library read.
                 was_ready = q.helper_ready
                 if topic.endswith("/connected"):

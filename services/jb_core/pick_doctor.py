@@ -21,7 +21,7 @@ time, it checks what it knows, in order:
   no_sound     the song plays, but no sound reaches the cabinet (the phone
                is sending its audio somewhere else)
 
-A song from the juk3box Helper app (item_path "helper:...") gets the app's
+A song from the Juk3box Helper app (item_path "helper:...") gets the app's
 own reasons too (not_playable, no_subscription, not_authorized, offline)
 and advice that points at the app, not at Bluetooth (HELPER_ADVICE).
 
@@ -63,27 +63,27 @@ ADVICE = {
               "Shuffle is off. Turn Bluetooth off and on again on your phone, then pick a song."),
 }
 
-# A song from the juk3box Helper app: it plays from Apple Music over AirPlay,
+# A song from the Juk3box Helper app: it plays from Apple Music over AirPlay,
 # so Bluetooth isn't the cure (docs/contracts/helper-protocol.md).
 HELPER_ADVICE = {
-    "no_answer": ("juk3box Helper didn't answer",
-                  "Open juk3box Helper on your phone. Your song will play when it connects."),
+    "no_answer": ("Juk3box Helper didn't answer",
+                  "Open Juk3box Helper on your phone. Your song will play when it connects."),
     "not_found": ("That song isn't in your Apple Music library",
                   "Pick another song."),
     "not_playable": ("Apple Music can't play that song",
                      "It may not be available right now. Pick another song."),
     "no_subscription": ("Apple Music needs a subscription",
-                        "juk3box Helper plays songs through Apple Music. Check your subscription on your phone."),
-    "not_authorized": ("juk3box Helper can't use Apple Music",
-                       "Open juk3box Helper on your phone and allow access to Apple Music."),
+                        "Juk3box Helper plays songs through Apple Music. Check your subscription on your phone."),
+    "not_authorized": ("Juk3box Helper can't use Apple Music",
+                       "Open Juk3box Helper on your phone and allow access to Apple Music."),
     "offline": ("Your phone is offline",
                 "Apple Music needs the internet for that song. Check your phone's Wi-Fi."),
     "no_start": ("Your phone didn't start the song",
-                 "Open juk3box Helper on your phone, then pick it again."),
+                 "Open Juk3box Helper on your phone, then pick it again."),
     "no_sound": ("No sound is reaching the jukebox",
-                 "In juk3box Helper, choose JUKE.BOX as the speaker."),
+                 "In Juk3box Helper, choose Juk3box as the speaker."),
     "stuck": ("Songs aren't playing",
-              "Shuffle is off. Open juk3box Helper on your phone, then pick a song."),
+              "Shuffle is off. Open Juk3box Helper on your phone, then pick a song."),
 }
 for _reason in ("not_playable", "no_subscription", "not_authorized", "offline"):
     ADVICE.setdefault(_reason, HELPER_ADVICE[_reason])

@@ -1,4 +1,4 @@
-# JUKE.BOX overflow swap: a 512 MB file on the SD card, used only once the
+# Juk3box overflow swap: a 512 MB file on the SD card, used only once the
 # zram swap (rpi-swap, priority 100) is full. With 1 GB of RAM the kiosk's
 # Chromium plus the jb-* services sit close to the limit; without this the
 # kernel OOM-kills the kiosk on a spike (2026-10-13, scrolling Home). With
@@ -12,7 +12,7 @@
 # Undo: sudo systemctl disable --now var-swapoverflow.swap && sudo rm /var/swapoverflow
 
 [Unit]
-Description=JUKE.BOX overflow swap (after zram)
+Description=Juk3box overflow swap (after zram)
 After=local-fs.target
 
 [Swap]

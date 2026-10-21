@@ -63,7 +63,7 @@ def run(tmp_path, check, wake=None):
     async def go():
         bus = RecordingBus()
         helper = Helper(bus, Phones(tmp_path / "phones.json"), tmp_path, logging.getLogger("t"),
-                        "jb1", "JUKE.BOX", wake)
+                        "jb1", "Juk3box", wake)
         await helper.start()
         client = TestClient(TestServer(helper_main.make_app(helper)))
         await client.start_server()

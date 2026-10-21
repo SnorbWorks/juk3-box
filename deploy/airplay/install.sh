@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs JUKE.BOX's AirPlay receiver on the Pi (run there with sudo, after
+# Installs Juk3box's AirPlay receiver on the Pi (run there with sudo, after
 # a deploy has put the repo in /opt/juk3-box):
 #   sudo sh /opt/juk3-box/deploy/airplay/install.sh
 set -eu

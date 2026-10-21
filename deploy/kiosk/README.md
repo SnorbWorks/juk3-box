@@ -6,7 +6,7 @@ How the Pi boots straight into the jukebox screen:
    Installed at `/etc/systemd/system/getty@tty1.service.d/autologin.conf`.
 2. **Start the compositor** — admin's `~/.profile` ends with:
    ```sh
-   # JUKE.BOX kiosk autostart
+   # Juk3box kiosk autostart
    if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
      exec sway
    fi

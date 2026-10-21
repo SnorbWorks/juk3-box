@@ -1,4 +1,4 @@
-"""Icon library: open-source icon sets bundled with JUKE.BOX, in Iconify's
+"""Icon library: open-source icon sets bundled with Juk3box, in Iconify's
 JSON format (https://iconify.design), looked up by "set:name"
 (e.g. "lucide:house").
 

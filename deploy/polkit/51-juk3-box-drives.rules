@@ -1,4 +1,4 @@
-// JUKE.BOX: lets the jukebox's own user (admin, which runs jb-source-local)
+// Juk3box: lets the jukebox's own user (admin, which runs jb-source-local)
 // eject a USB drive and mount it again -- stop or start a jb-drive@<device>
 // unit (deploy/jb-drive), and nothing else. Used by the admin's Drives page.
 // Installed by deploy.sh to /etc/polkit-1/rules.d/ (root, 0644).

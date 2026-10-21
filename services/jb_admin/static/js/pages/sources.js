@@ -1,5 +1,5 @@
 // Sources: where the music comes from. The phone that has the jukebox
-// (Bluetooth or the juk3box Helper app; one at a time, jb-core chooses,
+// (Bluetooth or the Juk3box Helper app; one at a time, jb-core chooses,
 // like the cabinet's Sources button) and the three kinds, each with its own
 // settings page: #/sources/bluetooth, #/sources/app, #/sources/drives.
 
@@ -21,13 +21,13 @@ export async function show(main, [kind, ...rest] = []) {
     sub = await KINDS[kind].load();
     const inner = h('div');
     clear(main, h('a.back-crumb', { href: '#/sources' }, icon('chevron-left'), 'Sources'), inner);
-    document.title = `${KINDS[kind].label} · Sources · JUKE.BOX Admin`;
+    document.title = `${KINDS[kind].label} · Sources · Juk3box Admin`;
     await sub.show(inner, rest);
     return;
   }
   sub = null;
   body = h('div.stack');
-  clear(main, pageHeader('Sources', 'Where the music comes from. One phone has the jukebox at a time, over Bluetooth or the juk3box Helper app; drives\' songs are always on the board.'), body);
+  clear(main, pageHeader('Sources', 'Where the music comes from. One phone has the jukebox at a time, over Bluetooth or the Juk3box Helper app; drives\' songs are always on the board.'), body);
   await refresh();
   timer = setInterval(refresh, 2000);
 }
@@ -88,7 +88,7 @@ function nowCard(data) {
     h('div.card-pad.stack',
       a ? null : h('p.muted', 'No phone yet. The first one to connect gets it.'),
       offer ? h('div.notice', icon('info'), h('span', `${offer.name} is here too; the cabinet is asking whether to switch.`)) : null,
-      rows.length ? rows : h('p.muted', 'No phones paired. Pair one over Bluetooth, or from the juk3box Helper app.')));
+      rows.length ? rows : h('p.muted', 'No phones paired. Pair one over Bluetooth, or from the Juk3box Helper app.')));
 }
 
 function kindLink(id, sub) {

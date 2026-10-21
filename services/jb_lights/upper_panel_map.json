@@ -1,5 +1,5 @@
 {
- "about": "JUKE.BOX upper panel LED map: [pixel n (1-189, chain order), x, y]. x 0..1 left to right and y 0..1 top to bottom, across the LEDs' own extent; aspect = that extent's width / height. Camera-mapped 2026-10-12 with tools/ledmap.",
+ "about": "Juk3box upper panel LED map: [pixel n (1-189, chain order), x, y]. x 0..1 left to right and y 0..1 top to bottom, across the LEDs' own extent; aspect = that extent's width / height. Camera-mapped 2026-10-12 with tools/ledmap.",
  "aspect": 2.3813,
  "points": [
   [1, 0.0226, 1.0000],

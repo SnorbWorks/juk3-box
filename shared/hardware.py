@@ -1,4 +1,4 @@
-"""Which board JUKE.BOX is running on, and what differs between them.
+"""Which board Juk3box is running on, and what differs between them.
 
 The hardware is chosen in setup (detected here, confirmed by the owner;
 dev plan roadmap item 2) and the right drivers and settings follow from

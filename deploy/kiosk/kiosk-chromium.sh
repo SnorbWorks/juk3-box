@@ -1,5 +1,5 @@
 #!/bin/sh
-# Launches the JUKE.BOX kiosk browser. Started from sway's config:
+# Launches the Juk3box kiosk browser. Started from sway's config:
 #   exec /home/admin/kiosk-chromium.sh [extra chromium flags]
 #
 # The kiosk never exits Chromium cleanly -- it's killed on redeploy, or the

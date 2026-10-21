@@ -1,4 +1,4 @@
-# JUKE.BOX's AirPlay receiver (shairport-sync, deploy/airplay/). Runs as
+# Juk3box's AirPlay receiver (shairport-sync, deploy/airplay/). Runs as
 # admin so it plays into admin's PipeWire, like everything else; the Debian
 # package's own system service is disabled (it would grab the ALSA device).
 # Install: deploy/airplay/install.sh

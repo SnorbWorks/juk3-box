@@ -337,7 +337,7 @@ Done when: a full select, confirm and reset sequence plays on the keys within ab
 
 ## Phase 7: UI platform (jb-ui)
 
-**Goal: the UI is a platform, not a theme, built the way WordPress is.** JUKE.BOX is meant for public release. Anyone can install it, apply a theme to change the look and the layout, and later add plugins for new abilities. The aim is to be a big step above fruitbox: easy install, easy modification, and the Bluetooth phone link.
+**Goal: the UI is a platform, not a theme, built the way WordPress is.** Juk3box is meant for public release. Anyone can install it, apply a theme to change the look and the layout, and later add plugins for new abilities. The aim is to be a big step above fruitbox: easy install, easy modification, and the Bluetooth phone link.
 
 The first build (Sep 27–Oct 6) proved the behavior on real hardware: song board, Now Playing, Up Next, sort drill-down, knob navigation and keypad selection. That page has its look and logic mixed together and is replaced by this design. The behavior carries over.
 
@@ -432,7 +432,7 @@ Setup and management from a phone or laptop browser, like Sidecar's admin page. 
 - [ ] Settings: everything on the cabinet's Settings screen, plus sources, Browse card sorts, idle timeout, volume limits, New ordering, the pick-interrupts setting, API keys
 - [x] Phones: pair, forget, switch (Oct 14, the admin's Bluetooth page); re-sync from the admin still open
 - [ ] Maintenance: software updates, logs, restart, reboot
-- [ ] Later: an installer, so anyone can set up JUKE.BOX on their own Pi
+- [ ] Later: an installer, so anyone can set up Juk3box on their own Pi
 
 Built so far (Oct 13 2026): Dashboard (now playing, phone, volume, theme, module health), Themes, Media library, Settings (nav buttons with drag to reorder, songs per page, idle time), Modules (the platform registry), Account. Settings has only the owner settings that exist so far; the rest of the list above comes as each setting is built.
 
@@ -495,9 +495,9 @@ One at a time, in this order. Each item points at the phase that holds its detai
 2. **Pi 5 move**, when the board arrives. *Prepared Oct 14: [docs/pi5-move.md](docs/pi5-move.md) (move this SD card: it already has the Pi 5 kernel), `shared/hardware.py` board detection, jb-lights idles on a Pi 5 until its PIO LED driver is in.* The hardware is **chosen in setup** (detected from the board, confirmed by the owner) and the matching drivers and settings follow from it: LEDs (rpi_ws281x doesn't run on the Pi 5; an SPI or PIO driver instead), background video (the Pi 5 decodes HEVC in hardware, not H.264), Wi-Fi power settings, memory limits.
 3. **Android go/no-go**, when an Android phone is at hand: the Phase 3 ten questions again (browse tree, play by item, metadata, art, reconnect). Android's AVRCP browsing differs from iOS's.
 4. **Security before anyone else uses it**: change the owner password from its placeholder (Account → Change password already exists); the core services onto bus logins and anonymous bus access closed (Phase 8 hardening).
-5. **First-boot setup wizard** (Phase 7b): over a Wi-Fi hotspot (Sidecar's lessons); name, Wi-Fi, time and region, hardware (item 2), sources, inputs (buttons, encoder, touch: calibrate and map keys) and the first phone, in one ordered flow.
-   - **Hardware is self-serve (decided Oct 14).** Once the Pi 5 runs JUKE.BOX, the image carries everything for both boards (both LED drivers, the `[pi4]`/`[pi5]` boot settings, both video profiles). The wizard detects the board, the owner confirms it, and it applies that board's settings by itself, with no hand edits and no outside help: a new owner won't have someone to walk them through config.txt or driver installs. Anything learned while moving to the Pi 5 goes into the wizard's code, not just docs/pi5-move.md.
-6. **Extensions inventory** *(done Oct 14: deploy/extensions.json, the admin's Extensions page, docs/extensions-inventory.md with what to settle before selling)*: everything JUKE.BOX runs that isn't our code (Chromium, BlueZ, PipeWire, Mosquitto, Python packages, fonts, the bundled MQTT.js, web APIs), each with its license and what that obliges. Shown in the admin as **Extensions**, separate from modules. Web services' terms count too: Last.fm's API is non-commercial without an agreement (Weather Mix), Open-Meteo's free plan is non-commercial and needs attribution (Weather).
+5. **First-boot setup wizard** (Phase 7b): over a Wi-Fi hotspot (Sidecar's lessons); name, Wi-Fi, time and region, hardware (item 2), sources, inputs (buttons, encoder, touch: calibrate and map keys) and the first phone, in one ordered flow. The plan: [docs/Setup Wizard — Plan.md](docs/Setup%20Wizard%20—%20Plan.md) (Oct 20).
+   - **Hardware is self-serve (decided Oct 14).** Once the Pi 5 runs Juk3box, the image carries everything for both boards (both LED drivers, the `[pi4]`/`[pi5]` boot settings, both video profiles). The wizard detects the board, the owner confirms it, and it applies that board's settings by itself, with no hand edits and no outside help: a new owner won't have someone to walk them through config.txt or driver installs. Anything learned while moving to the Pi 5 goes into the wizard's code, not just docs/pi5-move.md.
+6. **Extensions inventory** *(done Oct 14: deploy/extensions.json, the admin's Extensions page, docs/extensions-inventory.md with what to settle before selling)*: everything Juk3box runs that isn't our code (Chromium, BlueZ, PipeWire, Mosquitto, Python packages, fonts, the bundled MQTT.js, web APIs), each with its license and what that obliges. Shown in the admin as **Extensions**, separate from modules. Web services' terms count too: Last.fm's API is non-commercial without an agreement (Weather Mix), Open-Meteo's free plan is non-commercial and needs attribution (Weather).
 7. **Hard drive / USB source** (Phase 9): found and sorted automatically, shown only while a drive is attached.
 8. **Software updates and installer** (Phase 7b Maintenance): one-click updates from the admin; an SD image or installer for anyone's Pi.
 

@@ -1,4 +1,4 @@
-# juk3box Helper — iOS App Build Plan
+# Juk3box Helper — iOS App Build Plan
 
 > **For Claude Code:** Work through this plan **one phase at a time**. At the end of each phase, stop, summarize what was built, list what Shawn must test on a real iPhone + Pi, and wait for confirmation before starting the next phase. BLE, MusicKit playback, AirPlay routing and hotspot joining **do not work in the iOS Simulator** — every phase ends with an on-device test.
 
@@ -33,7 +33,7 @@
 
 ```
 ┌────────────── iPhone ──────────────┐            ┌──────────────── Raspberry Pi ────────────────┐
-│ juk3box Helper (SwiftUI)           │            │                                              │
+│ Juk3box Helper (SwiftUI)           │            │                                              │
 │  • MusicKit (library + playback)   │──AirPlay 2─▶ shairport-sync (AirPlay 2 receiver) ─▶ DAC   │
 │  • ApplicationMusicPlayer          │            │                                              │
 │  • Bonjour discovery (NWBrowser)   │◀─WebSocket─▶ jb-source-helper (new) ◀─MQTT─▶ jb-core, UI  │
@@ -230,6 +230,8 @@ A new Python service beside `jb-source-phone`, on the MQTT bus like the others (
 ---
 
 ### Phase 6 — Setup wizard (hotspot onboarding)
+The whole wizard, both sides, is now in [Setup Wizard — Plan](Setup%20Wizard%20—%20Plan.md) (Oct 20); this phase is its build order 5–6.
+
 **Pi side:** setup mode — when no known Wi-Fi is reachable (or on a long-hold reset gesture), bring up a hotspot (e.g. `juk3box-setup-XXXX`, NetworkManager AP mode) and serve `/setup/` wizard pages (choose home Wi-Fi, enter password, name the jukebox). Then join home Wi-Fi and advertise normally.
 
 **App side:**
@@ -254,7 +256,7 @@ A new Python service beside `jb-source-phone`, on the MQTT bus like the others (
 **Reliability first:**
 - Soak test: 4-hour session of repeated cabinet selections; zero dropped commands.
 - Handle: Wi-Fi blips, Pi reboots, AirPlay route lost, phone call interruptions (`AVAudioSession` interruption handling), app killed by iOS.
-- When the app is suspended and idle, the Pi must show the phone as "asleep — open juk3box Helper" instead of failing silently.
+- When the app is suspended and idle, the Pi must show the phone as "asleep — open Juk3box Helper" instead of failing silently.
 
 **Then system integration:**
 - **Live Activity** (+ Dynamic Island): now playing on the jukebox, with a stop button.
@@ -306,5 +308,5 @@ A new Python service beside `jb-source-phone`, on the MQTT bus like the others (
 1. ~~Pi 4 or Pi 5?~~ The Pi 5 is here; the move comes before the Pi side of this app (Oct 19).
 2. ~~CMS stack and repo?~~ Python services on an MQTT bus, in the `juk3-box` repo (`services/`, `shared/bus.py`, `deploy/deploy.sh`). The Pi side is `jb-source-helper` there.
 3. ~~Feed the house speakers?~~ Already built: whole-home audio sends the cabinet out to an AirPlay zone in sync (Oct 18). The helper's AirPlay audio goes through the same path.
-4. App name on the App Store: "juk3box Helper" or "juk3box"? *Still open.*
+4. App name on the App Store: "Juk3box Helper" or "juk3box"? *Still open.*
 5. ~~Where does the app live?~~ Its own repo, `juk3box-helper` (Oct 19).

@@ -1,4 +1,4 @@
-// JUKE.BOX: lets the jukebox's own user (admin, which runs jb-core) reboot
+// Juk3box: lets the jukebox's own user (admin, which runs jb-core) reboot
 // and power off through logind without a password -- nothing else. Used by
 // the Reset-hold power menu (services/jb_core/power.py). Install to
 // /etc/polkit-1/rules.d/ (root, 0644).

@@ -949,12 +949,12 @@
       "label": "Logo",
       "group": "navigation",
       "icon": "logo",
-      "description": "Your logo, or the word JUKE.BOX.",
+      "description": "Your logo, or the word Juk3box.",
       "settings": {
         "src": {
           "type": "picture",
           "label": "Picture",
-          "help": "Leave empty for the word JUKE.BOX."
+          "help": "Leave empty for the word Juk3box."
         }
       }
     },
@@ -1004,7 +1004,7 @@
       "label": "Sources",
       "group": "navigation",
       "icon": "cable",
-      "description": "Where the music comes from: Bluetooth, the juk3box Helper app and USB drives, each opening its own page. On the Settings screen by default.",
+      "description": "Where the music comes from: Bluetooth, the Juk3box Helper app and USB drives, each opening its own page. On the Settings screen by default.",
       "settings": {}
     },
     "bluetooth": {
@@ -1018,7 +1018,7 @@
       "label": "App settings",
       "group": "navigation",
       "icon": "smartphone",
-      "description": "The juk3box Helper app: its phones (use, read again, forget), letting new phones pair, and waking the app over Bluetooth. On Settings > Sources > App by default.",
+      "description": "The Juk3box Helper app: its phones (use, read again, forget), letting new phones pair, and waking the app over Bluetooth. On Settings > Sources > App by default.",
       "settings": {}
     },
     "drives": {

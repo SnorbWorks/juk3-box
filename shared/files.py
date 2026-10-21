@@ -4,7 +4,7 @@ A jukebox gets unplugged mid-write. A file written in place can be left
 half-written or empty; written next to the target and renamed over it, it
 is either the old file or the new one -- but only if the new data is on
 the SD card before the rename, and the rename itself is (fsync of the file,
-then of its folder). This is that, for every small state file JUKE.BOX
+then of its folder). This is that, for every small state file Juk3box
 keeps (the admin's own files go through services/jb_admin/files.py, which
 does the same).
 """

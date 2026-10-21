@@ -1,4 +1,4 @@
-// Sources > App: the juk3box Helper iPhone app (jb-source-helper). Phones
+// Sources > App: the Juk3box Helper iPhone app (jb-source-helper). Phones
 // pair from the app itself, with a code on the cabinet; here: which may
 // pair, each phone (rename, sync, forget), waking the app over Bluetooth,
 // and the jukebox's name in the app and the AirPlay speaker list.
@@ -13,7 +13,7 @@ let lastJson = '';
 export async function show(main) {
   body = h('div.stack');
   lastJson = '';
-  clear(main, pageHeader('App', 'Phones that play their Apple Music library through the juk3box Helper app, sent to the cabinet over AirPlay. Beside Bluetooth, not instead of it.'), body);
+  clear(main, pageHeader('App', 'Phones that play their Apple Music library through the Juk3box Helper app, sent to the cabinet over AirPlay. Beside Bluetooth, not instead of it.'), body);
   await refresh();
   timer = setInterval(refresh, 2000);
 }
@@ -107,13 +107,13 @@ function switchRow(iconName, title, sub, on, onChange) {
 function render(data) {
   const s = data.helper_settings || {};
   const phones = data.helper?.phones || [];
-  const name = s.name || 'JUKE.BOX';
+  const name = s.name || 'Juk3box';
   clear(body,
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
     h('h2', 'Phones'),
     phones.length ? h('div.stack', phones.map(p => phoneRow(p, data)))
-      : emptyState('smartphone', 'No phones yet', 'Install juk3box Helper on an iPhone and open it on the same Wi-Fi: a code shows on the cabinet to type in the app.'),
+      : emptyState('smartphone', 'No phones yet', 'Install Juk3box Helper on an iPhone and open it on the same Wi-Fi: a code shows on the cabinet to type in the app.'),
     h('h2', 'Settings'),
     switchRow('lock', 'Allow new phones to pair',
       s.allow_pairing ? 'On: an app that finds the jukebox shows a pairing code on the cabinet. It turns off by itself once a phone pairs.'

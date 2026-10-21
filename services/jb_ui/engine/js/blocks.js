@@ -87,13 +87,13 @@ function fillLogo(el, node, ctx) {
     el.replaceChildren();
     const span = document.createElement('span');
     span.className = 'jb-logo-text';
-    span.textContent = 'JUKE.BOX';
+    span.textContent = 'Juk3box';
     el.append(span);
   };
   if (!node.src) return text();
   const img = document.createElement('img');
   img.src = assetUrl(node.src, ctx);
-  img.alt = 'JUKE.BOX';
+  img.alt = 'Juk3box';
   img.onerror = text;
   el.append(img);
 }

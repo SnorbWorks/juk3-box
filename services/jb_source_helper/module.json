@@ -1,8 +1,8 @@
 {
   "contract": 1,
   "id": "jb-source-helper",
-  "name": "Phone (juk3box Helper app)",
-  "description": "Plays the owner's Apple Music library from the juk3box Helper app on their iPhone, over AirPlay. Beside Bluetooth, not instead of it.",
+  "name": "Phone (Juk3box Helper app)",
+  "description": "Plays the owner's Apple Music library from the Juk3box Helper app on their iPhone, over AirPlay. Beside Bluetooth, not instead of it.",
   "version": "0.1.0",
   "roles": ["source"],
   "publishes": ["jukebox/jb-source-helper/connected", "jukebox/jb-source-helper/sync", "jukebox/jb-source-helper/library", "jukebox/jb-source-helper/now-playing", "jukebox/jb-source-helper/play-error", "jukebox/jb-source-helper/pairing"],

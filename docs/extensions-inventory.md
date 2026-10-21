@@ -1,21 +1,21 @@
 # Extensions inventory
 
-Everything JUKE.BOX runs or ships that isn't its own code: other people's software, fonts, icons, web services and pictures. The list itself is [deploy/extensions.json](../deploy/extensions.json); the admin's **Extensions** page shows it with the versions installed on the jukebox. Add an entry whenever something new comes in.
+Everything Juk3box runs or ships that isn't its own code: other people's software, fonts, icons, web services and pictures. The list itself is [deploy/extensions.json](../deploy/extensions.json); the admin's **Extensions** page shows it with the versions installed on the jukebox. Add an entry whenever something new comes in.
 
-*Extensions* here are not *modules*. A module is an add-on people write and install to give JUKE.BOX new features or new ways to use it (Weather, Weather Mix); its contracts are [contracts/modules.md](contracts/modules.md) and [contracts/installed-modules.md](contracts/installed-modules.md). An extension is someone else's software the system needs at a deeper level, with a license that asks something of us.
+*Extensions* here are not *modules*. A module is an add-on people write and install to give Juk3box new features or new ways to use it (Weather, Weather Mix); its contracts are [contracts/modules.md](contracts/modules.md) and [contracts/installed-modules.md](contracts/installed-modules.md). An extension is someone else's software the system needs at a deeper level, with a license that asks something of us.
 
 Inventory taken Oct 14, 2026, from the reference Pi 4 (Raspberry Pi OS, Debian 13) and the repo. Not legal advice: a lawyer should look over the "before selling" items.
 
 ## What each license asks
 
-| Duty | Licenses | What JUKE.BOX has to do |
+| Duty | Licenses | What Juk3box has to do |
 | --- | --- | --- |
 | Keep the notice | MIT, BSD, ISC, Apache-2.0, PSF, OFL (fonts), EPL/EDL | Ship each one's copyright and license text: an About / Licenses screen or file in the product |
-| Offer source | GPL, LGPL (Linux, BlueZ, NetworkManager, systemd, FFmpeg) | If JUKE.BOX ships as an SD image or device, offer the source of those packages for the exact versions shipped (a written offer, valid 3 years, or the Raspberry Pi OS / Debian source alongside) |
+| Offer source | GPL, LGPL (Linux, BlueZ, NetworkManager, systemd, FFmpeg) | If Juk3box ships as an SD image or device, offer the source of those packages for the exact versions shipped (a written offer, valid 3 years, or the Raspberry Pi OS / Debian source alongside) |
 | Needs an agreement | Last.fm, Open-Meteo | An agreement or paid plan before commercial use |
 | To confirm | Apple artwork, theme pictures | Rights or terms to check before selling |
 
-**JUKE.BOX's own code stays its own.** Its services are separate programs that talk to the GPL parts over the message bus, D-Bus (BlueZ) or by running them (FFmpeg, nmcli). None of its Python imports a GPL library (the Python dependencies are MIT, BSD, Apache, EPL/EDL, MIT-CMU). That's the usual line for not being a "derivative work" of GPL software. Keep it that way: check the license before adding a library.
+**Juk3box's own code stays its own.** Its services are separate programs that talk to the GPL parts over the message bus, D-Bus (BlueZ) or by running them (FFmpeg, nmcli). None of its Python imports a GPL library (the Python dependencies are MIT, BSD, Apache, EPL/EDL, MIT-CMU). That's the usual line for not being a "derivative work" of GPL software. Keep it that way: check the license before adding a library.
 
 ## Before selling: to settle
 
@@ -31,4 +31,4 @@ Inventory taken Oct 14, 2026, from the reference Pi 4 (Raspberry Pi OS, Debian 1
 - **Pi 5:** `rpi_ws281x` doesn't run on the Pi 5; its replacement (an SPI or PIO LED driver) gets an entry when chosen.
 - **Development only:** pytest and grim are listed as *dev*; nothing in the running jukebox needs them.
 - **Keypad firmware:** CircuitPython and Adafruit's HID library (MIT) run on the keypad's Pico; the same notice duty applies if the keypad ships.
-- **Not listed:** Raspberry Pi OS packages JUKE.BOX doesn't use directly (the inventory lists what it relies on). An SD image would ship the whole OS: the "offer source" duty then covers every GPL package in it, which the Raspberry Pi OS source archive answers.
+- **Not listed:** Raspberry Pi OS packages Juk3box doesn't use directly (the inventory lists what it relies on). An SD image would ship the whole OS: the "offer source" duty then covers every GPL package in it, which the Raspberry Pi OS source archive answers.

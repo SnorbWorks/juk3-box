@@ -65,7 +65,7 @@ const HANDLERS = {
 };
 
 // Three sources report now-playing: the phone, USB drives (jb-source-local)
-// and the juk3box Helper app (jb-source-helper). Only one plays at a time
+// and the Juk3box Helper app (jb-source-helper). Only one plays at a time
 // (jb-core pauses or stops the others), so the screen shows
 // the one playing -- or, when neither is, the last one that was.
 let npSource = 'phone';

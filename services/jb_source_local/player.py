@@ -1,7 +1,7 @@
 """Playing a file: one mpv, kept running idle, driven over its JSON socket.
 
 mpv (GPL) runs as its own program; we only talk to it, which keeps
-JUKE.BOX's own code its own (docs/extensions-inventory.md). It plays to
+Juk3box's own code its own (docs/extensions-inventory.md). It plays to
 PipeWire's default output -- the DAC, the same place the phone's music
 goes, so the volume, the analyzer and the lights work unchanged.
 

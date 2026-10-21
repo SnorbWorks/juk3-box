@@ -963,7 +963,7 @@ async def main() -> None:
                         except Exception as e:
                             log.info("reconnect to %s failed: %s", name, type(e).__name__)
                 await asyncio.sleep(rc.retry_delay(now() - started))
-            log.info("reconnect gave up after %.0fs; tap juk3-box on the phone to connect", now() - started)
+            log.info("reconnect gave up after %.0fs; tap Juk3box on the phone to connect", now() - started)
         finally:
             await publish_reconnect(bus, "idle")
 

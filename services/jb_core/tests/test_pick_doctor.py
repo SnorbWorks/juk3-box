@@ -174,4 +174,4 @@ def test_a_helper_app_pick_gets_the_apps_reason_and_advice_not_bluetooths():
     assert v["problem"] == "no_subscription" and "Apple Music" in v["headline"]
     d.picked({"title": "Moon River", "item_path": "helper:dev-1/i.1"}, 10.0)
     v = d.failed({"item_path": "helper:dev-1/i.1", "reason": "no_answer"}, 11.0)
-    assert "juk3box Helper" in v["advice"] and "Bluetooth" not in v["advice"] and v["retry"]
+    assert "Juk3box Helper" in v["advice"] and "Bluetooth" not in v["advice"] and v["retry"]

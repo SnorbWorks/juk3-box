@@ -33,7 +33,7 @@ REPO_DIR = HERE.parent.parent
 DEFAULTS = {
     "http_host": "127.0.0.1",
     "http_port": 8090,
-    # Themes that ship with JUKE.BOX first, then themes the owner added
+    # Themes that ship with Juk3box first, then themes the owner added
     # (outside /opt/juk3-box, which every deploy replaces).
     "theme_dirs": [str(REPO_DIR / "themes"), "/var/lib/juk3-box/themes"],
     # Owner choices: active theme, nav buttons (later Home sections, ...).
@@ -49,7 +49,7 @@ DEFAULTS = {
     # Pictures the owner uploaded in the admin (the media library), for
     # image and logo blocks: "/media/<file>".
     "media_dir": "/var/lib/juk3-box/media",
-    # Album covers the juk3box Helper app uploaded (jb-source-helper), for
+    # Album covers the Juk3box Helper app uploaded (jb-source-helper), for
     # its songs' artwork_url: "/covers/<key>.jpg".
     "covers_dir": "/var/lib/juk3-box/helper/artwork",
     # The owner's published theme options (colors, fonts...), per theme:

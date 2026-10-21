@@ -138,8 +138,8 @@ context.modules = [
   {{ name = libpipewire-module-adapter }}
   {{ name = libpipewire-module-filter-chain
     args = {{
-      node.description = {spa_string("JUKE.BOX + " + settings.airplay)}
-      media.name = {spa_string("JUKE.BOX + " + settings.airplay)}
+      node.description = {spa_string("Juk3box + " + settings.airplay)}
+      media.name = {spa_string("Juk3box + " + settings.airplay)}
       filter.graph = {{
         nodes = [
           {{ type = builtin name = dl label = delay config = {{ "max-delay" = {MAX_DELAY_S} }} control = {{ "Delay (s)" = {delay_s} }} }}

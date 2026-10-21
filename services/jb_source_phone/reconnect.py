@@ -32,7 +32,7 @@ CONNECT_TIMEOUT_S = 20
 def window_for(event: str, was_playing: bool = False, app_has_it: bool = False):
     """How long to keep trying after `event` ("boot" or "drop"), or None.
 
-    Not while the juk3box Helper app has the jukebox (jb-core/source): a
+    Not while the Juk3box Helper app has the jukebox (jb-core/source): a
     phone that connects takes the iPhone's audio route, so the app's music
     would come over Bluetooth instead of AirPlay -- and after the owner
     disconnected it on purpose mid-song, it was pulled back 7 s later

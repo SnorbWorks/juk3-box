@@ -1,8 +1,8 @@
-# JUKE.BOX Theme Format
+# Juk3box Theme Format
 
 Format version 1 · **Draft** · Oct 8, 2026
 
-A theme decides how JUKE.BOX looks and how its screens are arranged. It is a folder of plain files: HTML layouts, CSS, images and fonts. A theme contains no code. The engine supplies all behavior: live data, the knob, keypad selection, screen changes and popups.
+A theme decides how Juk3box looks and how its screens are arranged. It is a folder of plain files: HTML layouts, CSS, images and fonts. A theme contains no code. The engine supplies all behavior: live data, the knob, keypad selection, screen changes and popups.
 
 If you can write HTML and CSS, you can make a theme. Copy the default theme, change it, and drop it in the themes folder.
 
@@ -53,7 +53,7 @@ my-theme/
 
 Themes live in two places:
 
-- `/opt/juk3-box/themes/` for themes that ship with JUKE.BOX.
+- `/opt/juk3-box/themes/` for themes that ship with Juk3box.
 - `/var/lib/juk3-box/themes/` for themes you add. These survive updates.
 
 ## theme.json
@@ -85,7 +85,7 @@ Themes live in two places:
 | `styles` | yes | CSS files, loaded in order |
 | `fonts` | no | Font files to load. A variable font can give its ranges, e.g. `"weight": "1 1000", "stretch": "25% 151%"`, so bold and condensed use its real axes |
 | `icons` | no | Library icons for the engine's buttons, e.g. `{"home": "lucide:house"}` (see Icons) |
-| `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS. Ship a video at any size, frame rate or format: JUKE.BOX re-encodes it once for the hardware (H.264, at most 1280x720, 30 fps) and plays that copy; your file is never changed |
+| `background` | no | `image` or `video` behind everything; `none` for a plain color from your CSS. Ship a video at any size, frame rate or format: Juk3box re-encodes it once for the hardware (H.264, at most 1280x720, 30 fps) and plays that copy; your file is never changed |
 | `sizing` | no | `fluid` (default) or `canvas`; see Fitting any screen |
 | `customize` | no | The options an owner can change from the admin's Appearance page, and your preset styles; see Customize |
 
@@ -190,7 +190,7 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | Block | Shows | Settings |
 | --- | --- | --- |
 | `screen` | Where the current screen goes (frame only) | |
-| `logo` | The logo | `src` (falls back to the text JUKE.BOX) |
+| `logo` | The logo | `src` (falls back to the text Juk3box) |
 | `nav` | Navigation buttons the owner switched on | |
 | `now-playing` | The current song | |
 | `up-next` | The queue | `limit` |
@@ -300,7 +300,7 @@ More section types will come with later format versions and plugins. A theme tha
 
 ### Icons
 
-JUKE.BOX bundles open-source icon sets in [Iconify](https://iconify.design)'s format, starting with [Lucide](https://lucide.dev) (ISC license). They live on the jukebox, so they work offline. More sets can be added as files (and later downloaded from jb-admin).
+Juk3box bundles open-source icon sets in [Iconify](https://iconify.design)'s format, starting with [Lucide](https://lucide.dev) (ISC license). They live on the jukebox, so they work offline. More sets can be added as files (and later downloaded from jb-admin).
 
 Every button the engine draws has an icon name: `home`, `volume`, `all-songs`, `settings`, `now-playing`, `shuffle`, `shuffle-on` (while shuffle is on), `back`, `page-prev`, `page-next`, `see-all`, `card-open`, `play`, `favorite`, `close`, `connection`, `dropdown`. For each, the engine uses the first of:
 
@@ -504,7 +504,7 @@ Themes must fit any monitor size and shape. There are two ways.
 
 ## Performance
 
-JUKE.BOX runs on a Raspberry Pi with a video playing behind your theme. Measured there:
+Juk3box runs on a Raspberry Pi with a video playing behind your theme. Measured there:
 
 - Animate only `transform` and `opacity`. Animating `box-shadow`, `background` or `filter` repaints every frame; on focus changes it kept the page busy 70% of the time. For a focus look that changes a shadow or glow, pre-draw it on a `::before`/`::after` layer and fade that layer's opacity, and give the layer `will-change: opacity` so the fade happens on the GPU (without it, fading a layer on a big card still repainted the card and dropped 25% of the video's frames).
 - No `backdrop-filter` over the video: it's recomputed every frame and halved the frame rate.

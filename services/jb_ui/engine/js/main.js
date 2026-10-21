@@ -1,4 +1,4 @@
-// JUKE.BOX UI engine: loads the active theme and builds the screen from
+// Juk3box UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
 import { albumSongs, openFilter, openList, pick, setSort, upLevel } from './board.js';
@@ -399,14 +399,14 @@ function watchSystem() {
   store.watch(html, 'driveOffers', offerImport);
   setInterval(offerImport, 5000);
 
-  // Pairing the juk3box Helper app (jb-source-helper/pairing): the code to
+  // Pairing the Juk3box Helper app (jb-source-helper/pairing): the code to
   // type on the phone, on screen until it's paired (or given up on).
   // Shown over anything: the owner is standing at the cabinet waiting for it.
   let pairingShown = false;
   store.watch(html, 'helperPairing', p => {
     if (p?.state === 'code') {
       openPopup('notice', {
-        title: 'Pair juk3box Helper',
+        title: 'Pair Juk3box Helper',
         message: `Type ${p.code} in the app on ${p.device || 'your phone'}.`,
       }, { onClose: () => { pairingShown = false; } });
       pairingShown = true;
@@ -552,7 +552,7 @@ start().catch(e => {
   console.error(e);
   const box = document.createElement('div');
   box.id = 'jb-error';
-  box.textContent = `JUKE.BOX couldn't start its screen.\n\n${e.message}`;
+  box.textContent = `Juk3box couldn't start its screen.\n\n${e.message}`;
   document.getElementById('jb-root').replaceChildren(box);
   document.getElementById('jb-splash')?.remove();
   // Keep trying: jb-ui may simply still be starting.

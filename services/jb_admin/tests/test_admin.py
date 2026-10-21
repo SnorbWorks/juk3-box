@@ -497,9 +497,9 @@ def test_phones_page_sends_only_phone_commands(tmp_path):
 def test_sources_page_switches_phones_and_sets_up_the_app(tmp_path):
     async def check(client, admin):
         admin.live["source"] = {"active": {"kind": "phone", "id": "88:51:F2:56:4B:2B", "name": "Lena's iPhone"}, "offer": None}
-        admin.live["helper_settings"] = {"allow_pairing": False, "ble": True, "name": "JUKE.BOX"}
+        admin.live["helper_settings"] = {"allow_pairing": False, "ble": True, "name": "Juk3box"}
         data = await (await client.get("/api/sources", headers=H)).json()
-        assert data["source"]["active"]["name"] == "Lena's iPhone" and data["helper_settings"]["name"] == "JUKE.BOX"
+        assert data["source"]["active"]["name"] == "Lena's iPhone" and data["helper_settings"]["name"] == "Juk3box"
         admin.bus = RecordingBus()
         assert (await client.post("/api/sources/use", json={"id": "helper:dev-1"}, headers=H)).status == 200
         assert (await client.post("/api/sources/use", json={"id": "drive:x"}, headers=H)).status == 400

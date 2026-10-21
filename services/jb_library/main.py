@@ -496,7 +496,7 @@ def store_drive(conn: sqlite3.Connection, drive_id: str, tracks: list, log=None,
 
 
 def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: list, log=None) -> int:
-    """Stores the juk3box Helper app's library (jb-source-helper) under
+    """Stores the Juk3box Helper app's library (jb-source-helper) under
     phone_mac "helper:<device>". Like a drive's tags, the app's artist,
     album, genre and track number are exact (phone_*), and its dateAdded is
     the real Recently Added. Its covers are the app's own uploads, served
@@ -937,7 +937,7 @@ async def main() -> None:
         # USB drives: their songs, and what they're playing (for play counts).
         await bus.subscribe("jukebox/jb-source-local/library")
         await bus.subscribe("jukebox/jb-source-local/now-playing")
-        # The juk3box Helper app (jb-source-helper): another phone, keyed
+        # The Juk3box Helper app (jb-source-helper): another phone, keyed
         # "helper:<device>", with its library sent whole.
         await bus.subscribe("jukebox/jb-source-helper/library")
         await bus.subscribe("jukebox/jb-source-helper/connected")

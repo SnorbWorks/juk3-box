@@ -1,7 +1,7 @@
 // Settings > Sources: where the music comes from, as in the admin's Sources
 // tab. The Settings screen lists the three kinds (the sources block); each
 // opens its own screen: sources-bluetooth (the bluetooth block, phones.js),
-// sources-app (the juk3box Helper app) and sources-drives (USB drives).
+// sources-app (the Juk3box Helper app) and sources-drives (USB drives).
 // One phone has the jukebox at a time, Bluetooth or the app (jb-core's
 // phone_choice.py); drives' songs are always on the board.
 
@@ -106,8 +106,8 @@ export function fillHelperApp(el) {
     const s = settings();
     const phones = appPhones();
     bind(el, {
-      intro: 'iPhones that play their Apple Music library through the juk3box Helper app, sent here over AirPlay.',
-      none: phones.length ? '' : 'No phones yet. Install juk3box Helper and open it on the same Wi-Fi; turn on "Allow new phones to pair" first.',
+      intro: 'iPhones that play their Apple Music library through the Juk3box Helper app, sent here over AirPlay.',
+      none: phones.length ? '' : 'No phones yet. Install Juk3box Helper and open it on the same Wi-Fi; turn on "Allow new phones to pair" first.',
       pairing: s.allow_pairing ? 'On' : 'Off',
       ble: s.ble === false ? 'Off' : 'On',
       note: s.allow_pairing ? 'An app that finds the jukebox shows a code here to type in. It turns off by itself once a phone pairs.'

@@ -2,7 +2,7 @@
 
 Version 1 · **Draft, built Oct 20, 2026, not yet proven on a phone** · the iOS app `juk3box-helper` ↔ `jb-source-helper` on the jukebox
 
-The phone app (`juk3box Helper`) is a second phone source beside Bluetooth: the jukebox picks the song, the app plays it from the owner's Apple Music library with MusicKit, and the sound comes to the cabinet over AirPlay. This is everything the two sides say to each other. The plan and its reasons are in [JUK3BOX_HELPER_BUILD_PLAN.md](../JUK3BOX_HELPER_BUILD_PLAN.md).
+The phone app (`Juk3box Helper`) is a second phone source beside Bluetooth: the jukebox picks the song, the app plays it from the owner's Apple Music library with MusicKit, and the sound comes to the cabinet over AirPlay. This is everything the two sides say to each other. The plan and its reasons are in [JUK3BOX_HELPER_BUILD_PLAN.md](../JUK3BOX_HELPER_BUILD_PLAN.md).
 
 ## Finding the jukebox
 
@@ -26,12 +26,12 @@ Every message is a JSON object:
 ## Connecting and pairing
 
 1. App opens the WebSocket. Pi sends `hello`:
-   `{ "jukeboxName": "JUKE.BOX", "jukeboxId": "…", "protocolVersions": [1], "ble": { "service": "<uuid>", "wake": "<uuid>" } }`
+   `{ "jukeboxName": "Juk3box", "jukeboxId": "…", "protocolVersions": [1], "ble": { "service": "<uuid>", "wake": "<uuid>" } }`
 2. App sends `client_hello`:
    `{ "deviceName": "Shawn's iPhone", "deviceId": "<uuid the app keeps>", "appVersion": "0.1", "token": "<if paired before>", "model": "iPhone16,1" }`
 3. Pi answers:
    - a known token for that `deviceId`: `welcome { "deviceId", "active": bool }`. Done. `active` is false when another phone (Bluetooth or another app) has the jukebox: the app stays connected and its library is kept, and the cabinet asks "Shawn's iPhone is here. Switch to it?" (or the owner switches under Sources). `set_active { "active": true }` arrives when it's chosen.
-   - an unknown phone while pairing is turned off (the admin's Sources > App, "Allow new phones to pair"): `pair_closed { "message": "…" }`, then the Pi closes. The app shows the message ("Pairing is off on JUKE.BOX. Turn it on in the jukebox admin: Sources > App.") and retries with its usual backoff, so it pairs as soon as pairing is turned on.
+   - an unknown phone while pairing is turned off (the admin's Sources > App, "Allow new phones to pair"): `pair_closed { "message": "…" }`, then the Pi closes. The app shows the message ("Pairing is off on Juk3box. Turn it on in the jukebox admin: Sources > App.") and retries with its usual backoff, so it pairs as soon as pairing is turned on.
    - otherwise `pair_challenge { "digits": 4, "expires": <seconds> }` and the cabinet shows a 4-digit code with the phone's name. The app asks the owner for it and sends `pair_response { "code": "1234" }`. Right: `paired { "token": "…" }` then `welcome`. Wrong: `pair_failed { "triesLeft": n }`; after 3 wrong tries or when it expires, a new `pair_challenge` (and a new code on the cabinet).
 4. The app keeps the token in the Keychain, per `jukeboxId`.
 
@@ -56,7 +56,7 @@ The Pi pings over the WebSocket every 15 s (standard ping frames); the app's Web
 | `playback_state` | `{ "itemId", "state": "playing" / "paused" / "stopped", "position": s, "duration": s, "title", "artist", "album" }`, on every change and every second while playing |
 | `track_ended` | `{ "itemId" }`: the song reached its end; the app stays stopped |
 | `play_failed` | `{ "itemId", "reason", "message" }`, reasons: `not_found` (not in the library), `not_playable` (e.g. a cloud song unavailable), `no_subscription`, `not_authorized` (Music access denied), `offline`, `other` |
-| `music_status` | `{ "authorization": "authorized" / "denied" / "notDetermined" / "restricted", "canPlay": bool, "canPlayCatalog": bool (optional), "route": { "airplay": bool, "kind": "airplay" / "bluetooth" / "phone" / "other" (optional), "name": "JUKE.BOX" } }`, on connect and when any of it changes (so the cabinet can say "choose JUKE.BOX as the speaker"). `canPlay`: the owner's library can play (Music access allowed; library songs need no subscription). `canPlayCatalog`: songs added from Apple Music can play (a subscription); absent while unknown. `route.airplay` is true for AirPlay to any speaker; compare `name` to tell the jukebox |
+| `music_status` | `{ "authorization": "authorized" / "denied" / "notDetermined" / "restricted", "canPlay": bool, "canPlayCatalog": bool (optional), "route": { "airplay": bool, "kind": "airplay" / "bluetooth" / "phone" / "other" (optional), "name": "Juk3box" } }`, on connect and when any of it changes (so the cabinet can say "choose Juk3box as the speaker"). `canPlay`: the owner's library can play (Music access allowed; library songs need no subscription). `canPlayCatalog`: songs added from Apple Music can play (a subscription); absent while unknown. `route.airplay` is true for AirPlay to any speaker; compare `name` to tell the jukebox |
 
 ### Library items
 
@@ -86,7 +86,7 @@ iOS suspends an idle app, so its WebSocket goes away; the Pi wakes it over Bluet
 - Characteristic `4A554B45-0003-4C80-8000-6A756B33626F` (**id**: read): the jukebox id (UTF-8), so the app knows which jukebox it found.
 - The app (background mode `bluetooth-central`) keeps a connection to its jukebox's peripheral, subscribed to **wake**; on a notification it reconnects the WebSocket. When the BLE link drops it calls `connect` again (iOS completes it whenever the jukebox is back in range, even with the app suspended).
 
-The Pi holds a command for up to 20 s for its phone to reconnect; after that the pick fails as `no_answer` (the pick doctor's wording: "open juk3box Helper on your phone").
+The Pi holds a command for up to 20 s for its phone to reconnect; after that the pick fails as `no_answer` (the pick doctor's wording: "open Juk3box Helper on your phone").
 
 ## On the jukebox's bus
 

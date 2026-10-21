@@ -41,7 +41,7 @@ RESTART_DELAY_S = 3.0
 
 
 def capture_cmd(cfg: dict) -> list:
-    cmd = ["pw-record", "-P", "{ stream.capture.sink=true node.dont-reconnect=true node.name=jb-analyzer node.description=\"JUKE.BOX analyzer\" }",
+    cmd = ["pw-record", "-P", "{ stream.capture.sink=true node.dont-reconnect=true node.name=jb-analyzer node.description=\"Juk3box analyzer\" }",
            "--rate", str(RATE), "--channels", str(CHANNELS), "--format", "f32", "--latency", "30ms", "--raw"]
     target = cfg.get("target") or dac_name()
     if target:
@@ -86,7 +86,7 @@ async def main() -> None:
         # USB drives (jb-source-local) too. Only one source plays at a time;
         # the song is whichever one last said it's playing.
         await bus.subscribe("jukebox/jb-source-local/now-playing")
-        await bus.subscribe("jukebox/jb-source-helper/now-playing")   # the juk3box Helper app
+        await bus.subscribe("jukebox/jb-source-helper/now-playing")   # the Juk3box Helper app
         playing_from = {"topic": "jukebox/jb-source-phone/now-playing"}
         last_slow = {"v": None}
 

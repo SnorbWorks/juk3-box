@@ -1,9 +1,9 @@
-"""Extensions: everything JUKE.BOX runs or ships that isn't its own code
+"""Extensions: everything Juk3box runs or ships that isn't its own code
 (deploy/extensions.json), with the version installed on this jukebox.
 
-Not modules: a module is JUKE.BOX's own kind of add-on (Weather, Weather
+Not modules: a module is Juk3box's own kind of add-on (Weather, Weather
 Mix); an extension is someone else's software, font, web service or
-picture that JUKE.BOX depends on, listed with its license and what that
+picture that Juk3box depends on, listed with its license and what that
 license asks of us.
 """
 

@@ -11,7 +11,7 @@ def item(member, name, flags=4):
 def test_receivers_are_listed_by_name_but_never_the_jukebox_itself():
     r = airplay.Receivers()
     r._signal(item("ItemNew", "30EB1C9EFC2D@Bar/Dining"))
-    r._signal(item("ItemNew", "161940F425FC@JUKE.BOX", flags=4 | airplay.LOCAL | airplay.OUR_OWN))
+    r._signal(item("ItemNew", "161940F425FC@Juk3box", flags=4 | airplay.LOCAL | airplay.OUR_OWN))
     assert r.names == ["Bar/Dining"]
     r._signal(item("ItemRemove", "30EB1C9EFC2D@Bar/Dining"))
     assert r.names == []

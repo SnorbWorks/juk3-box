@@ -1,6 +1,6 @@
-// Extensions: everything JUKE.BOX runs or ships that isn't its own code --
+// Extensions: everything Juk3box runs or ships that isn't its own code --
 // other people's software, fonts, icons, web services and pictures -- with
-// each one's license and what that license asks. (Modules are JUKE.BOX's
+// each one's license and what that license asks. (Modules are Juk3box's
 // own add-ons; they have their own page.) The list is deploy/extensions.json;
 // the versions are what's installed on this jukebox.
 
@@ -24,10 +24,10 @@ export async function show(main) {
   for (const item of items) (byKind[item.kind] ||= []).push(item);
 
   clear(main,
-    pageHeader('Extensions', 'Software, fonts, services and pictures JUKE.BOX uses that aren\'t its own, with their licenses. Modules are on their own page.'),
+    pageHeader('Extensions', 'Software, fonts, services and pictures Juk3box uses that aren\'t its own, with their licenses. Modules are on their own page.'),
     data.problem ? h('div.notice.danger', icon('circle-alert'), h('span', data.problem)) : null,
     attention.length ? h('div.notice.warn', icon('circle-alert'), h('div',
-      h('strong', 'Before selling JUKE.BOX: '),
+      h('strong', 'Before selling Juk3box: '),
       `${attention.length} need an agreement or a check.`,
       h('ul.ext-attention', attention.map(i => h('li', h('b', i.name), ' — ', i.note || data.duties?.[i.duty] || ''))))) : null,
     ...ORDER.filter(k => byKind[k]).map(kind => h('div.card',

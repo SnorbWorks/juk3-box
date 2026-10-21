@@ -131,7 +131,7 @@ def install_zip(zip_path: Path, added_dir: Path, dirs: list[Path], replace: bool
             raise InstallError("The theme's id must be lowercase letters, numbers and hyphens.")
         shipped = themes.find_theme_dir(theme_id, dirs[:1])
         if shipped:
-            raise InstallError(f"\"{theme_id}\" is a theme that comes with JUKE.BOX. Give yours another id.")
+            raise InstallError(f"\"{theme_id}\" is a theme that comes with Juk3box. Give yours another id.")
         existing = added_dir / theme_id
         if existing.exists() and not replace:
             raise InstallError(f"A theme called \"{theme_id}\" is already installed.")
@@ -177,7 +177,7 @@ def delete(theme_id: str, added_dir: Path, dirs: list[Path], active: str) -> Non
     if not themes.ID_RE.match(theme_id):
         raise InstallError("No such theme.")
     if themes.find_theme_dir(theme_id, dirs[:1]):
-        raise InstallError("Themes that come with JUKE.BOX can't be deleted.")
+        raise InstallError("Themes that come with Juk3box can't be deleted.")
     if theme_id == active:
         raise InstallError("That's the theme the cabinet is using. Switch to another theme first.")
     folder = added_dir / theme_id

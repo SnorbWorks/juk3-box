@@ -53,7 +53,7 @@ def find_theme_dir(theme_id: str, search_dirs: list[Path]) -> Path | None:
     """The folder for `theme_id`, searching `search_dirs` in order.
 
     Earlier directories win, so a theme you add can't shadow one that ships
-    with JUKE.BOX under the same id.
+    with Juk3box under the same id.
     """
     if not ID_RE.match(theme_id):
         return None

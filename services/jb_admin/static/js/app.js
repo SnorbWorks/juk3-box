@@ -29,7 +29,7 @@ async function start() {
   try {
     session = await get('/api/session');
   } catch (e) {
-    clear(app, h('div.boot-mark', 'JUKE.BOX'), h('p.boot-error', e.message));
+    clear(app, h('div.boot-mark', 'Juk3box'), h('p.boot-error', e.message));
     app.className = 'boot';
     setTimeout(start, 4000);
     return;
@@ -69,7 +69,7 @@ function showLogin(setup) {
       }
     },
   },
-  h('div.login-brand', h('div.brand-mark', icon('radio')), h('div', h('div.brand-name', 'JUKE.BOX'), h('div.brand-sub', 'Admin'))),
+  h('div.login-brand', h('div.brand-mark', icon('radio')), h('div', h('div.brand-name', 'Juk3box'), h('div.brand-sub', 'Admin'))),
   setup ? h('p.login-lead', 'Welcome! Choose a password for the admin. You\'ll use it from any phone or computer on your network.') : null,
   field(setup ? 'New password' : 'Password', password, setup ? 'At least 8 characters.' : null),
   setup ? field('Type it again', again) : null,
@@ -93,12 +93,12 @@ function showShell() {
     },
   }, icon('log-out'), h('span', 'Log out'));
   const sidebar = h('aside.sidebar',
-    h('div.side-brand', h('div.brand-mark.small', icon('radio')), h('span.brand-name', 'JUKE.BOX')),
+    h('div.side-brand', h('div.brand-mark.small', icon('radio')), h('span.brand-name', 'Juk3box')),
     nav, h('div.side-foot', logout));
   const scrim = h('div.scrim', { onclick: () => app.classList.remove('nav-open') });
   const topbar = h('header.topbar',
     h('button.icon-btn.menu-btn', { type: 'button', 'aria-label': 'Menu', onclick: () => app.classList.toggle('nav-open') }, icon('menu')),
-    h('span.topbar-title', 'JUKE.BOX'));
+    h('span.topbar-title', 'Juk3box'));
   const main = h('main.content', { id: 'content' });
   clear(app, sidebar, scrim, h('div.main-col', topbar, main));
   route();
@@ -117,7 +117,7 @@ async function route() {
   for (const a of document.querySelectorAll('.side-link[data-page]')) a.toggleAttribute('aria-current', a.dataset.page === page.id);
   app.classList.remove('nav-open');
   app.dataset.page = page.id;
-  document.title = `${page.label} · JUKE.BOX Admin`;
+  document.title = `${page.label} · Juk3box Admin`;
 
   if (current?.leave?.() === false) return;   // e.g. unsaved changes kept the page
   const main = document.getElementById('content');

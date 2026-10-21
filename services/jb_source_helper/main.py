@@ -1,4 +1,4 @@
-"""jb-source-helper: the juk3box Helper iPhone app as a music source.
+"""jb-source-helper: the Juk3box Helper iPhone app as a music source.
 
 The app plays the owner's Apple Music library with MusicKit and sends the
 sound to the cabinet over AirPlay; this service is its other half
@@ -31,7 +31,7 @@ from services.jb_source_helper.source import TOPIC, Helper
 SERVICE_NAME = "jb-source-helper"
 DEFAULTS = {
     "port": 8770,
-    "jukebox_name": "JUKE.BOX",
+    "jukebox_name": "Juk3box",
     "data_dir": "/var/lib/juk3-box/helper",
     "ble": True,
 }

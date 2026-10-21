@@ -2,7 +2,7 @@
 // screens). jb-source-phone does the work; these are its screens.
 //
 //   The Sources badge (top right): which phone has the jukebox. Clicking it
-//   lists every phone to switch to, Bluetooth or the juk3box Helper app
+//   lists every phone to switch to, Bluetooth or the Juk3box Helper app
 //   (jb-core chooses: phone_choice.py), and the drives plugged in, plus
 //   "Add a phone", which goes to Settings > Bluetooth. A phone arriving
 //   while another has the jukebox is offered: "… is here. Switch to it?"
