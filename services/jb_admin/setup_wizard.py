@@ -129,7 +129,7 @@ class System:
         return any(line.strip() == RTC_CHARGE for line in text.splitlines())
 
     async def network(self) -> dict:
-        """{"via": "wifi"|"ethernet"|None, "name": connection or SSID}."""
+        """{"via": "wifi"|"ethernet"|None, "name": the Wi-Fi network (SSID), or the cable's connection}."""
         out = await self.run("nmcli", "-t", "-f", "TYPE,STATE,CONNECTION", "device")
         found = {"via": None, "name": None}
         for line in out.splitlines():
@@ -137,6 +137,13 @@ class System:
             if len(parts) == 3 and parts[1] == "connected" and parts[0] in ("wifi", "ethernet"):
                 if found["via"] != "ethernet":
                     found = {"via": parts[0], "name": parts[2]}
+        if found["via"] == "wifi":
+            # The network's own name, not NetworkManager's name for the connection.
+            out = await self.run("nmcli", "-t", "-f", "IN-USE,SSID", "device", "wifi", "list", "--rescan", "no")
+            for line in out.splitlines():
+                if line.startswith("*:") and line[2:]:
+                    found["name"] = line[2:].replace("\\:", ":").replace("\\\\", "\\")
+                    break
         return found
 
     async def timezone(self) -> dict:
