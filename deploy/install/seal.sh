@@ -1,6 +1,6 @@
 #!/bin/sh
 # Makes an installed card start as a jukebox nobody has set up: no owner
-# password, no Wi-Fi, no phones, no songs, no setup progress. On the next
+# password, no Wi-Fi, no phones, no songs, no Last.fm key, no setup progress. On the next
 # start it opens setup mode (its own Wi-Fi, docs/Setup Wizard — Plan.md).
 # Run on the Pi as root, then it powers off:
 #   sudo sh /opt/juk3-box/deploy/install/seal.sh --yes [--for-owner] [--no-poweroff]
@@ -47,6 +47,9 @@ rm -f /etc/NetworkManager/system-connections/*
 rm -f /etc/netplan/*.yaml
 rm -f "$BOOT/user-data" "$BOOT/network-config" "$BOOT/meta-data"
 [ -d /etc/cloud ] && touch /etc/cloud/cloud-init.disabled
+
+say "The owner's Last.fm key (setup asks the next owner for theirs)"
+/usr/local/sbin/jb-setupctl lastfm clear >/dev/null
 
 say "Bluetooth pairings"
 for adapter in /var/lib/bluetooth/*; do

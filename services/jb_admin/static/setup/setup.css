@@ -104,6 +104,8 @@ label.wz-label { font-weight: 800; font-size: 15px; color: var(--heading); }
   font-size: 18px; color: var(--ink); background: #fff; outline: none; }
 .wz-input:focus, .wz-select:focus { border-color: var(--purple); }
 .wz-field { display: flex; flex-direction: column; gap: 8px; }
+.wz-howto { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 1.45; }
+.wz-howto a { color: var(--purple); font-weight: 800; }
 
 .wz-choices { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 900px) { .wz-choices.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

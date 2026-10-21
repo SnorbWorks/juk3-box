@@ -50,6 +50,7 @@ Answers and progress are kept in `/var/lib/juk3-box/setup.json` as each step com
 | 14 | Screen | all | cabinet |
 | 15 | Knob and keys | all | cabinet |
 | 16 | Sources | all | phone, cabinet |
+| 16a | Last.fm key | all | phone/computer |
 | 17 | Whole-home audio | all (Pi 4: cautioned) | phone/computer |
 | 18 | Suggestions | boards with any | phone/computer |
 | 19 | Finish | all | both |
@@ -115,6 +116,9 @@ Detects: the Pico keypad (jb-input's device, `/etc/juk3-box/jb-input.json`). Ask
 - **Bluetooth.** "Add a phone" on the cabinet (Settings > Sources > Bluetooth; `jb-source-phone/cmd` `pair_start`), then the phone's Bluetooth settings; the library syncs (911 songs on Oct 20).
 - **Drives.** "Plug in a USB drive with music"; its songs join the board (jb-drive, jb-source-local). Nothing to set.
 Verifies: the source's songs are on the board; one pick plays (the pick doctor watches it).
+
+**16a. Last.fm key.** (Optional; added Oct 20.) Each owner brings their own free key: none ships on the card or in an image.
+Detects: a key in `/etc/juk3-box/jb-library.json`. Asks: the key, under a numbered how-to (Last.fm's API page, what to type in its form, copy the API key and not the shared secret). Changes: `jb-setupctl lastfm KEY` writes it to jb-library (`lastfm_api_key`) and jb-analyzer (`lastfm_key`) and restarts them; Weather Mix gets it as its `lastfm-key` secret when installed. Verifies: asks Last.fm about one artist first (a key it turns down is refused; offline, it's saved unchecked). Skipping says what goes without: the board's Top 100, genre-picked light shows, Weather Mix's moods. Added or changed later on the admin's Setup page (`PUT`/`DELETE /api/lastfm`); seal.sh clears it.
 
 **17. Whole-home audio.** (Optional.)
 Detects: AirPlay speakers on the network (`jukebox/jb-audio/airplay` `receivers`). Asks: which zone plays along, or none. Changes: whole-home on, the zone, the starting delay (1425 ms on this cabinet) to tune by ear with music (`airplay_match`, the house following the cabinet's knob). Pi 4: shows `FEATURES["pi4"]["whole_home"]`'s caution and cost (a warning, not suggested off).
@@ -192,7 +196,7 @@ Built, in that order: 1–6 above, and the installer half of 8.
 - **1–4** run end to end on the cabinet (the owner finished it Oct 20). The admin's Setup page reads `/api/wizard-status`, which doesn't bring up the cabinet's setup screen. Renaming sets the Bluetooth name too.
 - **5, setup mode**, in jb-netwatch (`services/jb_netwatch/setup_mode.py`), talking to jb-admin and jb-core through request files (`shared/setup_net.py`, `/var/lib/juk3-box/setupnet`, admin's own). Starts by itself only on a jukebox that never finished setup and is offline (30 s with no Wi-Fi ever set, 3 min with one); otherwise from the power menu's Set up Wi-Fi, and then gives up after 15 minutes unused or on the cabinet's Cancel. The hotspot is an NM shared AP (`Juk3box Setup XXXX`, a password kept per board), every name answered with 10.42.0.1 (`dnsmasq-shared.d`, only while it's on) and port 80 redirected to the setup page by a small server inside jb-netwatch (no nft on the image). The cabinet shows a Wi-Fi QR code a phone camera joins with. Not done: WMM off (NetworkManager has no setting for it; watch for the Sidecar problem).
 - **6, the app**: "Set up a new jukebox" on Home (juk3box-helper `Features/Setup`): scans the code, notes the phone's network (`?ssid=` on the page), joins the hotspot, shows the page; the page tells the app when it starts joining (`webkit.messageHandlers.juk3box`), and the app lets go of the hotspot and finds the jukebox at its new address. Needs the Hotspot Configuration and Access Wi-Fi Information capabilities on the App ID (not enabled yet: the owner's call); without them it says to join from Settings.
-- **8, the card**: `deploy/make-card.sh` (from the Mac) runs `deploy/install/install.sh` on a fresh Raspberry Pi OS Lite and, after a check, `seal.sh`, which forgets the owner, Wi-Fi, phones, songs and setup so the next start opens setup mode.
+- **8, the card**: `deploy/make-card.sh` (from the Mac) runs `deploy/install/install.sh` on a fresh Raspberry Pi OS Lite and, after a check, `seal.sh`, which forgets the owner, Wi-Fi, phones, songs, the Last.fm key and setup so the next start opens setup mode. No Last.fm key is copied over (step 16a asks the owner).
 
 Still to do: 7 (services that reconnect to the bus); the knob step's key presses make real picks; the image for copying cards (machine id, SSH host keys, cloud-init).
 

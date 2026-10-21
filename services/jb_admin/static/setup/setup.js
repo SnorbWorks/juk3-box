@@ -671,6 +671,37 @@ const STEPS = {
     };
   },
 
+  lastfm(s) {
+    local.key ??= '';
+    const without = h('ul', {},
+      h('li', {}, 'The board\'s Top 100 stays empty.'),
+      h('li', {}, 'The light show picks its look from how loud and busy a song is, not from its genre.'),
+      s.weathermix ? h('li', {}, 'Weather Mix picks songs by genre, not by mood.') : null);
+    return {
+      body: [
+        h('p', {}, 'Last.fm knows what millions of listeners play. With a free key from Last.fm, your jukebox fills the board\'s Top 100 '
+          + 'and gives each song\'s light show a look that fits its genre.'),
+        s.set ? note('ok', `A key is saved (it ends in ${s.ends}). Press Next to keep it, or paste a new one.`) : null,
+        h('p', { style: 'font-weight:800;margin-bottom:0' }, 'Get your key (about 3 minutes):'),
+        h('ol.wz-howto', {},
+          h('li', {}, h('a', { href: s.get_key, target: '_blank', rel: 'noopener' }, 'Open Last.fm\'s API page'),
+            '. Sign in, or tap Sign up to make a free account first.'),
+          h('li', {}, 'Fill in the form: your email for Contact email, ', h('b', {}, 'Juk3box'), ' for Application name and ',
+            h('b', {}, 'My jukebox'), ' for Application description. Leave Callback URL and Application homepage empty.'),
+          h('li', {}, 'Tap Submit. Last.fm shows an API key and a shared secret.'),
+          h('li', {}, 'Copy the ', h('b', {}, 'API key'), ' (32 letters and numbers). Not the shared secret.'),
+          h('li', {}, 'Come back here and paste it below.')),
+        h('div.wz-field', {}, h('label.wz-label', { for: 'lfkey' }, 'Last.fm API key'),
+          h('input.wz-input', { id: 'lfkey', type: 'text', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false',
+            autocomplete: 'off', placeholder: s.set ? `Saved key ends in ${s.ends}` : 'Paste it here', value: local.key,
+            onInput: e => { local.key = e.target.value; } })),
+        note('warn', 'Without a key:', without, h('div', { style: 'margin-top:6px' }, 'You can add one later on the admin\'s Setup page.')),
+      ],
+      next: { label: s.set ? 'Next' : 'Save key', onClick: () => submit({ key: local.key.trim() }) },
+      skip: true,
+    };
+  },
+
   wholehome(s) {
     local.speaker ??= s.whole_home?.enabled ? s.whole_home.airplay : null;
     return {

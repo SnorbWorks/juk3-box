@@ -1,6 +1,7 @@
 """deploy/jb-setupctl's pure parts: config.txt's block and the EEPROM text."""
 
 import importlib.machinery
+import json
 import importlib.util
 from pathlib import Path
 
@@ -57,6 +58,16 @@ def test_eeprom_psu_is_set_and_cleared():
 def test_requests_outside_its_list_are_refused():
     for bad in (["reboot"], ["psu", "3000"], ["fan"], ["timezone", "../etc/passwd"], ["wifi-country", "usa"],
                 ["lights", "identify", "buttons,accent", "10"], ["lights", "load", "lasers", "10"],
-                ["lights", "load", "accent", "999"]):
+                ["lights", "load", "accent", "999"], ["lastfm", "not-a-key"], ["lastfm", "A" * 32]):
         with pytest.raises(ctl.Refused):
             ctl.dispatch(bad)
+
+
+def test_the_lastfm_key_is_set_and_cleared_keeping_the_other_settings():
+    key = "0123456789abcdef0123456789abcdef"
+    text = ctl.with_field('{"enrich_delay": 1}', "lastfm_api_key", key)
+    assert json.loads(text) == {"enrich_delay": 1, "lastfm_api_key": key}
+    assert ctl.with_field(text, "lastfm_api_key", key) is None
+    assert json.loads(ctl.with_field(text, "lastfm_api_key", None)) == {"enrich_delay": 1}
+    assert json.loads(ctl.with_field("", "lastfm_key", key)) == {"lastfm_key": key}
+    assert ctl.with_field("", "lastfm_key", None) is None

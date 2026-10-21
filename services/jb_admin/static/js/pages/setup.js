@@ -2,8 +2,8 @@
 // back into it, and running it again. The wizard itself is its own page,
 // /setup, made for a phone.
 
-import { get, post } from '../api.js';
-import { button, clear, confirmDialog, h, icon, pageHeader, showError } from '../ui.js';
+import { del, get, post, put } from '../api.js';
+import { button, clear, confirmDialog, field, h, icon, pageHeader, showError, toast } from '../ui.js';
 
 export async function show(main) {
   const s = await get('/api/wizard-status');
@@ -29,5 +29,40 @@ export async function show(main) {
     h('dl.setup-summary', s.summary.flatMap(r => [h('dt', r.k), h('dd', r.v)])));
   clear(main,
     pageHeader('Setup', 'The step-by-step setup: name, network, power, lights, sound and more.'),
-    h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null), summary));
+    h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null), summary,
+      lastfmCard(s.lastfm, () => show(main))));
+}
+
+// The owner's Last.fm key: added here when setup skipped it, or changed.
+function lastfmCard(lf, refresh) {
+  const key = h('input', { type: 'text', autocomplete: 'off', spellcheck: false, autocapitalize: 'off',
+    placeholder: lf.set ? `Saved key ends in ${lf.ends}` : '32 letters and numbers' });
+  const save = button(lf.set ? 'Replace key' : 'Save key', { variant: 'primary', type: 'submit' });
+  const remove = lf.set ? button('Remove key', {
+    onclick: async () => {
+      const ok = await confirmDialog('Remove the Last.fm key?',
+        'The Top 100 stops filling and the light show stops reading genres.', { confirm: 'Remove', danger: true });
+      if (!ok) return;
+      try { await del('/api/lastfm'); toast('Last.fm key removed.', 'success'); refresh(); } catch (e) { showError(e); }
+    },
+  }) : null;
+  return h('form.card.card-pad', {
+    style: { maxWidth: '560px' },
+    onsubmit: async e => {
+      e.preventDefault();
+      save.disabled = true;
+      try {
+        await put('/api/lastfm', { key: key.value.trim() });
+        toast('Last.fm key saved.', 'success');
+        refresh();
+      } catch (err) { showError(err); save.disabled = false; }
+    },
+  },
+  h('h2', { style: { marginBottom: '8px' } }, 'Last.fm'),
+  h('p', { style: { marginBottom: '14px' } }, lf.set
+    ? `On: the Top 100 and genre-aware light shows use your key (it ends in ${lf.ends}).`
+    : 'Off: the Top 100 stays empty and the light show goes by each song\'s energy only.'),
+  field('API key', key, h('span', 'Get a free one at ', h('a', { href: lf.get_key, target: '_blank', rel: 'noopener' }, 'Last.fm\'s API page'),
+    '. Copy the API key, not the shared secret.')),
+  h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' } }, save, remove));
 }

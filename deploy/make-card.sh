@@ -11,9 +11,7 @@
 #        deploy/make-card.sh [host] --seal
 #      It powers off; the next start is a new jukebox's first: setup mode.
 #
-# Last.fm keys (genres and similar songs) aren't in the repo: put
-# jb-library.json and jb-analyzer.json in ~/.juk3box/secrets/ and they're
-# copied over (root:admin 0640 in /etc/juk3-box).
+# No Last.fm key goes on the card: the setup wizard asks each owner for their own.
 set -euo pipefail
 
 PI_HOST="${1:-juk3box.local}"
@@ -22,7 +20,6 @@ SEAL=no
 PI_USER="admin"
 PI_KEY="$HOME/.ssh/sidecar_ed25519"
 REMOTE_DIR="/opt/juk3-box"
-SECRETS="$HOME/.juk3box/secrets"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 ssh_pi() { ssh -i "$PI_KEY" -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" "$@"; }
@@ -50,15 +47,6 @@ rsync -az --delete \
   --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude 'venv' \
   --exclude 'ssh_dummy' --exclude 'temp files' --exclude '.DS_Store' \
   -e "ssh -i $PI_KEY" "$REPO_DIR"/ "$PI_USER@$PI_HOST:$REMOTE_DIR"/
-
-if [ -d "$SECRETS" ]; then
-  echo "== Last.fm keys"
-  ssh_pi "mkdir -p -m 0700 /tmp/jb-secrets"
-  for f in jb-library.json jb-analyzer.json; do
-    [ -f "$SECRETS/$f" ] && scp -q -i "$PI_KEY" "$SECRETS/$f" "$PI_USER@$PI_HOST:/tmp/jb-secrets/$f"
-  done
-  ssh_pi_sudo "install -d -m 0755 /etc/juk3-box && for f in /tmp/jb-secrets/*.json; do [ -f \$f ] && install -o root -g $PI_USER -m 0640 \$f /etc/juk3-box/; done; rm -rf /tmp/jb-secrets"
-fi
 
 echo "== Installing (a few minutes: packages, then the Python ones)"
 ssh_pi_sudo "sh $REMOTE_DIR/deploy/install/install.sh"

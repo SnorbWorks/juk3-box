@@ -19,6 +19,8 @@ class FakePi(setup_wizard.System):
         self.charging = False
         self.volts_now = 5.14
         self.ran = []
+        self.lastfm = None
+        self.lastfm_answer = True
 
     async def run(self, *cmd, timeout=10, env=None):
         self.ran.append(cmd)
@@ -69,6 +71,12 @@ class FakePi(setup_wizard.System):
     async def sound(self):
         return {"dac": True, "realtime": True, "clock": True}
 
+    def lastfm_key(self):
+        return self.lastfm
+
+    async def lastfm_works(self, key):
+        return self.lastfm_answer
+
 
 def run(tmp_path, check, family="pi5", password=True, lights=None):
     async def go():
@@ -91,6 +99,8 @@ def run(tmp_path, check, family="pi5", password=True, lights=None):
                 pi.psu = None if args[0] == "unset" else args[0]
             if verb == "rtc-charge":
                 pi.charging = args[0] == "on"
+            if verb == "lastfm":
+                pi.lastfm = None if args[0] == "clear" else args[0]
             return "ok"
 
         async def nothing(*_a, **_k):
@@ -102,6 +112,7 @@ def run(tmp_path, check, family="pi5", password=True, lights=None):
         admin.reboot = nothing
         admin.bus_cmd = nothing
         admin.set_module_enabled = nothing
+        admin.set_module_secret = nothing
         async with TestClient(TestServer(app)) as client:
             if password:
                 assert (await client.post("/api/setup", json={"password": "correct horse"}, headers=H)).status == 200
@@ -304,4 +315,41 @@ def test_the_cabinet_can_cancel_setup_mode_only_when_it_was_asked_for(tmp_path):
             write_atomic(setup_net.state_path(folder), json.dumps({"active": True, "why": why, "ssid": "s", "password": "abcd2345"}))
             admin.wizard.heard_answer({"action": "stop_hotspot"})
             assert setup_net.take_requests(folder) == stops
+    run(tmp_path, check)
+
+
+KEY = "0123456789abcdef0123456789abcdef"
+
+
+def test_the_lastfm_step_checks_the_key_then_saves_it_everywhere(tmp_path):
+    async def check(client, admin, pi, calls):
+        s = (await view(client, "lastfm"))["step"]
+        assert s["set"] is False and s["skippable"] and s["get_key"].startswith("https://www.last.fm/api")
+        out = await submit(client, "lastfm", {"key": "the shared secret?"}, status=400)
+        assert "32 letters and numbers" in out["error"]
+        pi.lastfm_answer = False
+        out = await submit(client, "lastfm", {"key": KEY}, status=400)
+        assert "turned that key down" in out["error"] and pi.lastfm is None
+        pi.lastfm_answer = True
+        out = await submit(client, "lastfm", {"key": " " + KEY.upper() + " "})
+        assert out["step"]["id"] == "wholehome"
+        assert ("lastfm", KEY) in calls and ("call", "jb-weathermix", "lastfm-key", KEY) in calls
+        assert {"k": "Last.fm", "v": "On"} in admin.wizard.summary()
+        # Back again: the saved key is kept without typing it.
+        assert (await view(client, "lastfm"))["step"]["ends"] == "cdef"
+        await submit(client, "lastfm", {})
+        assert [c for c in calls if c[0] == "lastfm"] == [("lastfm", KEY)]
+    run(tmp_path, check)
+
+
+def test_lastfm_can_be_skipped_and_added_later_from_the_admin(tmp_path):
+    async def check(client, admin, pi, calls):
+        out = await submit(client, "lastfm", {"skip": True})
+        assert out["step"]["id"] == "wholehome" and pi.lastfm is None
+        assert (await (await client.get("/api/wizard-status")).json())["lastfm"]["set"] is False
+        r = await client.put("/api/lastfm", json={"key": KEY}, headers=H)
+        assert r.status == 200 and (await r.json())["ends"] == "cdef"
+        r = await client.delete("/api/lastfm", headers=H)
+        assert r.status == 200 and (await r.json())["set"] is False
+        assert ("lastfm", "clear") in calls and ("call", "jb-weathermix", "lastfm-key", None) in calls
     run(tmp_path, check)

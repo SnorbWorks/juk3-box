@@ -24,6 +24,8 @@ import time
 import wave
 from pathlib import Path
 
+import aiohttp
+
 from services.jb_admin.files import read_json, write_json
 from services.jb_lights import present
 from shared import hardware, setup_net
@@ -38,6 +40,12 @@ TEST_VOLUME = 0.05         # the Oct 20 test volume
 RTC_CHARGE = "dtparam=rtc_bbat_vchg=3000000"
 CONFIG_TXT = Path("/boot/firmware/config.txt")
 PORT = 8080
+# Last.fm: the owner's own API key (jb-library's popularity, jb-analyzer's tags,
+# Weather Mix). Kept in the services' config by jb-setupctl; read back from here.
+LASTFM_API = "https://ws.audioscrobbler.com/2.0/"
+LASTFM_GET_KEY = "https://www.last.fm/api/account/create"
+LASTFM_CONFIG = Path("/etc/juk3-box/jb-library.json")
+LASTFM_KEY_RE = re.compile(r"[0-9a-f]{32}")
 
 CHAIN_NAMES = {"buttons": "Button lights", "accent": "Upper panel and footlights", "levelbar": "Volume bar"}
 CHAIN_LOOK = {
@@ -162,6 +170,28 @@ class System:
 
     async def addresses(self) -> list[str]:
         return [a for a in (await self.run("hostname", "-I")).split() if "." in a]
+
+    def lastfm_key(self) -> str | None:
+        data = read_json(LASTFM_CONFIG, {})
+        key = data.get("lastfm_api_key") if isinstance(data, dict) else None
+        return key if isinstance(key, str) and key else None
+
+    async def lastfm_works(self, key: str) -> bool | None:
+        """Asks Last.fm about one artist with the key: True it answers, False
+        it turns the key down, None it couldn't be reached."""
+        params = {"method": "artist.getinfo", "artist": "Cher", "api_key": key, "format": "json"}
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+                async with s.get(LASTFM_API, params=params) as r:
+                    data = await r.json(content_type=None)
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        # 10 invalid key, 26 suspended; anything else (rate limits, Last.fm down) isn't the key's fault.
+        if data.get("error") in (10, 26):
+            return False
+        return True if "artist" in data else None
 
 
 def chime(path: Path) -> None:
@@ -606,6 +636,21 @@ class Sources(Step):
         return await super().action(w, name, data)
 
 
+class LastFm(Step):
+    id, title, short = "lastfm", "Song info from Last.fm", "Last.fm"
+
+    async def view(self, w):
+        key = w.system.lastfm_key()
+        return {"set": bool(key), "ends": key[-4:] if key else None, "get_key": LASTFM_GET_KEY,
+                "weathermix": w.admin.has_module_setting("jb-weathermix", "lastfm-key")}
+
+    async def submit(self, w, data):
+        key = data.get("key")
+        if not key and w.system.lastfm_key():
+            return {"key": True}            # keeping the one it has
+        return await w.set_lastfm(key)
+
+
 class WholeHome(Step):
     id, title, short = "wholehome", "Music around the house", "House"
 
@@ -676,9 +721,9 @@ class Finish(Step):
 
 
 STEPS = [Password(), Name(), Wifi(), Time(), Board(), Power(), Battery(), Cooling(), Lights(), Apply(),
-         LightCheck(), LoadTest(), Sound(), Screen(), Knob(), Sources(), WholeHome(), Suggestions(), Finish()]
+         LightCheck(), LoadTest(), Sound(), Screen(), Knob(), Sources(), LastFm(), WholeHome(), Suggestions(), Finish()]
 BY_ID = {s.id: s for s in STEPS}
-SKIPPABLE = {"screen", "knob", "sources", "wholehome"}
+SKIPPABLE = {"screen", "knob", "sources", "lastfm", "wholehome"}
 
 
 class Wizard:
@@ -912,6 +957,31 @@ class Wizard:
         self.answers_in.pop("sound", None)
         await self.system.run("pw-play", str(path), timeout=10, env={"XDG_RUNTIME_DIR": "/run/user/1000", "PATH": "/usr/bin:/bin"})
 
+    async def set_lastfm(self, key) -> dict:
+        """Checks the owner's Last.fm key with Last.fm, then gives it to the
+        services that use it (jb-setupctl restarts them) and Weather Mix."""
+        key = key.strip().lower() if isinstance(key, str) else ""
+        if not LASTFM_KEY_RE.fullmatch(key):
+            raise WizardError("That isn't a Last.fm API key. It's 32 letters and numbers: "
+                              "copy the one labeled API key, not the shared secret.")
+        works = await self.system.lastfm_works(key)
+        if works is False:
+            raise WizardError("Last.fm turned that key down. Check that you copied the API key, "
+                              "not the shared secret.")
+        await self.ctl("lastfm", key)
+        await self.admin.set_module_secret("jb-weathermix", "lastfm-key", key)
+        self.log.info("setup: Last.fm key saved (%s)", "checked" if works else "Last.fm couldn't be reached to check it")
+        return {"key": True, "checked": bool(works)}
+
+    async def clear_lastfm(self) -> None:
+        await self.ctl("lastfm", "clear")
+        await self.admin.set_module_secret("jb-weathermix", "lastfm-key", None)
+        self.log.info("setup: Last.fm key removed")
+
+    def lastfm(self) -> dict:
+        key = self.system.lastfm_key()
+        return {"set": bool(key), "ends": key[-4:] if key else None, "get_key": LASTFM_GET_KEY}
+
     def hotspot(self) -> dict:
         """Setup mode's state (jb-netwatch): {"active": False} when it's off."""
         return setup_net.read_state(self.setupnet_dir)
@@ -936,6 +1006,7 @@ class Wizard:
         lt = a.get("loadtest") or {}
         if lt.get("min_volts"):
             rows.append({"k": "Power check", "v": f"{lt['min_volts']:.2f} V lowest"})
+        rows.append({"k": "Last.fm", "v": "On" if self.system.lastfm_key() else "Off: no Top 100 or genre light shows"})
         return rows
 
     def status(self) -> dict:
@@ -945,7 +1016,7 @@ class Wizard:
         step = self.current()
         return {"done": self.done, "step": None if self.done else step.title,
                 "finished": sum(1 for s in steps if self.completed(s)), "of": len(steps),
-                "summary": self.summary()}
+                "summary": self.summary(), "lastfm": self.lastfm()}
 
     # The cabinet --------------------------------------------------------------------------
 

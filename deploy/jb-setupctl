@@ -12,6 +12,8 @@ it only ever does these:
     jb-setupctl wifi-country CC           the Wi-Fi regulatory country
     jb-setupctl lights identify CHAIN SECONDS | load CHAINS SECONDS | stop
                                           the light checks, with jb-lights paused
+    jb-setupctl lastfm KEY|clear          the owner's Last.fm API key, in jb-library's and
+                                          jb-analyzer's config (restarts them)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -42,6 +44,10 @@ RESPONSES = Path("/var/lib/juk3-box/setupctl/responses")
 REQ_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}\.json$")
 TZ_RE = re.compile(r"^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$")
 CHAINS = ("buttons", "accent", "levelbar")
+ETC = Path("/etc/juk3-box")
+# Each service's name for the Last.fm key in its config file.
+LASTFM_FIELDS = {"jb-library": "lastfm_api_key", "jb-analyzer": "lastfm_key"}
+LASTFM_KEY_RE = re.compile(r"^[0-9a-f]{32}$")
 TEST_UNIT = "jb-lighttest"
 
 BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
@@ -220,6 +226,38 @@ def cmd_lights(args: list[str]) -> str:
     return "started"
 
 
+def with_field(text: str, field: str, value: str | None) -> str | None:
+    """A service's config with `field` set (or removed when None); None when
+    that changes nothing. Its other settings are kept."""
+    data = json.loads(text) if text.strip() else {}
+    if not isinstance(data, dict):
+        die("the config isn't a JSON object")
+    new = {k: v for k, v in data.items() if k != field}
+    if value is not None:
+        new[field] = value
+    return None if new == data else json.dumps(new, indent=2) + "\n"
+
+
+def cmd_lastfm(value: str) -> str:
+    if value != "clear" and not LASTFM_KEY_RE.match(value):
+        die("lastfm takes a 32-character key or clear")
+    ETC.mkdir(mode=0o755, exist_ok=True)
+    changed = []
+    for unit, field in LASTFM_FIELDS.items():
+        path = ETC / f"{unit}.json"
+        text = path.read_text() if path.exists() else ""
+        new = with_field(text, field, None if value == "clear" else value)
+        if new is None:
+            continue
+        write(path, new, 0o640)
+        shutil.chown(path, "root", "admin")      # the services run as admin and only read it
+        changed.append(unit)
+    if changed:
+        # Only the ones running: the setup wizard may have turned jb-analyzer off.
+        run("systemctl", "try-restart", *changed)
+    return "changed" if changed else "unchanged"
+
+
 def dispatch(a: list[str]) -> str:
     if len(a) == 2 and a[0] == "psu":
         return cmd_psu(a[1])
@@ -235,6 +273,8 @@ def dispatch(a: list[str]) -> str:
         return cmd_wifi_country(a[1])
     if a and a[0] == "lights":
         return cmd_lights(a[1:])
+    if len(a) == 2 and a[0] == "lastfm":
+        return cmd_lastfm(a[1])
     die("unknown command")
 
 

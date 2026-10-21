@@ -334,6 +334,24 @@ class Admin:
         except ModuleError as e:
             raise WizardError(f"Couldn't turn {m.get('name') or module_id} {'on' if on else 'off'}: {e}")
 
+    def has_module_setting(self, module_id: str, key: str) -> bool:
+        m = next((m for m in self.registry.view() if m["id"] == module_id and not m.get("undeclared")), None)
+        return m is not None and key in (m.get("owner_settings") or {})
+
+    async def set_module_secret(self, module_id: str, key: str, value: str | None) -> None:
+        """One secret setting of an installed module (None removes it), as the
+        Modules page saves it; a module without that setting is left alone."""
+        if not self.has_module_setting(module_id, key):
+            return
+        m = self.module(module_id)
+        try:
+            self.modules.save_settings(m["id"], m, {key: value})
+            if self.modules.secrets_changed and m.get("installed"):
+                await self.modules.ctl("unit", "restart", unit_of(m))
+        except ModuleError as e:
+            raise WizardError(f"Couldn't give {m.get('name') or module_id} the key: {e}")
+        await self.announce(f"module:{m['id']}")
+
     async def reboot(self) -> None:
         self.log.info("setup: restarting to apply the settings")
         proc = await asyncio.create_subprocess_exec("systemctl", "reboot")
@@ -399,6 +417,22 @@ class Admin:
     async def wizard_again(self, request):
         await self.wizard.restart_wizard()
         return web.json_response({"ok": True})
+
+    # The owner's Last.fm key, after setup too (the admin's Setup page).
+    async def put_lastfm(self, request):
+        body = await json_body(request)
+        try:
+            await self.wizard.set_lastfm(body.get("key"))
+        except WizardError as e:
+            raise error(400, str(e))
+        return web.json_response(self.wizard.lastfm())
+
+    async def delete_lastfm(self, request):
+        try:
+            await self.wizard.clear_lastfm()
+        except WizardError as e:
+            raise error(400, str(e))
+        return web.json_response(self.wizard.lastfm())
 
     # Helpers --------------------------------------------------------------
 
@@ -1346,6 +1380,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/wizard-again", admin.wizard_again)
     r.add_post("/api/wizard/{step}", admin.wizard_submit)
     r.add_post("/api/wizard/{step}/{action}", admin.wizard_action)
+    r.add_put("/api/lastfm", admin.put_lastfm)
+    r.add_delete("/api/lastfm", admin.delete_lastfm)
     r.add_post("/api/logout", admin.logout)
     r.add_post("/api/password", admin.change_password)
     r.add_get("/api/status", admin.status)
