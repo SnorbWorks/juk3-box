@@ -5,6 +5,9 @@
 #   sudo sh /opt/juk3-box/deploy/install/install.sh
 # Safe to run again. Then reboot; deploy/install/seal.sh makes the card
 # start as never set up (the setup wizard, docs/Setup Wizard — Plan.md).
+# deploy/image/build-image.sh runs it inside an image (JB_IMAGE_BUILD=1):
+# nothing is running there, so the steps that talk to a live system wait
+# for the image's first start.
 #
 # What it does is the first Pi 5 cabinet's setup, taken stock of on
 # Oct 20, 2026 (packages from apt's history, files compared with the repo).
@@ -15,6 +18,7 @@ DATA=/var/lib/juk3-box
 JB_USER=${JB_USER:-admin}
 HOME_DIR=$(getent passwd "$JB_USER" | cut -d: -f6)
 BOOT=/boot/firmware
+IMAGE=${JB_IMAGE_BUILD:-}
 SERVICES="jb_admin jb_analyzer jb_core jb_display jb_input jb_library jb_source_helper jb_source_local jb_source_phone jb_ui"
 OWN_UNITS="jb-audio jb-crawl jb-lights jb-netwatch jb-airplay"
 
@@ -80,7 +84,9 @@ say "The bus (mosquitto, with installed modules' private socket)"
 
 say "$JB_USER's account: realtime audio, user services without a login, the kiosk"
 usermod -aG pipewire "$JB_USER"
-loginctl enable-linger "$JB_USER"
+# What loginctl enable-linger leaves behind (it needs a running system).
+install -d -m 0755 /var/lib/systemd/linger
+touch "/var/lib/systemd/linger/$JB_USER"
 as_user_install() { install -D -o "$JB_USER" -g "$JB_USER" -m 0644 "$1" "$HOME_DIR/$2"; }
 as_user_install "$REPO/deploy/kiosk/sway-config" .config/sway/config
 as_user_install "$REPO/deploy/kiosk/fontconfig-fonts.conf" .config/fontconfig/fonts.conf
@@ -108,11 +114,11 @@ fi
 grep -q 'cgroup_enable=memory' "$BOOT/cmdline.txt" || sed -i '1s/$/ cgroup_enable=memory/' "$BOOT/cmdline.txt"
 
 say "Clock from the internet"
-timedatectl set-ntp true || true
+[ -n "$IMAGE" ] || timedatectl set-ntp true || true
 
 say "Turning it all on"
 systemctl daemon-reload
-udevadm control --reload
+[ -n "$IMAGE" ] || udevadm control --reload
 systemctl enable mosquitto jb-modctl.path jb-setupctl.path var-swapoverflow.swap >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done

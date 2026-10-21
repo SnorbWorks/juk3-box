@@ -3,24 +3,26 @@
 # password, no Wi-Fi, no phones, no songs, no Last.fm key, no setup progress. On the next
 # start it opens setup mode (its own Wi-Fi, docs/Setup Wizard — Plan.md).
 # Run on the Pi as root, then it powers off:
-#   sudo sh /opt/juk3-box/deploy/install/seal.sh --yes [--for-owner] [--no-poweroff]
+#   sudo sh /opt/juk3-box/deploy/install/seal.sh --yes [--for-owner] [--no-poweroff] [--image]
 #
 # --for-owner also removes the SSH keys that let a developer in. Without it
 # (a test card) they stay, so its logs can still be read during setup.
-# Machine id and SSH host keys are kept: this seals one card, it doesn't
-# make an image to copy (that's roadmap item 8).
+# --image (deploy/image/build-image.sh, inside the image being built) is
+# for-owner and no power-off, and also forgets what makes one card itself:
+# the machine id and SSH host keys, so each copy makes its own on its first start.
 set -eu
 
 DATA=/var/lib/juk3-box
 JB_USER=${JB_USER:-admin}
 HOME_DIR=$(getent passwd "$JB_USER" | cut -d: -f6)
 BOOT=/boot/firmware
-YES=no FOR_OWNER=no POWEROFF=yes
+YES=no FOR_OWNER=no POWEROFF=yes IMAGE=no
 for a in "$@"; do
   case $a in
     --yes) YES=yes ;;
     --for-owner) FOR_OWNER=yes ;;
     --no-poweroff) POWEROFF=no ;;
+    --image) IMAGE=yes FOR_OWNER=yes POWEROFF=no ;;
     *) echo "seal.sh: unknown option $a" >&2; exit 2 ;;
   esac
 done
@@ -77,6 +79,13 @@ apt-get clean
 if [ "$FOR_OWNER" = yes ]; then
   say "Developer access"
   rm -f "$HOME_DIR/.ssh/authorized_keys"
+fi
+
+if [ "$IMAGE" = yes ]; then
+  say "This card's identity: each copy makes its own"
+  printf 'uninitialized\n' > /etc/machine-id
+  rm -f /var/lib/dbus/machine-id /var/lib/systemd/random-seed /etc/ssh/ssh_host_*
+  rm -f /var/lib/systemd/linger/root
 fi
 
 sync

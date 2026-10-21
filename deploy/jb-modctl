@@ -264,6 +264,9 @@ def cmd_setup():
     write(ACL, acl_text(), 0o640, "root:mosquitto")
     old = CONF.read_text() if CONF.exists() else None
     write(CONF, CONF_TEXT.format(socket=SOCKET, passwd=PASSWD, acl=ACL), 0o644)
+    if os.environ.get("JB_IMAGE_BUILD"):
+        print("bus module listener set up (it starts with the image)")
+        return
     run("systemctl", "daemon-reload")
     run("systemctl", "restart", "mosquitto", check=False)
     time.sleep(2)
