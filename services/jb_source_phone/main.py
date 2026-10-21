@@ -656,7 +656,10 @@ async def main() -> None:
             # A pick always wins over a deep crawl: revoke, and play once the
             # holder has handed browsing back (end_lease re-syncs first, so
             # the pick's stale path gets replayed by title).
+            # Tell jb-core's pick doctor it's waiting (the hand-back and the
+            # re-sync can take ~40s, past its 15s START_S), and the screen.
             pending_pick = cmd
+            await pick_problem(bus, cmd, "busy", retrying=True)
             if not lease["revoked_at"]:
                 lease["revoked_at"] = now()
                 log.info("pick while %s holds the browse lease; revoking", lease["holder"])
