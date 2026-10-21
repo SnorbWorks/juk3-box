@@ -232,6 +232,14 @@ def test_artwork_needs_a_paired_phones_token(tmp_path):
         assert r.status == 400
         r = await client.post(f"/artwork/{key}", data=jpeg, headers={"Authorization": f"Bearer {token}"})
         assert r.status == 204 and (tmp_path / "artwork" / f"{key}.jpg").read_bytes() == jpeg
+
+        async def slowly(body):                               # arriving in pieces, as over Wi-Fi
+            for i in range(0, len(body), 16384):
+                yield body[i:i + 16384]
+                await asyncio.sleep(0.01)
+        big = b"\xff\xd8" + bytes(range(256)) * 1200 + b"\xff\xd9"   # ~300 KB
+        r = await client.post(f"/artwork/{key}", data=slowly(big), headers={"Authorization": f"Bearer {token}"})
+        assert r.status == 204 and (tmp_path / "artwork" / f"{key}.jpg").read_bytes() == big
     run(tmp_path, check)
 
 

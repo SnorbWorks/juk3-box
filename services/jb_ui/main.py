@@ -270,8 +270,9 @@ class App:
         path = cover_path(Path(self.cfg["covers_dir"]), request.match_info["name"])
         if path is None or not path.is_file():
             raise web.HTTPNotFound()
-        # A key names one album's cover for good: the browser may keep it.
-        return web.FileResponse(path, headers={"Cache-Control": "max-age=86400"})
+        # Revalidated each time (a 304 when unchanged): the app may send a
+        # cover again, and a bad copy mustn't stick in the kiosk's cache.
+        return web.FileResponse(path, headers={"Cache-Control": "no-cache"})
 
     async def theme_file(self, request: web.Request) -> web.StreamResponse:
         root = themes.find_theme_dir(request.match_info["theme_id"], self.theme_dirs)

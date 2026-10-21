@@ -65,7 +65,12 @@ def make_app(helper: Helper) -> web.Application:
             raise web.HTTPUnauthorized()
         if (request.content_length or 0) > MAX_ARTWORK:
             raise web.HTTPRequestEntityTooLarge(MAX_ARTWORK, request.content_length)
-        body = await request.content.read(MAX_ARTWORK + 1)
+        # The whole body: content.read(n) returns only what has arrived so
+        # far (2026-10-20: 423 of 429 covers saved cut off).
+        try:
+            body = await request.read()
+        except web.HTTPRequestEntityTooLarge:
+            raise web.HTTPRequestEntityTooLarge(MAX_ARTWORK, request.content_length or 0)
         if len(body) > MAX_ARTWORK:
             raise web.HTTPRequestEntityTooLarge(MAX_ARTWORK, len(body))
         if not body.startswith(b"\xff\xd8"):
