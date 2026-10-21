@@ -756,3 +756,20 @@ def test_videos_are_optimized_one_at_a_time(tmp_path, monkeypatch):
     assert log.read_text().split() == ["start", "end"] * 3          # never two at once
     assert sorted(p.name for p in (tmp_path / "media").glob("clip*")) == ["clip0.mp4", "clip1.mp4", "clip2.mp4"]
     assert not lib.jobs
+
+
+def test_per_board_suggestions_reach_the_pages(tmp_path):
+    async def check(client, admin):
+        admin.board = {"family": "pi4", "name": "Raspberry Pi 4"}
+        mods = {m["id"]: m for m in (await (await client.get("/api/status", headers=H)).json())["modules"]}
+        assert "CPU" in mods["jb-analyzer"]["suggestion"]["why"] and mods["jb-core"]["suggestion"] is None
+        info = await (await client.get("/api/modules/jb-analyzer", headers=H)).json()
+        assert info["suggestion"]["cost"] and info["board"] == "Raspberry Pi 4"
+        board = await (await client.get("/api/board", headers=H)).json()
+        assert board["family"] == "pi4" and set(board["features"]) == {"background_video", "whole_home"}
+        assert (await (await client.get("/api/audio", headers=H)).json())["suggestion"]["warn"] is True
+        admin.board = {"family": "pi5", "name": "Raspberry Pi 5"}
+        mods = {m["id"]: m for m in (await (await client.get("/api/status", headers=H)).json())["modules"]}
+        assert mods["jb-analyzer"]["suggestion"] is None
+        assert (await (await client.get("/api/board", headers=H)).json())["features"] == {}
+    run(tmp_path, check)

@@ -57,9 +57,12 @@ function syncLine(w) {
   return `${w.airplay}'s delay: ${w.measured_ms} ms, ${how}${offset}. The cabinet is held back ${w.delay_ms} ms.`;
 }
 
-function powerCard(w, receivers) {
+function powerCard(w, receivers, suggestion, board) {
   const toggle = switchControl(w.enabled, value => act('whole_home', { enabled: value, airplay: w.airplay },
     value ? `Whole-home is on: ${w.airplay}.` : 'Whole-home is off.'), w.enabled ? 'On' : 'Off');
+  // Per-board suggestions (shared/hardware.py): on a Pi 4, a caution.
+  const caution = suggestion ? h('div.notice.warn', icon('circle-alert'), h('span',
+    `${suggestion.warn ? 'On a' : 'Not suggested on a'} ${board || 'board like this'}: ${suggestion.why}${suggestion.cost ? ` (It uses ${suggestion.cost}.)` : ''}`)) : null;
   const names = receivers.includes(w.airplay) ? receivers : [w.airplay, ...receivers];
   const pick = h('select', {
     onfocus: () => { editing = true; },
@@ -75,6 +78,7 @@ function powerCard(w, receivers) {
       h('div.phone-text', h('div.stat-value', 'Play in the house too'), h('div.stat-sub', statusLine(w))),
       toggle),
     h('div.card-pad.stack',
+      caution,
       field('AirPlay speaker', pick, 'The speakers it plays on as well. Changing it takes a few seconds.'),
       w.enabled ? field('AirPlay loudness', slider({
         min: 25, max: 300, step: 5, value: Math.round(w.airplay_match * 100), format: matchText,
@@ -117,5 +121,5 @@ function render(data) {
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
     !w ? h('div.notice.warn', icon('circle-alert'), h('span', 'Waiting to hear from the jukebox\'s sound service…'))
-      : [powerCard(w, data.receivers), w.enabled ? tuningCard(w) : null]);
+      : [powerCard(w, data.receivers, data.suggestion, data.board), w.enabled ? tuningCard(w) : null]);
 }

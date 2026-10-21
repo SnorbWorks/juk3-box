@@ -116,7 +116,7 @@ Measured on the reference Pi 4 (1 GB). The platform targets the smallest machine
 - **Each module is its own process, and a Python one costs 20–40 MB** before it does anything. Fine for a handful of modules; not for many on a 1 GB Pi. Before modules multiply: a lighter way to run small ones (several declarative or data-only modules sharing one host process, each still behind its own bus login), and the admin showing memory in use against the Pi's total before an install.
 - **The kiosk is the tightest budget.** The screen restyling or repainting is what makes the knob feel slow, not the knob code. The rules (now in docs/theme-format.md and the Neon theme's notes): animate only `transform` and `opacity`; never change a variable or attribute on `<html>` per frame or per step (it restyles every element: ~225 ms on the Pi 4); no `backdrop-filter` (it ran the kiosk out of memory); write to the page only when a value actually changes.
 
-### Per-board suggestions: what a small board shouldn't run (Oct 20, 2026; agreed, not built)
+### Per-board suggestions: what a small board shouldn't run (Oct 20, 2026; built in the admin, the wizard still to come)
 
 The owner's real-world test on the Pi 4 with music playing (Bluetooth, whole-home on): the kiosk (Chromium + sway) about 110% of a core, jb-analyzer about 30%, jb-lights about 25%, audio about 15%; load around 4 on 4 cores, ~500 MB in zram. With PipeWire realtime (commit 47a60e7) that no longer pops, but there's no headroom. So some modules and features are **suggested off** per board: a suggestion with a reason, never a block, and nothing turns off on its own.
 
@@ -138,3 +138,5 @@ Candidates (Pi 4):
 | jb-lights | module | ~25% | Keep: it's the cabinet's look |
 
 Nothing is suggested off for the Pi 5 yet; re-measure there before deciding.
+
+**Built (Oct 20):** `module.json` `boards` (jb-analyzer's Pi 4 entry) and `hardware.FEATURES` (`background_video`; `whole_home` as a caution, `warn`), `hardware.module_suggestion` / `feature_suggestion`; the admin's `/api/board`, a `suggestion` on each module in `/api/status` and `/api/modules/<id>` and on `/api/audio`; the Modules page's label, the reason in Manage, a confirm before Turn on; Sound's caution on whole-home; Appearance's note when a background is a video. The background video's cost isn't measured yet (its why has no number). Left for the wizard: the one screen listing them, each a switch, starting off.

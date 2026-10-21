@@ -24,12 +24,14 @@ export async function show(main, [themeArg]) {
   const usable = themesData.themes.filter(t => !t.problems.length);
   const theme = usable.find(t => t.id === themeArg)?.id || themesData.active;
   const data = await get(`/api/customize/${encodeURIComponent(theme)}`);
+  const board = await get('/api/board').catch(() => null);   // per-board suggestions
   const saved = data.draft || data.published || { style: null, values: {} };
   S = {
     theme, themes: usable, active: themesData.active, name: data.name,
     options: data.options, styles: data.styles, groups: data.groups, fonts: data.fonts,
     style: saved.style || data.styles[0]?.id || null, values: { ...(saved.values || {}) },
     published: data.published, hasDraft: !!data.draft, dirty: false, saving: false, screen: 'home',
+    board,
   };
   build(main);
 }
@@ -173,6 +175,11 @@ function control(o) {
         h('div.picture-buttons',
           button(value ? 'Change' : 'Choose', { variant: 'small', onclick: async () => { const got = await pickPicture(S.theme, value, { video: !!o.video }); if (got) { set(got); render(); } } }, 'image'),
           value ? button('Use the theme\'s', { variant: 'small ghost', onclick: () => { set(''); render(); } }) : null));
+      const videoNote = S.board?.features?.background_video;
+      if (isVideo && videoNote) {
+        input = h('div.stack', input, h('div.notice.warn', icon('circle-alert'),
+          h('span', `Not suggested on a ${S.board.name || 'board like this'}: ${videoNote.why}`)));
+      }
       break;
     }
     default:

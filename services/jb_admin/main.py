@@ -24,7 +24,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from shared import config, logging as jb_logging
+from shared import config, hardware, logging as jb_logging
 from services.jb_admin import schema, theme_store
 from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
@@ -101,6 +101,8 @@ def hostname(request: web.Request) -> str:
 class Admin:
     def __init__(self, cfg: dict, log, bus_enabled: bool = True):
         self.cfg = cfg
+        # Which board this is, for the per-board suggestions (shared/hardware.py).
+        self.board = hardware.board()
         self.log = log
         self.bus_enabled = bus_enabled
         self.theme_dirs = [Path(d) for d in cfg["theme_dirs"]]
@@ -360,9 +362,22 @@ class Admin:
                 states[by_unit.get(unit, unit)] = line[len("ActiveState="):]
         return states
 
+    def with_suggestion(self, m: dict) -> dict:
+        return {**m, "suggestion": hardware.module_suggestion(m, self.board["family"])}
+
+    async def board_info(self, request):
+        """The board and what's suggested off on it, for the pages that
+        have such a switch (Sound's whole-home, Appearance's backgrounds)."""
+        family = self.board["family"]
+        return web.json_response({
+            "family": family, "name": self.board.get("name") or self.board.get("model") or "",
+            "features": hardware.FEATURES.get(family, {}),
+        })
+
     async def status(self, request):
         return web.json_response({
-            "modules": self.registry.view(await self.systemd_states()),
+            "modules": [self.with_suggestion(m) for m in self.registry.view(await self.systemd_states())],
+            "board": {"family": self.board["family"], "name": self.board.get("name") or ""},
             "live": self.live,
             "bus": self.bus is not None,
             "theme": self.active_theme(),
@@ -483,6 +498,8 @@ class Admin:
             "volume": state.get("volume"),
             "whole_home": state.get("whole_home"),   # None until jb-audio reports it
             "receivers": (self.live.get("airplay") or {}).get("receivers") or [],
+            "suggestion": hardware.feature_suggestion("whole_home", self.board["family"]),
+            "board": self.board.get("name") or "",
             "bus": self.bus is not None,
         })
 
@@ -830,7 +847,8 @@ class Admin:
     async def module_info(self, request):
         m = self.module(request.match_info["id"])
         states = await self.systemd_states()
-        return web.json_response({**m, "unit": unit_of(m), "state": states.get(m["id"]),
+        return web.json_response({**self.with_suggestion(m), "unit": unit_of(m), "state": states.get(m["id"]),
+                                  "board": self.board.get("name") or "",
                                   "review": module_review(m) if m.get("installed") else None,
                                   "settings": self.modules.get_settings(m["id"], m)})
 
@@ -1178,6 +1196,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/logout", admin.logout)
     r.add_post("/api/password", admin.change_password)
     r.add_get("/api/status", admin.status)
+    r.add_get("/api/board", admin.board_info)
     r.add_get("/api/settings", admin.get_settings)
     r.add_get("/api/phones", admin.get_phones)
     r.add_get("/api/extensions", admin.get_extensions)

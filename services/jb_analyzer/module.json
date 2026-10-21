@@ -4,7 +4,21 @@
   "name": "Audio analyzer",
   "description": "Listens to what's playing and publishes levels, beats, drops and mood.",
   "version": "1.0.1",
-  "roles": ["analyzer"],
-  "publishes": ["jukebox/analysis/audio/fast", "jukebox/analysis/audio/slow", "jukebox/analysis/audio/events", "jukebox/analysis/audio/status"],
-  "settings": "jb-analyzer"
+  "roles": [
+    "analyzer"
+  ],
+  "publishes": [
+    "jukebox/analysis/audio/fast",
+    "jukebox/analysis/audio/slow",
+    "jukebox/analysis/audio/events",
+    "jukebox/analysis/audio/status"
+  ],
+  "settings": "jb-analyzer",
+  "boards": {
+    "pi4": {
+      "suggested": false,
+      "why": "It listens to every song for the light show's beats, drops and genre. On a Pi 4 that's a big share of the CPU, and the lights still play their plain show without it.",
+      "cost": "about 30% of a core and 23 MB"
+    }
+  }
 }

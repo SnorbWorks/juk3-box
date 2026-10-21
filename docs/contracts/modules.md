@@ -35,6 +35,7 @@ Every module ships a manifest beside its code (`services/<package>/module.json`)
 | `commands` | no | Actions its `cmd` topic accepts |
 | `settings` | no | The name of its settings file in `/etc/juk3-box/<name>.json`, if it has one |
 | `essential` | no | `true` if the jukebox can't work without it; the admin warns before restarting it |
+| `boards` | no | Per-board suggestions: `{"pi4": {"suggested": false, "why": "…", "cost": "about 30% of a core and 23 MB"}}`, by `shared/hardware.py`'s family names. Never a block: the admin labels it and asks before turning it on; the setup wizard starts that board with it off. Costs are measured on that board with music playing. Features inside a module (a setting) are in `hardware.FEATURES` |
 
 ## Discovery: the registry
 

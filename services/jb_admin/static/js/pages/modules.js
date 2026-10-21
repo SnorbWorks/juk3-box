@@ -34,6 +34,7 @@ function render(body, s, refresh) {
       h('div.roles', m.undeclared ? h('span.badge.warn', 'Undeclared') : null,
         m.installed ? h('span.badge.ok', 'Installed') : null,
         m.essential ? h('span.badge', 'Essential') : null,
+        m.suggestion ? h('span.badge.warn', { title: m.suggestion.why }, `Not suggested on a ${s.board?.name || 'this board'}`) : null,
         (m.roles || []).map(r => h('span.badge.accent', ROLE_LABELS[r] || r)),
         m.undeclared ? null : button('Manage', { variant: 'small', onclick: () => manage(m.id, refresh) }, 'settings')),
       m.description || m.problem ? h('p.module-desc', m.problem || m.description) : null);
@@ -76,7 +77,9 @@ async function manage(id, refresh) {
       } }] : []),
       ...(m.id === 'jb-admin' ? [] : [running
         ? { label: 'Turn off', onclick: () => act('stop', m.essential ? essentialAsk('Turn off') : null) }
-        : { label: 'Turn on', onclick: () => act('start') }]),
+        : { label: 'Turn on', onclick: () => act('start', m.suggestion ? [`Turn on ${m.name}?`,
+          `It isn't suggested on a ${m.board || 'board like this'}: ${m.suggestion.why}${m.suggestion.cost ? ` (It uses ${m.suggestion.cost}.)` : ''}`,
+          { confirm: 'Turn on' }] : null) }]),
       { label: 'Restart', onclick: () => act('restart', essentialAsk('Restart')) },
       { label: 'Close', variant: 'primary' },
     ],
@@ -87,6 +90,8 @@ async function manage(id, refresh) {
 function overview(m) {
   const res = m.resources || {};
   return h('div.stack',
+    m.suggestion ? h('div.notice.warn', icon('circle-alert'), h('span',
+      `Not suggested on a ${m.board || 'board like this'}. ${m.suggestion.why}${m.suggestion.cost ? ` It uses ${m.suggestion.cost}.` : ''} It's your choice: it can stay on.`)) : null,
     m.description ? h('p', m.description) : null,
     h('div.kv',
       h('div', h('span.muted', 'State '), m.state === 'active' ? 'Running' : m.state || 'Unknown'),
