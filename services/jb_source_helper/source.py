@@ -296,7 +296,7 @@ class Helper:
         elif t == "play_failed":
             await self._play_failed(session.device_id, str(p.get("itemId") or ""), str(p.get("reason") or "other"))
         elif t == "music_status":
-            self.music[session.device_id] = {k: p.get(k) for k in ("authorization", "canPlay", "route")}
+            self.music[session.device_id] = {k: p.get(k) for k in ("authorization", "canPlay", "canPlayCatalog", "route")}
             await self.publish_state()
         else:
             self.log.debug("ignoring %s from %s", t, session.name)

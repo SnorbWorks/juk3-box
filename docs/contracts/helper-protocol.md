@@ -56,7 +56,7 @@ The Pi pings over the WebSocket every 15 s (standard ping frames); the app's Web
 | `playback_state` | `{ "itemId", "state": "playing" / "paused" / "stopped", "position": s, "duration": s, "title", "artist", "album" }`, on every change and every second while playing |
 | `track_ended` | `{ "itemId" }`: the song reached its end; the app stays stopped |
 | `play_failed` | `{ "itemId", "reason", "message" }`, reasons: `not_found` (not in the library), `not_playable` (e.g. a cloud song unavailable), `no_subscription`, `not_authorized` (Music access denied), `offline`, `other` |
-| `music_status` | `{ "authorization": "authorized" / "denied" / "notDetermined" / "restricted", "canPlay": bool, "route": { "airplay": bool, "name": "JUKE.BOX" } }`, on connect and when any of it changes (so the cabinet can say "choose JUKE.BOX as the speaker") |
+| `music_status` | `{ "authorization": "authorized" / "denied" / "notDetermined" / "restricted", "canPlay": bool, "canPlayCatalog": bool (optional), "route": { "airplay": bool, "kind": "airplay" / "bluetooth" / "phone" / "other" (optional), "name": "JUKE.BOX" } }`, on connect and when any of it changes (so the cabinet can say "choose JUKE.BOX as the speaker"). `canPlay`: the owner's library can play (Music access allowed; library songs need no subscription). `canPlayCatalog`: songs added from Apple Music can play (a subscription); absent while unknown. `route.airplay` is true for AirPlay to any speaker; compare `name` to tell the jukebox |
 
 ### Library items
 
