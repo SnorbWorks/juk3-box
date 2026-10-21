@@ -13,6 +13,7 @@ import { closePopup, initPopups, openPopup, popupOpen, updatePopup } from './pop
 import { initPhones, openSwitcher } from './phones.js';
 import { initWholeHome } from './wholehome.js';
 import { initDisplay } from './display.js';
+import { initSources, SOURCE_SCREENS } from './sources.js';
 import { sectionView } from './sections.js';
 import { store } from './store.js';
 import { fetchTheme, applyTheme } from './theme.js';
@@ -33,9 +34,17 @@ const DEFAULT_SETTINGS_LAYOUT = {
   class: 'jb-settings-screen',
   children: [
     { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
-    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'bluetooth' }, { block: 'wholehome' }, { block: 'display' }] },
+    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'sources' }, { block: 'wholehome' }, { block: 'display' }] },
   ],
 };
+// Settings > Sources > Bluetooth, App, Drives: one block each.
+const sourceLayout = name => ({
+  class: 'jb-settings-screen',
+  children: [
+    { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
+    { class: 'jb-settings-sections', focus: 'settings', children: [{ block: SOURCE_SCREENS[name].block }] },
+  ],
+});
 
 let theme = null;
 const startedAt = Date.now();
@@ -109,6 +118,13 @@ function context() {
 const parked = new Map();   // screen name -> its element
 const keeps = name => !PREVIEW && name !== 'collection';
 
+// The theme's layout for a screen, else the engine's own.
+function layoutFor(name) {
+  return theme.layouts[name]
+    || { collection: DEFAULT_COLLECTION_LAYOUT, settings: DEFAULT_SETTINGS_LAYOUT }[name]
+    || (SOURCE_SCREENS[name] ? sourceLayout(name) : null);
+}
+
 function showScreen(name, { remember = true } = {}) {
   const holder = document.querySelector('jb-screen');
   if (!holder) return;
@@ -124,8 +140,7 @@ function showScreen(name, { remember = true } = {}) {
   } else {
     showing?.remove();
   }
-  const layout = theme.layouts[name]
-    || { collection: DEFAULT_COLLECTION_LAYOUT, settings: DEFAULT_SETTINGS_LAYOUT }[name] || null;
+  const layout = layoutFor(name);
   const kept = parked.get(name);
   if (kept) {
     parked.delete(name);
@@ -479,10 +494,11 @@ async function start() {
   initPopups(theme.blocks);
   initWholeHome(theme.blocks);
   initDisplay(theme.blocks);
+  initSources(theme.blocks);
   initPhones(theme.blocks, html, {
-    // "Add a phone" on the badge: Settings, at its Bluetooth section.
+    // "Add a phone" on the badge: Settings > Sources > Bluetooth.
     openSettings: key => {
-      showScreen('settings');
+      showScreen('sources-bluetooth');
       focusKey(key);
     },
   });
@@ -495,7 +511,7 @@ async function start() {
   document.getElementById('jb-root').replaceChildren(renderLayout(theme.layouts.frame, context(), PREVIEW ? 'frame' : undefined));
   // The admin preview can open on any screen (?screen=all-songs).
   const first = PREVIEW && new URLSearchParams(location.search).get('screen');
-  showScreen(first && theme.layouts[first] ? first : 'home');
+  showScreen(first && first !== 'collection' && layoutFor(first) ? first : 'home');
   goToRest();
   watchKeyboard();
   connectBus();

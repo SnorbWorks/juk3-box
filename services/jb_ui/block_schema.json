@@ -1000,11 +1000,32 @@
       "description": "Which phone is connected.",
       "settings": {}
     },
+    "sources": {
+      "label": "Sources",
+      "group": "navigation",
+      "icon": "cable",
+      "description": "Where the music comes from: Bluetooth, the juk3box Helper app and USB drives, each opening its own page. On the Settings screen by default.",
+      "settings": {}
+    },
     "bluetooth": {
       "label": "Bluetooth settings",
       "group": "navigation",
       "icon": "bluetooth",
-      "description": "Bluetooth on/off, the paired phones and pairing a new one. On the Settings screen by default.",
+      "description": "Bluetooth on/off, the paired phones and pairing a new one. On Settings > Sources > Bluetooth by default.",
+      "settings": {}
+    },
+    "helper-app": {
+      "label": "App settings",
+      "group": "navigation",
+      "icon": "smartphone",
+      "description": "The juk3box Helper app: its phones (use, read again, forget), letting new phones pair, and waking the app over Bluetooth. On Settings > Sources > App by default.",
+      "settings": {}
+    },
+    "drives": {
+      "label": "Drives",
+      "group": "navigation",
+      "icon": "usb",
+      "description": "The USB drives plugged in, with their songs, and ejecting one. On Settings > Sources > Drives by default.",
       "settings": {}
     },
     "wholehome": {

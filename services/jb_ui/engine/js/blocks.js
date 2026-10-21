@@ -14,6 +14,7 @@ import { sized, toTrack } from './tracks.js';
 import { fillBluetooth } from './phones.js';
 import { fillWholeHome } from './wholehome.js';
 import { fillDisplay } from './display.js';
+import { fillDrives, fillHelperApp, fillSources, SOURCE_SCREENS } from './sources.js';
 import { renderLayout } from './layout.js';
 
 export const BLOCKS = {
@@ -30,7 +31,10 @@ export const BLOCKS = {
   pager: fillPager,
   header: fillHeader,
   connection: fillConnection,
+  sources: (el, node, ctx) => fillSources(el, ctx),
   bluetooth: el => fillBluetooth(el),
+  'helper-app': el => fillHelperApp(el),
+  drives: el => fillDrives(el),
   wholehome: el => fillWholeHome(el),
   display: el => fillDisplay(el),
   // Content the owner places with the page builder.
@@ -392,7 +396,8 @@ function fillNav(el, node, ctx) {
         label: on ? 'Single Play' : NAV_LABELS[name],
         icon: (on && ctx.icons['shuffle-on']) || ctx.icons[name],
       });
-      item.toggleAttribute('data-active', name === screen);
+      // Settings > Sources' pages are part of Settings.
+      item.toggleAttribute('data-active', name === screen || (name === 'settings' && !!SOURCE_SCREENS[screen]));
       if (name === 'shuffle') item.toggleAttribute('data-on', on);
     }
   };
@@ -428,6 +433,9 @@ function fillHeader(el, node, ctx) {
       subtitle = c?.subtitle || '';
     } else if (screen === 'settings') {
       title = 'Settings';
+    } else if (SOURCE_SCREENS[screen]) {
+      title = SOURCE_SCREENS[screen].title;
+      subtitle = 'Settings · Sources';
     }
     bind(el, { title, subtitle, canGoBack: screen !== 'home', backIcon: ctx.icons.back });
   };

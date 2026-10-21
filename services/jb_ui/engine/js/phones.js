@@ -231,13 +231,17 @@ export function fillBluetooth(el) {
       on,
       powerLabel: on ? 'On' : 'Off',
       note: on
-        ? (connected ? `${connected.name} has the jukebox.` : 'No phone connected. Pick one below, or connect from the phone.')
+        ? (connected ? `${connected.name} has the jukebox.`
+          : store.get('source')?.active?.kind === 'helper'
+            ? `${store.get('source').active.name} has the jukebox, through the app. Pick a phone below to switch to it.`
+            : 'No phone connected. Pick one below, or connect from the phone.')
         : 'Off: the jukebox is invisible and no phone can connect.',
     });
     slot(el, 'phones')?.replaceChildren(...(on ? phoneRows('bt:phone', p => openPhone(p.mac)) : []));
   };
   store.watch(el, 'phones', render);
   store.watch(el, 'bluetooth', render);
+  store.watch(el, 'source', render);
 }
 
 function togglePower() {

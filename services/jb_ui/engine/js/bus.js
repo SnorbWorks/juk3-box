@@ -27,6 +27,7 @@ const HANDLERS = {
   // and a phone that arrived meanwhile (offered); the app's phones; drives in.
   'jukebox/jb-core/source': s => store.set('source', s),
   'jukebox/jb-source-helper/connected': h => store.set('helper', h),
+  'jukebox/jb-source-helper/settings': s => store.set('helperSettings', s),
   // New covers from the app landed: tiles drawn before them load them now.
   'jukebox/jb-source-helper/artwork': a => store.set('coversAt', a.at),
   'jukebox/jb-library/drives-in': d => store.set('drivesIn', d.drives || []),
