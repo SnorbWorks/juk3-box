@@ -339,12 +339,24 @@ class Admin:
         proc = await asyncio.create_subprocess_exec("systemctl", "reboot")
         await proc.wait()
 
+    async def bluetooth_alias(self, name: str) -> None:
+        """The name phones see in their Bluetooth settings (BlueZ's adapter alias)."""
+        try:
+            proc = await asyncio.create_subprocess_exec("bluetoothctl", "system-alias", name,
+                                                        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            _, err = await asyncio.wait_for(proc.communicate(), 10)
+            if proc.returncode:
+                self.log.warning("couldn't set the Bluetooth name: %s", err.decode().strip())
+        except (OSError, asyncio.TimeoutError) as e:
+            self.log.warning("couldn't set the Bluetooth name: %s", e)
+
     async def rename_jukebox(self, name: str) -> None:
         """One name for the app, the AirPlay speaker and the cabinet: jb-source-helper's."""
         if self.bus is None:
             raise WizardError("The admin can't reach the jukebox right now. Try again in a moment.")
         old_name = (self.live.get("helper_settings") or {}).get("name")
         await self.bus.publish("jukebox/jb-source-helper/cmd", {"action": "settings", "name": name})
+        await self.bluetooth_alias(name)
         if name == old_name:
             return
         # The AirPlay speaker takes the new name on a restart, once
