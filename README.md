@@ -31,4 +31,4 @@ The jukebox is a set of small Python services talking over MQTT (`services/`), a
 
 ## License
 
-GPL-3.0 (see LICENSE). Fonts carry their own licenses (SIL Open Font License, next to each font). The Neon theme's background picture and video are licensed stock and aren't included: the theme works without them, and you can add your own on the admin's Media page.
+GPL-3.0 (see LICENSE). Fonts carry their own licenses (SIL Open Font License, next to each font). The Neon theme's background picture and video are licensed stock and aren't included: without them the theme has a plain dark background, and you can pick your own picture or video in its settings.
