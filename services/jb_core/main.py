@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 
-from shared import config, logging as jb_logging
+from shared import config, logging as jb_logging, setup_net
 from shared.bus import Bus
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
@@ -228,6 +228,13 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
         elif act == "clear":
             q.manual, q.shuffle_buffer, q.shuffle_active = [], [], False
             await publish_queue(bus, q)
+        elif act == "setup_wifi":
+            # jb-netwatch turns the hotspot on (shared/setup_net.py).
+            log.warning("power menu: set up Wi-Fi")
+            try:
+                setup_net.request("start")
+            except OSError as e:
+                log.error("can't start setup mode: %s", e)
         elif act in POWER_COMMANDS:
             log.warning("power menu: %s", act)
             q.doctor.forget()

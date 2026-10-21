@@ -102,8 +102,8 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-admin/changed` | event | the owner changed settings, layouts or the theme: `{"what": [...], "at": ...}` (see [configuration.md](configuration.md)) |
 | `jb-admin/drive-offers` | R state | drives with new pictures or videos, to ask before importing them: `{"offers": [{"id", "label", "pictures", "videos"}]}`. A drive answered "not now" leaves the list until it's plugged in again |
 | `jb-admin/cmd` | command | the cabinet's answer: `{"action": "import_drive" or "decline_drive", "id": drive id}` |
-| `jb-admin/setup` | R state | the setup wizard, for the cabinet's setup screen (docs/Setup Wizard — Plan.md): `{"active": false}`, or `{"active": true, "step", "title", "say", "n", "of", "steps": [{"short", "done", "now"}], "address", "qr": [rows of "1"/"0"], "restarting", "ask"?: {"id", "q", "yes", "no"}, "live"?: {"running", "min_volts", "max_temp", "passed"}}`. Active while setup isn't finished and its page was open in the last 2 minutes (always, before the owner password is set) |
-| `jb-admin/setup-answer` | command | the cabinet's knob answering the open `ask`: `{"step", "yes": bool}` |
+| `jb-admin/setup` | R state | the setup wizard, for the cabinet's setup screen (docs/Setup Wizard — Plan.md): `{"active": false}`, or `{"active": true, "step", "title", "say", "n", "of", "steps": [{"short", "done", "now"}], "address", "qr": [rows of "1"/"0"], "restarting", "ask"?: {"id", "q", "yes", "no"}, "live"?: {"running", "min_volts", "max_temp", "passed"}, "hotspot"?: {"ssid", "password", "why", "qr", "address"}}` (`hotspot` while in setup mode: join the jukebox's own Wi-Fi first; `why` is `"asked"` or `"not-set-up"`). Active while setup isn't finished and its page was open in the last 2 minutes (always, before the owner password is set) |
+| `jb-admin/setup-answer` | command | the cabinet's knob answering the open `ask`: `{"step", "yes": bool}`; or cancelling setup mode it was asked into: `{"action": "stop_hotspot"}` |
 
 ## Proving notes
 

@@ -230,7 +230,7 @@ function openNowPlaying() {
 }
 
 // The power menu (holding Reset; jb-core's power.py decides when). The
-// knob turns between Reboot, Shut down and Cancel and starts on Cancel, so
+// knob turns between Reboot, Shut down, Set up Wi-Fi and Cancel and starts on Cancel, so
 // a stray click never takes the jukebox down; jb-core closes it on a choice,
 // a Reset click or its timeout, and this follows jukebox/jb-core/power.
 function openPower() {
@@ -247,7 +247,8 @@ function openPower() {
   };
   const timer = setInterval(() => popupOpen() === 'power' && render(), 1000);
   openPopup('power', { title: 'Power' }, {
-    stops: { reboot: () => choose('reboot'), shutdown: () => choose('shutdown'), cancel: () => choose('cancel') },
+    stops: { reboot: () => choose('reboot'), shutdown: () => choose('shutdown'), wifi: () => choose('wifi'),
+      cancel: () => choose('cancel') },
     onClose: () => {
       clearInterval(timer);
       focusKey(returnTo);

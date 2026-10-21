@@ -5,7 +5,9 @@
 
 const root = document.getElementById('wizard');
 const POLL_MS = 1500;
-const LIVE_STEPS = new Set(['lightcheck', 'loadtest', 'sound', 'knob', 'sources']);
+const LIVE_STEPS = new Set(['wifi', 'lightcheck', 'loadtest', 'sound', 'knob', 'sources']);
+// The Juk3box Helper app opens setup with the phone's own network to suggest.
+const SUGGESTED_SSID = new URLSearchParams(location.search).get('ssid');
 const COLORS = ['#22e7d4', '#009da4', '#0068a6', '#ff2198', '#ff63d5', '#ff9959'];
 
 let view = null;          // the server's view of the open step
@@ -299,9 +301,14 @@ function renderTrouble(message) {
     h('button.wz-next', { type: 'button', onClick: () => load() }, 'Try again')));
 }
 
-// Live answers from the cabinet's knob (light check, sound).
+// Live answers from the cabinet's knob (light check, sound), and how a
+// Wi-Fi join went.
 function onLive() {
   const s = view.step;
+  if (s.id === 'wifi' && local.joining && s.join?.id === local.joinId && s.join.state === 'failed') {
+    local.joining = null;
+    local.failedId = local.joinId;
+  }
   if (s.id === 'lightcheck' && local.phase === 'asking') {
     const a = s.cabinet_answer;
     if (a && a.chain === s.chains[local.idx]?.id && a.at * 1000 > (local.shownAt || 0)) answerChain(a.yes);
@@ -355,6 +362,7 @@ const STEPS = {
   },
 
   wifi(s) {
+    if (s.hotspot) return hotspotWifi(s);
     const via = s.via === 'ethernet' ? 'a network cable' : 'Wi-Fi';
     return {
       body: s.via ? [
@@ -704,6 +712,63 @@ const STEPS = {
     };
   },
 };
+
+// Setup mode: the jukebox's own hotspot. Pick the home network and join it.
+// Joining drops the hotspot, so this phone loses the jukebox for a moment:
+// say beforehand where to find it again.
+function hotspotWifi(s) {
+  const join = s.join;
+  if (local.joining || join?.state === 'joining') {
+    const ssid = local.joining || join?.ssid;
+    return {
+      body: [
+        h('div.wz-center', { style: 'display:flex;flex-direction:column;gap:14px;align-items:center' },
+          h('div.wz-spin', { style: 'width:36px;height:36px;border-width:4px' }),
+          h('p', { style: 'font-size:22px;font-weight:800;color:#2a1640' }, `Joining ${ssid}…`)),
+        note('info', 'This phone loses the jukebox for a moment while it joins.', h('ol', {},
+          h('li', {}, `Put this phone back on ${ssid}.`),
+          h('li', {}, 'Open ', h('b', {}, s.address.replace(/^http:\/\//, '')), ' to carry on, or scan the code on the cabinet.'))),
+        h('p', {}, 'If it can\'t join, the jukebox\'s own Wi-Fi comes back and this page says why.'),
+      ],
+      next: null,
+      back: false,
+    };
+  }
+  local.ssid ??= SUGGESTED_SSID && s.networks.some(n => n.ssid === SUGGESTED_SSID) ? SUGGESTED_SSID : null;
+  local.password ??= '';
+  const picked = s.networks.find(n => n.ssid === local.ssid);
+  const other = local.ssid === '';
+  const needsPassword = other || picked?.secure;
+  const bars = sig => sig >= 70 ? 'Strong' : sig >= 45 ? 'Good' : 'Weak';
+  const go = async () => {
+    const ssid = other ? (local.otherName || '').trim() : local.ssid;
+    if (!ssid) { local.error = 'Pick a network.'; return render(); }
+    local.joinId = Math.random().toString(36).slice(2, 10);
+    const out = await act('join', { ssid, password: local.password, hidden: other, id: local.joinId });
+    if (out?.joining) { local.joining = ssid; render(); }
+  };
+  return {
+    body: [
+      h('p', {}, 'Pick your home Wi-Fi. The jukebox uses it for cover art, the weather and your phones.'),
+      join?.state === 'failed' && join.id && join.id === local.failedId ? note('bad', join.reason) : null,
+      h('div.wz-choices', {},
+        s.networks.map(n => choice({ title: n.ssid, sub: `${bars(n.signal)} signal${n.secure ? '' : ' · open'}`, kind: 'radio',
+          on: local.ssid === n.ssid, onClick: () => { local.ssid = n.ssid; render(); } })),
+        choice({ title: 'Another network', sub: 'A hidden one, or one not listed', kind: 'radio',
+          on: other, onClick: () => { local.ssid = ''; render(); } })),
+      s.networks.length ? null : note('warn', 'No networks found yet. Look again, or type its name under Another network.'),
+      other ? h('div.wz-field', {}, h('label.wz-label', { for: 'ssid' }, 'Network name'),
+        h('input.wz-input', { id: 'ssid', type: 'text', autocapitalize: 'off', autocorrect: 'off', value: local.otherName || '',
+          onInput: e => { local.otherName = e.target.value; } })) : null,
+      needsPassword ? h('div.wz-field', {}, h('label.wz-label', { for: 'wpw' }, 'Wi-Fi password'),
+        h('input.wz-input', { id: 'wpw', type: 'password', autocomplete: 'off', value: local.password,
+          onInput: e => { local.password = e.target.value; } })) : null,
+      h('button.wz-ghost', { type: 'button', disabled: local.acting === 'scan', onClick: () => act('scan') },
+        local.acting === 'scan' ? [h('span.wz-spin'), 'Looking…'] : 'Look again'),
+    ],
+    next: { label: 'Join', onClick: go, disabled: local.ssid === null || local.ssid === undefined },
+  };
+}
 
 function check(ok, label) {
   return h(`div.wz-check${ok ? '.yes' : ''}`, {},

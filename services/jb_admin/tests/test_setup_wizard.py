@@ -5,6 +5,8 @@ import logging
 from aiohttp.test_utils import TestClient, TestServer
 
 from services.jb_admin import main, setup_wizard
+from shared import setup_net
+from shared.files import write_atomic
 from services.jb_admin.tests.test_admin import H, config
 
 
@@ -71,7 +73,8 @@ class FakePi(setup_wizard.System):
 def run(tmp_path, check, family="pi5", password=True, lights=None):
     async def go():
         cfg = {**config(tmp_path), "setup_path": str(tmp_path / "setup.json"),
-               "lights_path": str(tmp_path / "lights.json"), "setupctl_dir": str(tmp_path / "setupctl")}
+               "lights_path": str(tmp_path / "lights.json"), "setupctl_dir": str(tmp_path / "setupctl"),
+               "setupnet_dir": str(tmp_path / "setupnet")}
         if lights is not None:
             (tmp_path / "lights.json").write_text(json.dumps(lights))
         app = main.build_app(cfg, logging.getLogger("test"), bus_enabled=False)
@@ -273,3 +276,32 @@ def test_the_board_voltage_is_read_after_the_equals_sign():
         async def run(self, *cmd, timeout=10, env=None):
             return "EXT5V_V volt(24)=5.09736000V\n"
     assert asyncio.run(Pi().volts()) == 5.1
+
+
+def test_in_setup_mode_the_wifi_step_lists_networks_and_asks_to_join(tmp_path):
+    async def check(client, admin, pi, calls):
+        folder = tmp_path / "setupnet"
+        write_atomic(setup_net.state_path(folder), json.dumps({
+            "active": True, "ssid": "Juk3box Setup 1234", "password": "abcd2345", "url": "http://10.42.0.1:8080/setup",
+            "networks": [{"ssid": "Ducks Home", "signal": 80, "secure": True}]}))
+        v = await view(client, "wifi")
+        assert v["step"]["hotspot"] is True and v["step"]["networks"][0]["ssid"] == "Ducks Home"
+        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Ducks Home", "password": "short"}, headers=H)
+        assert r.status == 400
+        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Ducks Home", "password": "correct horse"}, headers=H)
+        assert r.status == 200
+        assert setup_net.take_requests(folder) == [{"action": "join", "ssid": "Ducks Home", "password": "correct horse", "hidden": False, "id": ""}]
+        cab = admin.wizard.cabinet()
+        assert cab["active"] and cab["hotspot"]["ssid"] == "Juk3box Setup 1234" and cab["hotspot"]["qr"]
+        assert cab["say"].startswith("Pick your Wi-Fi")
+    run(tmp_path, check)
+
+
+def test_the_cabinet_can_cancel_setup_mode_only_when_it_was_asked_for(tmp_path):
+    async def check(client, admin, pi, calls):
+        folder = tmp_path / "setupnet"
+        for why, stops in (("not-set-up", []), ("asked", [{"action": "stop"}])):
+            write_atomic(setup_net.state_path(folder), json.dumps({"active": True, "why": why, "ssid": "s", "password": "abcd2345"}))
+            admin.wizard.heard_answer({"action": "stop_hotspot"})
+            assert setup_net.take_requests(folder) == stops
+    run(tmp_path, check)

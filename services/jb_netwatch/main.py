@@ -6,6 +6,9 @@ what policy.py says: nothing, reconnect, turn the Wi-Fi off and on, or
 restart the jukebox. Every action is written to the journal and to
 /var/lib/juk3-box/netwatch/events.jsonl.
 
+It also runs setup mode (setup_mode.py): the jukebox's own Wi-Fi for
+setting it up, and while that's on, it leaves the network alone.
+
 Needs no bus and nothing else of ours, so it keeps working whatever else
 has stopped. Every command has a time limit: a hung driver can hang the
 network tools too. Runs as root (it reconnects and reboots), via
@@ -19,6 +22,7 @@ import time
 from pathlib import Path
 
 from services.jb_netwatch import policy
+from services.jb_netwatch.setup_mode import SetupMode
 from shared.files import write_atomic
 
 CHECK_EVERY_S = 30
@@ -95,6 +99,20 @@ def wifi_device() -> str | None:
     return None
 
 
+def serial() -> str | None:
+    try:
+        return Path("/proc/device-tree/serial-number").read_text().strip("\x00\n ")
+    except OSError:
+        return None
+
+
+def check_online(gateway_ever_answered: bool) -> tuple[bool, str | None, bool]:
+    """Online now? With the router's address and whether it answered."""
+    gateway, _ = default_route()
+    ping_ok = bool(gateway) and ping(gateway)
+    return policy.is_online(nm_state(), gateway, ping_ok, gateway_ever_answered or ping_ok), gateway, ping_ok
+
+
 def load_reboots() -> list[float]:
     try:
         return [float(t) for t in json.loads(REBOOTS_FILE.read_text())]
@@ -135,35 +153,54 @@ def main() -> None:
     pol = policy.Policy(reboots=load_reboots())
     gateway_ever_answered = False
     last_action = policy.OK
+    offline_since = None
+    setup = SetupMode(wifi_device=wifi_device, serial=serial,
+                      online=lambda: check_online(gateway_ever_answered)[0])
     log.info("watching the network every %ds", CHECK_EVERY_S)
+    next_check = 0.0
     while True:
-        gateway, _ = default_route()
-        ping_ok = bool(gateway) and ping(gateway)
-        gateway_ever_answered |= ping_ok
-        online = policy.is_online(nm_state(), gateway, ping_ok, gateway_ever_answered)
-        hung = not online and policy.driver_hung(kernel_log())
-        action = pol.step(time.time(), uptime(), online, hung, playing() if not online else False)
+        if time.monotonic() >= next_check:
+            next_check = time.monotonic() + CHECK_EVERY_S
+            online, gateway, ping_ok = check_online(gateway_ever_answered)
+            gateway_ever_answered |= ping_ok
+            now = time.time()
+            offline_since = None if online else (offline_since or now)
+            if setup.active:
+                # Setting up: offline is the point. Leave the network alone.
+                last_action = policy.WAIT
+            else:
+                last_action = act(pol, online, gateway, last_action)
+                setup.consider(online, now - offline_since if offline_since else 0.0, uptime())
+                if setup.active:
+                    pol = policy.Policy(reboots=pol.reboots)
+        setup.tick()
+        time.sleep(1)
 
-        if action == policy.OK and last_action != policy.OK:
-            record("back-online")
-        elif action == policy.RECONNECT:
-            dev = wifi_device()
-            record("reconnect", device=dev)
-            if dev:
-                run(["nmcli", "device", "connect", dev], 45)
-        elif action == policy.RADIO:
-            record("wifi-off-on")
-            run(["nmcli", "radio", "wifi", "off"], 20)
-            time.sleep(3)
-            run(["nmcli", "radio", "wifi", "on"], 20)
-        elif action == policy.DEFER and last_action != policy.DEFER:
-            record("reboot-waits-for-music")
-        elif action == policy.REBOOT:
-            reboot(pol, hung)
-        elif action == policy.WAIT and last_action == policy.OK:
-            record("offline", nm=nm_state(), gateway=gateway, driver_hung=hung)
-        last_action = action
-        time.sleep(CHECK_EVERY_S)
+
+def act(pol: policy.Policy, online: bool, gateway: str | None, last_action: str) -> str:
+    """One check's worth of keeping the jukebox online; the action taken."""
+    hung = not online and policy.driver_hung(kernel_log())
+    action = pol.step(time.time(), uptime(), online, hung, playing() if not online else False)
+
+    if action == policy.OK and last_action != policy.OK:
+        record("back-online")
+    elif action == policy.RECONNECT:
+        dev = wifi_device()
+        record("reconnect", device=dev)
+        if dev:
+            run(["nmcli", "device", "connect", dev], 45)
+    elif action == policy.RADIO:
+        record("wifi-off-on")
+        run(["nmcli", "radio", "wifi", "off"], 20)
+        time.sleep(3)
+        run(["nmcli", "radio", "wifi", "on"], 20)
+    elif action == policy.DEFER and last_action != policy.DEFER:
+        record("reboot-waits-for-music")
+    elif action == policy.REBOOT:
+        reboot(pol, hung)
+    elif action == policy.WAIT and last_action == policy.OK:
+        record("offline", nm=nm_state(), gateway=gateway, driver_hung=hung)
+    return action
 
 
 if __name__ == "__main__":

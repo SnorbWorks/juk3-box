@@ -58,3 +58,10 @@ def test_choices_without_a_menu_or_unknown_do_nothing():
     assert m.choose("reboot") == []
     m.hold(0, playing=False)
     assert m.choose("explode") == []
+
+
+def test_set_up_wifi_closes_the_menu_and_starts_setup_mode():
+    m = PowerMenu()
+    m.long_hold(0, playing=True)
+    assert m.choose("wifi") == ["close", "resume", "setup_wifi"]
+    assert not m.open

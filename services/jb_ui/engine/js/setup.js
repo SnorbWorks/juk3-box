@@ -77,11 +77,7 @@ function screen(s) {
   if (s.ask) main.append(ask(s.step, s.ask));
 
   const side = el('div', 'jb-setup-side');
-  const join = el('div', 'jb-setup-join');
-  join.append(el('div', 'jb-setup-label', 'Set up from your phone or computer'));
-  if (s.qr?.length) join.append(qr(s.qr));
-  join.append(el('div', 'jb-setup-address', s.address.replace(/^http:\/\//, '')));
-  side.append(join);
+  side.append(s.hotspot ? hotspotJoin(s.hotspot) : addressJoin(s));
   const list = el('ol', 'jb-setup-steps');
   for (const step of s.steps || []) {
     const li = el('li', step.now ? 'now' : step.done ? 'done' : '', step.short);
@@ -91,6 +87,37 @@ function screen(s) {
 
   wrap.append(main, side);
   return wrap;
+}
+
+function addressJoin(s) {
+  const join = el('div', 'jb-setup-join');
+  join.append(el('div', 'jb-setup-label', 'Set up from your phone or computer'));
+  if (s.qr?.length) join.append(qr(s.qr));
+  join.append(el('div', 'jb-setup-address', s.address.replace(/^http:\/\//, '')));
+  return join;
+}
+
+// Setup mode: join the jukebox's own Wi-Fi first. A phone's camera joins
+// from the QR code, and the setup page then opens by itself.
+function hotspotJoin(hs) {
+  const join = el('div', 'jb-setup-join');
+  join.append(el('div', 'jb-setup-label', 'Scan with your phone\'s camera to join'));
+  if (hs.qr?.length) join.append(qr(hs.qr));
+  const creds = el('div', 'jb-setup-creds');
+  for (const [k, v] of [['Wi-Fi', hs.ssid], ['Password', hs.password]]) {
+    const row = el('div');
+    row.append(el('span', 'k', k), el('span', 'v', v));
+    creds.append(row);
+  }
+  join.append(creds);
+  join.append(el('div', 'jb-setup-hint', `Setup opens by itself. If not, go to ${hs.address.replace(/^http:\/\//, '')}`));
+  if (hs.why === 'asked') {
+    // Started from the power menu: the knob can take it back.
+    const cancel = el('div', 'jb-setup-button', 'Cancel');
+    makeStop(cancel, 'setup:cancel', () => publish('jukebox/jb-admin/setup-answer', { action: 'stop_hotspot' }));
+    join.append(cancel);
+  }
+  return join;
 }
 
 function live(t) {

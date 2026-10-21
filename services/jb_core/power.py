@@ -6,9 +6,11 @@ The user's design (2026-10-12):
   - hold Reset with nothing playing -> the power menu
   - keep holding (4 s) while music was playing -> the song is cancelled at
     1 s, then the menu opens; playback is paused until a choice is made
-  - in the menu (knob turns between Reboot, Shut down, Cancel; click
-    chooses): Reboot / Shut down clear the queue and take the system down;
-    Cancel, a Reset click or MENU_TIMEOUT_S of nothing resume what was paused
+  - in the menu (knob turns between Reboot, Shut down, Set up Wi-Fi, Cancel;
+    click chooses): Reboot / Shut down clear the queue and take the system
+    down; Set up Wi-Fi closes it and starts setup mode (the jukebox's own
+    hotspot, docs/Setup Wizard — Plan.md); Cancel, a Reset click or
+    MENU_TIMEOUT_S of nothing resume what was paused
 
 A pure state machine: it's told what happened and returns what to do, as a
 list of action names, so it can be tested without a bus or a phone.
@@ -18,10 +20,11 @@ list of action names, so it can be tested without a bus or a phone.
   "resume"  play again what the menu paused
   "clear"   empty the queue
   "reboot" / "shutdown"
+  "setup_wifi"  start setup mode
 """
 
 MENU_TIMEOUT_S = 20
-CHOICES = ("reboot", "shutdown", "cancel")
+CHOICES = ("reboot", "shutdown", "wifi", "cancel")
 
 
 class PowerMenu:
@@ -49,6 +52,8 @@ class PowerMenu:
             return []
         if choice == "cancel":
             return self._close()
+        if choice == "wifi":
+            return self._close() + ["setup_wifi"]
         self.open = False
         self.paused = False
         return ["close", "clear", choice]

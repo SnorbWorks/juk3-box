@@ -70,6 +70,7 @@ DEFAULTS = {
     "setup_path": str(DATA / "setup.json"),
     "lights_path": str(DATA / "lights.json"),
     "setupctl_dir": str(DATA / "setupctl"),
+    "setupnet_dir": str(DATA / "setupnet"),
     "default_theme": "bare",
     "max_upload_mb": 600,
     # Pictures and videos imported from USB drives stop once the media
@@ -147,7 +148,8 @@ class Admin:
         self._bus_task = None
         self._wizard_task = None
         self._pending = set()
-        self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]))
+        self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]),
+                             setupnet_dir=Path(cfg["setupnet_dir"]))
 
     # The bus ------------------------------------------------------------
 

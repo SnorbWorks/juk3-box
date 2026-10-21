@@ -55,6 +55,11 @@ ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/l
 # arrangement as jb-modctl, with its own folder.
 ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-setupctl /usr/local/sbin/jb-setupctl && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-setupctl.service $REMOTE_DIR/deploy/systemd/jb-setupctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupctl $DATA_DIR/setupctl/requests && systemctl daemon-reload && systemctl enable --now jb-setupctl.path >/dev/null 2>&1"
 
+# Setup mode's folder (shared/setup_net.py): jb-admin and jb-core ask, jb-netwatch
+# (root) runs the hotspot and answers. admin's own, so a Wi-Fi password on its
+# way through is seen by nobody else.
+ssh_pi_sudo "install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupnet $DATA_DIR/setupnet/requests"
+
 # USB drives (jb-source-local): mounted read-only by a root-owned helper that
 # udev has systemd start when one is plugged in. The trigger mounts any
 # drive that's already there.

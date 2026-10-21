@@ -26,7 +26,7 @@ from pathlib import Path
 
 from services.jb_admin.files import read_json, write_json
 from services.jb_lights import present
-from shared import hardware
+from shared import hardware, setup_net
 
 SETUP_TOPIC = "jukebox/jb-admin/setup"
 ANSWER_TOPIC = "jukebox/jb-admin/setup-answer"
@@ -249,7 +249,36 @@ class Wifi(Step):
     id, title, short = "wifi", "Connect to Wi-Fi", "Wi-Fi"
 
     async def view(self, w):
-        return await w.system.network()
+        # In setup mode (the jukebox's own hotspot, jb-netwatch): the networks
+        # it found and how the last join went.
+        net = await w.system.network()
+        hs = w.hotspot()
+        if hs.get("active"):
+            return {**net, "via": None, "hotspot": True, "networks": hs.get("networks") or [],
+                    "join": hs.get("join"), "scanned": hs.get("scanned"),
+                    "address": f"http://{socket.gethostname()}.local:{PORT}/setup"}
+        return {**net, "hotspot": False, "join": hs.get("join")}
+
+    async def action(self, w, name, data):
+        if not w.hotspot().get("active"):
+            raise WizardError("The jukebox is already on a network.")
+        if name == "scan":
+            w.net_request("scan")
+            return {"scanning": True}
+        if name == "join":
+            req = {"ssid": data.get("ssid"), "password": data.get("password") or "", "hidden": bool(data.get("hidden")),
+                   "id": str(data.get("id") or "")[:40]}
+            problem = setup_net.valid_join(req)
+            if problem:
+                raise WizardError(problem)
+            w.net_request("join", **req)
+            return {"joining": True}
+        return await super().action(w, name, data)
+
+    def cabinet(self, w):
+        if w.hotspot().get("active"):
+            return "Pick your Wi-Fi on your phone or computer."
+        return super().cabinet(w)
 
     async def submit(self, w, data):
         net = await w.system.network()
@@ -653,10 +682,12 @@ SKIPPABLE = {"screen", "knob", "sources", "wholehome"}
 
 
 class Wizard:
-    def __init__(self, admin, path: Path, lights_path: Path = present.PATH, system: System | None = None):
+    def __init__(self, admin, path: Path, lights_path: Path = present.PATH, system: System | None = None,
+                 setupnet_dir: Path = setup_net.DIR):
         self.admin = admin
         self.path = Path(path)
         self.lights_path = Path(lights_path)
+        self.setupnet_dir = Path(setupnet_dir)
         self.system = system or System()
         self.board = admin.board
         self.log = admin.log
@@ -881,6 +912,13 @@ class Wizard:
         self.answers_in.pop("sound", None)
         await self.system.run("pw-play", str(path), timeout=10, env={"XDG_RUNTIME_DIR": "/run/user/1000", "PATH": "/usr/bin:/bin"})
 
+    def hotspot(self) -> dict:
+        """Setup mode's state (jb-netwatch): {"active": False} when it's off."""
+        return setup_net.read_state(self.setupnet_dir)
+
+    def net_request(self, action: str, **details) -> None:
+        setup_net.request(action, self.setupnet_dir, **details)
+
     def summary(self) -> list[dict]:
         a = self.state["answers"]
         rows = [{"k": "Name", "v": (a.get("name") or {}).get("name") or "Juk3box"}]
@@ -915,6 +953,11 @@ class Wizard:
         return self.answers_in.get(step_id)
 
     def heard_answer(self, payload) -> None:
+        if isinstance(payload, dict) and payload.get("action") == "stop_hotspot":
+            # The cabinet's Cancel, when setup mode was asked for (the power menu).
+            if self.hotspot().get("why") == "asked":
+                self.net_request("stop")
+            return
         if isinstance(payload, dict) and payload.get("step") in BY_ID and isinstance(payload.get("yes"), bool):
             self.answers_in[payload["step"]] = {"yes": payload["yes"], "chain": self.showing, "at": time.time()}
 
@@ -930,6 +973,8 @@ class Wizard:
             self.input_seen["keys"] = (self.input_seen["keys"] + [payload["key"]])[-12:]
 
     def active(self) -> bool:
+        if self.hotspot().get("active"):
+            return True
         if self.done:
             return False
         if not self.admin.auth.has_password():
@@ -948,6 +993,13 @@ class Wizard:
                "steps": [{"short": s.short, "done": self.completed(s), "now": s.id == step.id} for s in steps],
                "address": address, "qr": qr_rows(address),
                "restarting": bool(self.state.get("restart"))}
+        hs = self.hotspot()
+        if hs.get("active"):
+            # Join the jukebox's own Wi-Fi first: its name, password and a QR code
+            # a phone's camera joins with; then the address on it.
+            out["hotspot"] = {"ssid": hs.get("ssid"), "password": hs.get("password"), "why": hs.get("why"),
+                              "qr": qr_rows(setup_net.wifi_qr_text(hs.get("ssid", ""), hs.get("password", ""))),
+                              "address": hs.get("url")}
         ask = step.ask(self) if hasattr(step, "ask") else None
         if ask:
             out["ask"] = ask
