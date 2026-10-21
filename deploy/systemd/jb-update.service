@@ -1,0 +1,11 @@
+# Updates the jukebox from the project's releases (deploy/jb-update), if
+# the owner left automatic updates on. Started by jb-update.timer.
+[Unit]
+Description=juk3-box update (nightly)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jb-update auto
+TimeoutStartSec=90min

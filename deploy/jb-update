@@ -1,0 +1,267 @@
+#!/usr/bin/python3
+"""jb-update: a jukebox updates itself from the project's GitHub releases.
+
+    jb-update check          is there a newer version? (writes the state)
+    jb-update apply          install the newest version now
+    jb-update auto           what the nightly timer runs: check, and apply if
+                             the owner left "update automatically" on
+    jb-update set-auto on|off
+
+latest.json on the newest release names the code bundle and its signature.
+The bundle is installed only if it's signed with the key this jukebox
+already has (deploy/update/juk3box-update.pub, from its current version),
+and only if it's newer. The new code goes to /opt/juk3-box and the old one
+stays beside it (/opt/juk3-box.prev) with the Python packages moved over;
+then the installer runs (packages, services) and the jukebox restarts. If
+its services don't all come back, the old version goes back in.
+
+A copy without /opt/juk3-box/VERSION is a developer's (deploy.sh): it's
+never updated from here. Runs as root: from the timer (jb-update.timer),
+or jb-setupctl's "update" requests (the admin's Updates card).
+"""
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+LATEST_URL = "https://github.com/SnorbWorks/juk3-box/releases/latest/download/latest.json"
+REPO = Path("/opt/juk3-box")
+PREV = Path("/opt/juk3-box.prev")
+NEW = Path("/opt/juk3-box.new")
+DIR = Path("/var/lib/juk3-box/update")
+STATE = DIR / "state.json"
+SETTINGS = DIR / "settings.json"
+KEY = "deploy/update/juk3box-update.pub"
+UNITS = ["jb-admin", "jb-analyzer", "jb-core", "jb-display", "jb-input", "jb-library", "jb-source-helper",
+         "jb-source-local", "jb-source-phone", "jb-ui", "jb-audio", "jb-crawl", "jb-lights", "jb-netwatch",
+         "jb-airplay"]
+SETTLE_S = 45                 # how long the services get to come back before it's judged
+TIMEOUT_S = 60
+VERSION_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
+
+class Failed(Exception):
+    pass
+
+
+def version_key(v) -> tuple | None:
+    m = VERSION_RE.match(v or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def newer(latest, current) -> bool:
+    a, b = version_key(latest), version_key(current)
+    return a is not None and b is not None and a > b
+
+
+def current_version(root: Path = REPO) -> str | None:
+    try:
+        v = (root / "VERSION").read_text().strip()
+    except OSError:
+        return None
+    return v if version_key(v) else None
+
+
+def read_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+    os.chmod(tmp, 0o644)              # jb-admin (not root) reads it
+    os.replace(tmp, path)
+
+
+def state(**changes) -> dict:
+    s = read_json(STATE, {})
+    s.update(changes)
+    write_json(STATE, s)
+    return s
+
+
+def auto_on() -> bool:
+    return read_json(SETTINGS, {}).get("auto", True) is not False
+
+
+def fetch(url: str, dest: Path | None = None) -> bytes | None:
+    req = urllib.request.Request(url, headers={"User-Agent": "juk3box-update"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+        if dest is None:
+            return r.read()
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(r, f)
+    return None
+
+
+def run(*cmd, check=True, **kw):
+    return subprocess.run(cmd, check=check, capture_output=True, text=True, **kw)
+
+
+# Checking --------------------------------------------------------------------
+
+def check() -> dict:
+    current = current_version()
+    if current is None:
+        return state(current=None, latest=None, available=False, checked_at=time.time(),
+                     error=None, note="A development copy: it's updated by deploying, not from releases.")
+    try:
+        latest = json.loads(fetch(LATEST_URL))
+    except Exception as e:          # offline, GitHub down, no release yet
+        return state(current=current, checked_at=time.time(), error=f"Couldn't check for updates: {e}")
+    v = latest.get("version")
+    if not version_key(v):
+        return state(current=current, checked_at=time.time(), error="The release list didn't make sense.")
+    return state(current=current, latest=v, latest_date=latest.get("date"), available=newer(v, current),
+                 checked_at=time.time(), error=None, note=None, release=latest)
+
+
+# Applying --------------------------------------------------------------------
+
+def verify(bundle: Path, sig: Path, sha256: str, key: Path) -> None:
+    h = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    if h != sha256:
+        raise Failed("The download doesn't match the release (checksum).")
+    r = run("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(key), "-rawin",
+            "-in", str(bundle), "-sigfile", str(sig), check=False)
+    if r.returncode != 0:
+        raise Failed("The update isn't signed with this jukebox's key: not installed.")
+
+
+def unpack(bundle: Path, dest: Path) -> None:
+    shutil.rmtree(dest, ignore_errors=True)
+    dest.mkdir(parents=True)
+    with tarfile.open(bundle, "r:gz") as t:
+        t.extractall(dest, filter="data")     # no paths outside dest, no device files
+
+
+def services(action: str) -> None:
+    run("systemctl", action, *[f"{u}.service" for u in UNITS], check=False)
+
+
+def failed_units() -> list[str]:
+    out = []
+    for u in UNITS:
+        if run("systemctl", "is-enabled", "--quiet", f"{u}.service", check=False).returncode != 0:
+            continue                          # turned off on purpose (the setup wizard's suggestions)
+        if run("systemctl", "is-active", "--quiet", f"{u}.service", check=False).returncode != 0:
+            out.append(u)
+    return out
+
+
+def install(root: Path) -> None:
+    r = run("sh", str(root / "deploy/install/install.sh"), check=False, timeout=3600)
+    if r.returncode != 0:
+        raise Failed("The installer stopped: " + (r.stderr or r.stdout).strip()[-400:])
+
+
+def swap_in(new: Path) -> None:
+    """new -> /opt/juk3-box, the running one -> .prev, the Python packages with it."""
+    shutil.rmtree(PREV, ignore_errors=True)
+    os.rename(REPO, PREV)
+    os.rename(new, REPO)
+    if (PREV / "venv").is_dir():
+        os.rename(PREV / "venv", REPO / "venv")
+
+
+def swap_back() -> None:
+    broken = REPO.with_name("juk3-box.failed")
+    shutil.rmtree(broken, ignore_errors=True)
+    if (REPO / "venv").is_dir():
+        os.rename(REPO / "venv", PREV / "venv")
+    os.rename(REPO, broken)
+    os.rename(PREV, REPO)
+
+
+def apply() -> dict:
+    s = check()
+    if not s.get("available"):
+        return s
+    current, latest, rel = s["current"], s["latest"], s["release"]
+    state(phase="downloading", started_at=time.time(), error=None)
+    work = DIR / "download"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    try:
+        bundle, sig = work / "code.tar.gz", work / "code.tar.gz.sig"
+        fetch(rel["code"], bundle)
+        fetch(rel["signature"], sig)
+        state(phase="checking")
+        verify(bundle, sig, rel.get("code_sha256", ""), REPO / KEY)
+        unpack(bundle, NEW)
+        if current_version(NEW) != latest:
+            raise Failed(f"The download says it's {current_version(NEW)}, not {latest}.")
+    except Failed as e:
+        shutil.rmtree(NEW, ignore_errors=True)
+        return state(phase=None, error=str(e))
+    except Exception as e:
+        shutil.rmtree(NEW, ignore_errors=True)
+        return state(phase=None, error=f"Couldn't download the update: {e}")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    state(phase="installing")
+    swap_in(NEW)
+    try:
+        install(REPO)
+        run("systemctl", "daemon-reload")
+        state(phase="restarting")
+        services("restart")
+        time.sleep(SETTLE_S)
+        bad = failed_units()
+        if bad:
+            raise Failed("These didn't start on the new version: " + ", ".join(bad))
+    except (Failed, subprocess.SubprocessError, OSError) as e:
+        state(phase="rolling back")
+        swap_back()
+        try:
+            install(REPO)
+        except Failed:
+            pass
+        run("systemctl", "daemon-reload", check=False)
+        services("restart")
+        return state(phase=None, current=current, available=True,
+                     error=f"{latest} didn't work here, so {current} is back. {e}")
+    return state(phase=None, current=latest, available=False, updated_at=time.time(),
+                 updated_from=current, error=None)
+
+
+def main():
+    if os.geteuid() != 0:
+        print("jb-update: must run as root", file=sys.stderr)
+        sys.exit(2)
+    a = sys.argv[1:]
+    DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(DIR, 0o755)
+    if a == ["check"]:
+        s = check()
+    elif a == ["apply"]:
+        s = apply()
+    elif a == ["auto"]:
+        s = apply() if auto_on() else check()
+    elif len(a) == 2 and a[0] == "set-auto" and a[1] in ("on", "off"):
+        write_json(SETTINGS, {"auto": a[1] == "on"})
+        s = {"auto": a[1] == "on"}
+    else:
+        print(__doc__, file=sys.stderr)
+        sys.exit(2)
+    print(json.dumps({k: v for k, v in s.items() if k != "release"}))
+    sys.exit(1 if s.get("error") else 0)
+
+
+if __name__ == "__main__":
+    main()

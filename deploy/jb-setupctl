@@ -14,6 +14,9 @@ it only ever does these:
                                           the light checks, with jb-lights paused
     jb-setupctl lastfm KEY|clear          the owner's Last.fm API key, in jb-library's and
                                           jb-analyzer's config (restarts them)
+    jb-setupctl update check|apply|auto-on|auto-off
+                                          the admin's Updates card (deploy/jb-update); apply
+                                          runs on its own (it restarts the jukebox, jb-admin too)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -44,6 +47,8 @@ RESPONSES = Path("/var/lib/juk3-box/setupctl/responses")
 REQ_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}\.json$")
 TZ_RE = re.compile(r"^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$")
 CHAINS = ("buttons", "accent", "levelbar")
+UPDATE = "/usr/local/sbin/jb-update"
+UPDATE_UNIT = "jb-update-now"
 ETC = Path("/etc/juk3-box")
 # Each service's name for the Last.fm key in its config file.
 LASTFM_FIELDS = {"jb-library": "lastfm_api_key", "jb-analyzer": "lastfm_key"}
@@ -258,6 +263,21 @@ def cmd_lastfm(value: str) -> str:
     return "changed" if changed else "unchanged"
 
 
+def cmd_update(what: str) -> str:
+    if what == "check":
+        return run(UPDATE, "check", check=False).stdout.strip()
+    if what in ("auto-on", "auto-off"):
+        return run(UPDATE, "set-auto", what[5:]).stdout.strip()
+    if what == "apply":
+        if run("systemctl", "is-active", "--quiet", UPDATE_UNIT, check=False).returncode == 0 or \
+                run("systemctl", "is-active", "--quiet", "jb-update", check=False).returncode == 0:
+            return "already updating"
+        run("systemctl", "reset-failed", UPDATE_UNIT, check=False)
+        run("systemd-run", f"--unit={UPDATE_UNIT}", "--collect", "--no-block", "--quiet", UPDATE, "apply")
+        return "started"
+    die("update check|apply|auto-on|auto-off")
+
+
 def dispatch(a: list[str]) -> str:
     if len(a) == 2 and a[0] == "psu":
         return cmd_psu(a[1])
@@ -275,6 +295,8 @@ def dispatch(a: list[str]) -> str:
         return cmd_lights(a[1:])
     if len(a) == 2 and a[0] == "lastfm":
         return cmd_lastfm(a[1])
+    if len(a) == 2 and a[0] == "update":
+        return cmd_update(a[1])
     die("unknown command")
 
 

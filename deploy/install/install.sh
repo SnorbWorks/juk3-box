@@ -52,8 +52,10 @@ for d in modctl setupctl setupnet; do
 done
 
 say "Root helpers, services, rules"
-install -o root -g root -m 0755 "$REPO/deploy/jb-modctl" "$REPO/deploy/jb-setupctl" "$REPO/deploy/jb-drive" /usr/local/sbin/
-for u in jb-modctl.service jb-modctl.path jb-setupctl.service jb-setupctl.path jb-drive@.service; do
+install -o root -g root -m 0755 "$REPO/deploy/jb-modctl" "$REPO/deploy/jb-setupctl" "$REPO/deploy/jb-drive" \
+  "$REPO/deploy/jb-update" /usr/local/sbin/
+for u in jb-modctl.service jb-modctl.path jb-setupctl.service jb-setupctl.path jb-drive@.service \
+    jb-update.service jb-update.timer; do
   install -o root -g root -m 0644 "$REPO/deploy/systemd/$u" /etc/systemd/system/
 done
 for u in $OWN_UNITS; do
@@ -73,9 +75,12 @@ install -D -o root -g root -m 0644 "$REPO/deploy/install/nm-wifi.conf" /etc/Netw
 
 say "Overflow swap"
 if [ ! -f /var/swapoverflow ]; then
-  fallocate -l 512M /var/swapoverflow
-  chmod 600 /var/swapoverflow
-  mkswap /var/swapoverflow >/dev/null
+  # Made under another name: building an image on a machine whose own
+  # /var/swapoverflow is in use, mkswap would take the path for that one.
+  fallocate -l 512M /var/swapoverflow.new
+  chmod 600 /var/swapoverflow.new
+  mkswap /var/swapoverflow.new >/dev/null
+  mv /var/swapoverflow.new /var/swapoverflow
 fi
 install -o root -g root -m 0644 "$REPO/deploy/swap/var-swapoverflow.swap" /etc/systemd/system/
 
@@ -119,7 +124,7 @@ say "Clock from the internet"
 say "Turning it all on"
 systemctl daemon-reload
 [ -n "$IMAGE" ] || udevadm control --reload
-systemctl enable mosquitto jb-modctl.path jb-setupctl.path var-swapoverflow.swap >/dev/null
+systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer var-swapoverflow.swap >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done
 

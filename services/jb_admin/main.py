@@ -71,6 +71,8 @@ DEFAULTS = {
     "lights_path": str(DATA / "lights.json"),
     "setupctl_dir": str(DATA / "setupctl"),
     "setupnet_dir": str(DATA / "setupnet"),
+    # Updates from the project's releases (deploy/jb-update, root): what it last found.
+    "update_dir": str(DATA / "update"),
     "default_theme": "bare",
     "max_upload_mb": 600,
     # Pictures and videos imported from USB drives stop once the media
@@ -433,6 +435,41 @@ class Admin:
         except WizardError as e:
             raise error(400, str(e))
         return web.json_response(self.wizard.lastfm())
+
+    # Updates (the admin's Setup page). jb-update does the work as root,
+    # asked through jb-setupctl; this reads back what it found.
+    def update_view(self) -> dict:
+        folder = Path(self.cfg["update_dir"])
+        s = read_json(folder / "state.json", {})
+        s = s if isinstance(s, dict) else {}
+        auto = read_json(folder / "settings.json", {})
+        return {"current": s.get("current"), "latest": s.get("latest"), "available": bool(s.get("available")),
+                "checked_at": s.get("checked_at"), "updated_at": s.get("updated_at"), "phase": s.get("phase"),
+                "error": s.get("error"), "note": s.get("note"),
+                "auto": not (isinstance(auto, dict) and auto.get("auto") is False)}
+
+    async def get_update(self, request):
+        return web.json_response(self.update_view())
+
+    async def post_update(self, request):
+        what = request.match_info["what"]
+        if what not in ("check", "apply"):
+            raise error(404, "Not found.")
+        try:
+            await self.setup_ctl("update", what, timeout=90)
+        except WizardError as e:
+            raise error(400, str(e))
+        return web.json_response(self.update_view())
+
+    async def put_update_auto(self, request):
+        body = await json_body(request)
+        if not isinstance(body.get("on"), bool):
+            raise error(400, "on: true or false")
+        try:
+            await self.setup_ctl("update", "auto-on" if body["on"] else "auto-off")
+        except WizardError as e:
+            raise error(400, str(e))
+        return web.json_response(self.update_view())
 
     # Helpers --------------------------------------------------------------
 
@@ -1382,6 +1419,9 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/wizard/{step}/{action}", admin.wizard_action)
     r.add_put("/api/lastfm", admin.put_lastfm)
     r.add_delete("/api/lastfm", admin.delete_lastfm)
+    r.add_get("/api/update", admin.get_update)
+    r.add_put("/api/update/auto", admin.put_update_auto)
+    r.add_post("/api/update/{what}", admin.post_update)
     r.add_post("/api/logout", admin.logout)
     r.add_post("/api/password", admin.change_password)
     r.add_get("/api/status", admin.status)

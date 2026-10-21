@@ -1,0 +1,59 @@
+# A release: pushing a version tag (deploy/release.sh) builds the card image
+# and the signed code bundle jukeboxes update from, and publishes them with
+# latest.json (what jukeboxes check) and imager.json (Raspberry Pi Imager's
+# list) on the tag's GitHub release.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q parted e2fsprogs xz-utils
+
+      - name: The code bundle, signed
+        env:
+          SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          mkdir -p out
+          printf '%s\n' "$TAG" > VERSION
+          git archive --format=tar "$TAG" > out/code.tar
+          tar -rf out/code.tar VERSION
+          gzip -9n < out/code.tar > "out/juk3box-code-$TAG.tar.gz"
+          rm out/code.tar VERSION
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/signing.pem"
+          openssl pkeyutl -sign -inkey "$RUNNER_TEMP/signing.pem" -rawin \
+            -in "out/juk3box-code-$TAG.tar.gz" -out "out/juk3box-code-$TAG.tar.gz.sig"
+          rm "$RUNNER_TEMP/signing.pem"
+          # The key in the repo is the one jukeboxes check with.
+          openssl pkeyutl -verify -pubin -inkey deploy/update/juk3box-update.pub -rawin \
+            -in "out/juk3box-code-$TAG.tar.gz" -sigfile "out/juk3box-code-$TAG.tar.gz.sig"
+
+      - name: The card image
+        run: sudo WORK="$RUNNER_TEMP/image" sh deploy/image/build-image.sh "out/juk3box-code-$TAG.tar.gz" "$TAG" out
+
+      - name: latest.json and Imager's list
+        run: python3 deploy/release/release_files.py "$TAG" out "${{ github.repository }}"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" --title "Juk3box $TAG" --notes-file out/notes.md \
+            "out/juk3box-$TAG.img.xz" "out/juk3box-code-$TAG.tar.gz" "out/juk3box-code-$TAG.tar.gz.sig" \
+            out/latest.json out/imager.json
