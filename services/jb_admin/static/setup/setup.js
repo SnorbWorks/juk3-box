@@ -4,6 +4,8 @@
 // the sound, the knob) poll while they're open.
 
 const root = document.getElementById('wizard');
+// Inside the Juk3box Helper app, which has its own title bar.
+if (/Juk3boxHelper/.test(navigator.userAgent)) document.documentElement.classList.add('in-app');
 const POLL_MS = 1500;
 const LIVE_STEPS = new Set(['wifi', 'lightcheck', 'loadtest', 'sound', 'knob', 'sources']);
 // The Juk3box Helper app opens setup with the phone's own network to suggest.
@@ -745,7 +747,13 @@ function hotspotWifi(s) {
     if (!ssid) { local.error = 'Pick a network.'; return render(); }
     local.joinId = Math.random().toString(36).slice(2, 10);
     const out = await act('join', { ssid, password: local.password, hidden: other, id: local.joinId });
-    if (out?.joining) { local.joining = ssid; render(); }
+    if (out?.joining) {
+      local.joining = ssid;
+      render();
+      // Inside the Juk3box Helper app: it lets go of the jukebox's Wi-Fi and
+      // finds it again at its address on the owner's network.
+      window.webkit?.messageHandlers?.juk3box?.postMessage({ event: 'joining', ssid, address: s.address });
+    }
   };
   return {
     body: [

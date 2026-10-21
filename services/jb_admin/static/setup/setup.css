@@ -157,3 +157,6 @@ label.wz-label { font-weight: 800; font-size: 15px; color: var(--heading); }
 .wz-center { align-items: center; text-align: center; }
 .wz-big-icon { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: 28px; background: var(--tint-2); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Inside the Juk3box Helper app (setup.js): its own bar shows the name. */
+.in-app .wz-top img { display: none; }
