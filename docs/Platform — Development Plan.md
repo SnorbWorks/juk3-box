@@ -115,3 +115,26 @@ Measured on the reference Pi 4 (1 GB). The platform targets the smallest machine
 
 - **Each module is its own process, and a Python one costs 20–40 MB** before it does anything. Fine for a handful of modules; not for many on a 1 GB Pi. Before modules multiply: a lighter way to run small ones (several declarative or data-only modules sharing one host process, each still behind its own bus login), and the admin showing memory in use against the Pi's total before an install.
 - **The kiosk is the tightest budget.** The screen restyling or repainting is what makes the knob feel slow, not the knob code. The rules (now in docs/theme-format.md and the Neon theme's notes): animate only `transform` and `opacity`; never change a variable or attribute on `<html>` per frame or per step (it restyles every element: ~225 ms on the Pi 4); no `backdrop-filter` (it ran the kiosk out of memory); write to the page only when a value actually changes.
+
+### Per-board suggestions: what a small board shouldn't run (Oct 20, 2026; agreed, not built)
+
+The owner's real-world test on the Pi 4 with music playing (Bluetooth, whole-home on): the kiosk (Chromium + sway) about 110% of a core, jb-analyzer about 30%, jb-lights about 25%, audio about 15%; load around 4 on 4 cores, ~500 MB in zram. With PipeWire realtime (commit 47a60e7) that no longer pops, but there's no headroom. So some modules and features are **suggested off** per board: a suggestion with a reason, never a block, and nothing turns off on its own.
+
+- **Modules declare it in `module.json`**, a new optional field (goes into [modules.md](contracts/modules.md) when built):
+  `"boards": {"pi4": {"suggested": false, "why": "Uses about a third of a Pi 4 core; the music can pop", "cost": {"cpu_pct": 30, "mem_mb": 25}}}`.
+  Absent = suggested everywhere. The family names are `shared/hardware.py`'s (`pi4`, `pi5`).
+- **Features inside a module** (a setting, not a whole service) go in `shared/hardware.py`'s `FAMILIES`, e.g. `"suggest_off": {"background_video": "...why...", "whole_home": "...why..."}`, and the setting's switch shows the same label.
+- **The admin**: the Modules page and those settings show "Not suggested on a Raspberry Pi 4" with the why and the measured cost; turning one on there asks to confirm.
+- **The first-boot wizard** (pi5-move.md work item 3, "Hardware in setup") applies them: after the owner confirms the board, a module or feature suggested off for it starts off, listed on one screen ("Your Pi 4 runs better without these; you can turn any on later") with each one's why. It stays the owner's choice: each is a switch on that screen.
+- **Numbers are measured, not guessed**: before writing a why, measure each candidate on the Pi 4 with music playing, one switched off at a time (CPU, memory, DAC underruns from `pw-top`'s ERR), and put the numbers in the manifest.
+
+Candidates (Pi 4):
+
+| What | Kind | Cost on a Pi 4 | Suggestion |
+|---|---|---|---|
+| jb-analyzer (beat, genre, sections for the light show) | module | ~30% of a core | Off; the lights fall back to their plain show |
+| Background video on the kiosk | feature (jb-ui) | most of the kiosk's ~110% | Off; a still image |
+| Whole-home audio | feature (jb-audio) | a second PipeWire, the AirPlay stream | On allowed, with the warning |
+| jb-lights | module | ~25% | Keep: it's the cabinet's look |
+
+Nothing is suggested off for the Pi 5 yet; re-measure there before deciding.
