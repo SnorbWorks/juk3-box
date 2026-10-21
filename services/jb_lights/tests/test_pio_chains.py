@@ -11,7 +11,7 @@ def make(tmp_path):
     for name in (pio_chains.BUTTONS_DEV, pio_chains.ACCENT_DEV):
         (dev / name).write_bytes(b"")
     gpiomem = tmp_path / "gpiomem0"
-    regs = bytearray(4096)
+    regs = bytearray(pio_chains.GPIOMEM_SIZE)
     # GPIO12's CTRL as the PIO driver leaves it: FUNCSEL = PIO (7), F_M = 4.
     struct.pack_into("<I", regs, pio_chains.ctrl_offset(12), (4 << 5) | 7)
     gpiomem.write_bytes(bytes(regs))

@@ -33,6 +33,10 @@ DEV = Path("/dev")
 BUTTONS_DEV = "leds-buttons"
 ACCENT_DEV = "leds-accent"
 GPIOMEM = Path("/dev/gpiomem0")      # RP1 io_bank0 at offset 0
+# The whole RP1 GPIO block, as pinctrl maps it: the driver refuses a
+# smaller mapping (EINVAL, the first Pi 5 boot, 2026-10-20). Only this
+# device: mapping another gpiomem past its own size can hang the board.
+GPIOMEM_SIZE = 0x30000
 
 # RP1 io_bank0: GPIOn_STATUS at 8n, GPIOn_CTRL at 8n + 4. OUTOVER (bits
 # 13:12): 0 = the peripheral's signal, 1 = inverted, 2 = low, 3 = high.
@@ -47,8 +51,9 @@ def ctrl_offset(gpio: int) -> int:
 
 def invert_output(gpio: int, path: Path = GPIOMEM) -> tuple[int, int]:
     """Inverts a pin's output in RP1. Returns the CTRL register (before, after)."""
-    with open(path, "r+b", buffering=0) as f:
-        mem = mmap.mmap(f.fileno(), 4096)
+    fd = os.open(path, os.O_RDWR | os.O_SYNC)
+    try:
+        mem = mmap.mmap(fd, GPIOMEM_SIZE)
         try:
             off = ctrl_offset(gpio)
             before = struct.unpack_from("<I", mem, off)[0]
@@ -58,6 +63,8 @@ def invert_output(gpio: int, path: Path = GPIOMEM) -> tuple[int, int]:
             return before, struct.unpack_from("<I", mem, off)[0]
         finally:
             mem.close()
+    finally:
+        os.close(fd)
 
 
 def available(dev: Path = DEV) -> bool:
