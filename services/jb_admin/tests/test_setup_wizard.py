@@ -263,3 +263,13 @@ def test_the_cabinet_says_which_step_and_carries_its_yes_no(tmp_path):
         await submit(client, "lightcheck")
         assert ("lights", "stop") in calls
     run(tmp_path, check)
+
+
+def test_the_board_voltage_is_read_after_the_equals_sign():
+    class Pi(setup_wizard.System):
+        def __init__(self):
+            pass
+
+        async def run(self, *cmd, timeout=10, env=None):
+            return "EXT5V_V volt(24)=5.09736000V\n"
+    assert asyncio.run(Pi().volts()) == 5.1

@@ -84,7 +84,8 @@ class System:
         return Path(path).exists()
 
     async def volts(self) -> float | None:
-        m = re.search(r"([\d.]+)V", await self.run("vcgencmd", "pmic_read_adc", "EXT5V_V"))
+        # "EXT5V_V volt(24)=5.09736000V": the reading is after the "=" (not the "5V" in the name).
+        m = re.search(r"=([\d.]+)V", await self.run("vcgencmd", "pmic_read_adc", "EXT5V_V"))
         return round(float(m.group(1)), 2) if m else None
 
     async def throttled(self) -> int | None:
