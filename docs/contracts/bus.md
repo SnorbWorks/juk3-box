@@ -58,7 +58,7 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-input/raw` | event | `control`, `state` |
 | `jb-input/status` | R state | `online`, `device`, `faults` |
 | `jb-core/queue` | R state | `shuffle_active`, `upcoming` |
-| `jb-core/source` | R state | which phone has the jukebox, Bluetooth or the helper app (`services/jb_core/phone_choice.py`): `active` (`kind` `phone`/`helper`, `id` a Bluetooth address or `helper:<device>`, `name`, `connected`) or null, and `offer` (a phone that arrived meanwhile, which the cabinet offers) or null. jb-library shows that phone's songs; jb-source-helper makes that app phone its source |
+| `jb-core/source` | R state | which phone has the jukebox, Bluetooth or the helper app (`services/jb_core/phone_choice.py`): `active` (`kind` `phone`/`helper`, `id` a Bluetooth address or `helper:<device>`, `name`, `connected`) or null, and `offer` (a phone that arrived meanwhile, which the cabinet offers) or null. jb-library shows that phone's songs; jb-source-helper makes that app phone its source; while the app has it, jb-source-phone doesn't reconnect Bluetooth, and disconnects a Bluetooth phone when the app takes over (so the iPhone's audio can go to AirPlay) |
 | `jb-core/entry` | R state | `state`, `letter`, `reason` (keypad entry) |
 | `jb-core/power` | R state | `state` |
 | `jb-core/selection` | event | a keypad pick: slot `index`, `code` |

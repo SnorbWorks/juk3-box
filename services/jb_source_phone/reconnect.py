@@ -48,6 +48,15 @@ def window_for(event: str, was_playing: bool = False, app_has_it: bool = False):
     return None
 
 
+def app_took_over(before: str | None, after: str | None, first: bool) -> bool:
+    """jb-core's choice moved to the app (jukebox/jb-core/source's active
+    kind, "phone" / "helper" / None): a Bluetooth phone still connected is
+    let go, so the iPhone's audio can go to AirPlay (the owner's choice,
+    2026-10-20). Not on the first message after a start: that's the choice
+    as it stood, and a phone connected since then is connected on purpose."""
+    return not first and after == "helper" and before != "helper"
+
+
 def retry_delay(elapsed_s: float) -> float:
     return 15.0 if elapsed_s < 60 else 30.0
 

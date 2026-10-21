@@ -27,3 +27,11 @@ def test_no_reconnecting_while_the_app_has_the_jukebox():
     assert rc.window_for("drop", was_playing=True, app_has_it=True) is None
     assert rc.window_for("boot", app_has_it=True) is None
     assert rc.window_for("pick", app_has_it=True) == 180
+
+
+def test_the_bluetooth_phone_is_let_go_when_the_app_takes_over():
+    assert rc.app_took_over("phone", "helper", first=False)
+    assert rc.app_took_over(None, "helper", first=False)
+    assert not rc.app_took_over("helper", "helper", first=False)   # a rename, a republish
+    assert not rc.app_took_over(None, "helper", first=True)         # the choice as it stood at start
+    assert not rc.app_took_over("helper", "phone", first=False)

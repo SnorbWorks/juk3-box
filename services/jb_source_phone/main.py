@@ -819,6 +819,21 @@ async def main() -> None:
         except Exception:
             log.exception("couldn't disconnect %s", target[2])
 
+    async def let_go_for_app(bus: Bus):
+        """The app has the jukebox now: disconnect the Bluetooth phone (often
+        the same iPhone), so its audio can go to AirPlay. Not paused first:
+        it's likely the app's own music on that phone."""
+        for mac, path, name, connected in await rc.phones(system_bus):
+            if not connected:
+                continue
+            if lock.owner == mac:
+                lock.release()
+            try:
+                await drop_link(mac, path)
+                log.info("the app has the jukebox: let go of %s on Bluetooth", name)
+            except Exception:
+                log.exception("couldn't let go of %s", name)
+
     async def forget_phone(bus: Bus, mac: str):
         """Unpair a phone and remove what the jukebox stored about it (the
         user's choice, 2026-10-14): jb-library deletes its music on
@@ -893,7 +908,7 @@ async def main() -> None:
     reconnect_task = None
     # Which kind of phone has the jukebox (jukebox/jb-core/source): "phone",
     # "helper" (the app), or None.
-    chosen = {"kind": None}
+    chosen = {"kind": None, "seen": False}
     reconnect_until = 0.0
 
     async def publish_reconnect(bus: Bus, state: str, **extra):
@@ -1099,10 +1114,14 @@ async def main() -> None:
         asyncio.create_task(watch_connection(bus))
         async for topic, payload in messages:
             if topic == "jukebox/jb-core/source":
+                before = chosen["kind"]
                 chosen["kind"] = ((payload or {}).get("active") or {}).get("kind")
+                first, chosen["seen"] = not chosen["seen"], True
                 if chosen["kind"] == "helper" and reconnect_task and not reconnect_task.done():
                     log.info("the app has the jukebox: stopping the Bluetooth reconnect")
                     reconnect_task.cancel()
+                if rc.app_took_over(before, chosen["kind"], first):
+                    asyncio.create_task(let_go_for_app(bus))
                 continue
             try:
                 await handle_command(bus, payload)
