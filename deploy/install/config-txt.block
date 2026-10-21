@@ -1,0 +1,19 @@
+[pi4]
+# The level bar (WS2812B over SPI, GPIO10): on a Pi 4 the SPI clock follows
+# the VPU core clock, which otherwise scales with load and garbles the data.
+core_freq=500
+core_freq_min=500
+
+[pi5]
+# Powered through the header from the cabinet supply (no USB-PD): allow full
+# USB current. (The setup wizard's power step checks this.)
+usb_max_current_enable=1
+# The cabinet LEDs through RP1's PIO (jb_lights/pio_chains.py): buttons on
+# GPIO12 (23 GRBW), accent chain on GPIO13 (349 GRB). brightness=0 is the
+# driver's pass-through (jb-lights does its own).
+dtoverlay=ws2812-pio,gpio=12,num_leds=23,rgbw,brightness=0,dev_name=leds-buttons
+dtoverlay=ws2812-pio,gpio=13,num_leds=349,brightness=0,dev_name=leds-accent
+
+[all]
+# The level bar: WS2812B over SPI on GPIO10 (MOSI).
+dtparam=spi=on

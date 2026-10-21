@@ -3,7 +3,8 @@
 # Usage: deploy/deploy.sh <service-name>
 set -euo pipefail
 
-PI_HOST="juk3-box.local"
+# Another card (deploy/make-card.sh): PI_HOST=juk3box.local deploy/deploy.sh ...
+PI_HOST="${PI_HOST:-juk3-box.local}"
 PI_USER="admin"
 PI_KEY="$HOME/.ssh/sidecar_ed25519"
 REMOTE_DIR="/opt/juk3-box"
