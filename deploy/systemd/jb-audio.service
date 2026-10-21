@@ -1,0 +1,24 @@
+[Unit]
+Description=juk3-box jb_audio
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/juk3-box
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/opt/juk3-box/venv/bin/python -m services.jb_audio.main
+Restart=on-failure
+RestartSec=2
+User=admin
+# The whole-home PipeWire and its AirPlay feed run under this service, not
+# the login session, so they don't get the pipewire group's limits
+# (/etc/security/limits.d/25-pw-rlimits.conf). Without realtime their
+# data loop waits behind the lights and the kiosk: the DAC ran dry about
+# twice a second, pops and cut-outs (2026-10-20).
+LimitRTPRIO=95
+LimitNICE=-19
+LimitMEMLOCK=4194304
+
+[Install]
+WantedBy=multi-user.target
