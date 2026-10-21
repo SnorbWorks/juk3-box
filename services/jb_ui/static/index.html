@@ -86,12 +86,9 @@
     flex: 1;
     display: flex; gap: 14px;
     min-height: 0;
-    border: 1px solid transparent;
-    /* Only shapes the encoder-highlight outline (a border-image isn't
-       clipped by radius); ~matches the frame art's rounded chrome corners. */
+    border: 2px solid #5a6bb8;
     border-radius: 18px;
-    background: none;
-    border-image: url(img/songboard_background.png) 80 fill / 40px stretch;
+    background: #0b0d12;
     padding: 26px 32px;
   }
   .col {
@@ -108,7 +105,7 @@
   .slot .label {
     flex-shrink: 0; width: 38px;
     display: flex; align-items: center; justify-content: center;
-    background: url(img/songboard_numbers.png) center / 100% 100%;
+    background: #3a3f52;
     color: #fff; font-weight: bold; font-size: 13px;
     text-shadow: 0 1px 1px rgba(0,0,0,0.5);
   }
@@ -322,7 +319,7 @@
 </style>
 </head>
 <body>
-<video id="bg" src="bg.mp4" autoplay muted loop playsinline></video>
+<video id="bg" autoplay muted loop playsinline></video>
 <div id="scrim"></div>
 <div id="wrap">
 
