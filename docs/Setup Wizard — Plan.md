@@ -22,7 +22,7 @@ The first-boot setup wizard (dev plan roadmap item 5, Phase 7b), in one place. I
 
 ## Setup mode (the Pi side of Phase 6)
 
-- **When:** no owner password yet (`/api/session` `setup_needed`) or setup not finished (`/var/lib/juk3-box/setup.json`), and no known network reachable; or the owner asks for it from the Reset-hold menu (open question 1). Then: NetworkManager AP mode, `juk3box-setup-XXXX` (last 4 of the board serial), WMM off, a captive portal (DNS answers everything with the Pi; port 80 sent to the setup pages).
+- **When:** no owner password yet (`/api/session` `setup_needed`) or setup not finished (`/var/lib/juk3-box/setup.json`), and no known network reachable; or the owner asks for it from the Reset-hold menu (open question 1). Then: NetworkManager AP mode, `Juk3box Setup XXXX` (last 4 of the board serial; the name a person reads, so spelled as the product), WMM off, a captive portal (DNS answers everything with the Pi; port 80 sent to the setup pages).
 - **jb-netwatch stands down in setup mode.** Today it reconnects, turns the Wi-Fi off and on, and as a last resort reboots when offline (`services/jb_netwatch/policy.py`); in setup mode offline is the point. It reads the setup state and does nothing until setup mode ends.
 - **The Wi-Fi scan happens before the AP starts** (the chip can't scan well while it's an access point); the list is kept and refreshed on request by dropping the AP for a few seconds.
 - **Leaving it:** after the Wi-Fi step the Pi joins the home network and advertises normally (Bonjour for the app and the admin). If joining fails, the hotspot comes back and the page shows why (wrong password, not found).
