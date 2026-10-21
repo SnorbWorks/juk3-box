@@ -891,6 +891,9 @@ async def main() -> None:
     bus_ref: dict = {}
     pairing = Pairing(system_bus, None, log)
     reconnect_task = None
+    # Which kind of phone has the jukebox (jukebox/jb-core/source): "phone",
+    # "helper" (the app), or None.
+    chosen = {"kind": None}
     reconnect_until = 0.0
 
     async def publish_reconnect(bus: Bus, state: str, **extra):
@@ -898,9 +901,12 @@ async def main() -> None:
 
     def start_reconnect(bus: Bus, event: str, was_playing: bool = False):
         nonlocal reconnect_task, reconnect_until
-        window = rc.window_for(event, was_playing)
+        window = rc.window_for(event, was_playing, app_has_it=chosen["kind"] == "helper")
         if window is None:
-            log.info("phone dropped while idle: not reconnecting (it may have been the owner's choice)")
+            if chosen["kind"] == "helper":
+                log.info("the app has the jukebox: not reconnecting Bluetooth (%s)", event)
+            else:
+                log.info("phone dropped while idle: not reconnecting (it may have been the owner's choice)")
             return
         reconnect_until = max(reconnect_until, now() + window)
         if reconnect_task is None or reconnect_task.done():
@@ -912,6 +918,9 @@ async def main() -> None:
         try:
             while now() < reconnect_until:
                 if not bt["on"]:
+                    return
+                if chosen["kind"] == "helper":   # the source arrived after a boot reconnect began
+                    log.info("the app has the jukebox: not reconnecting Bluetooth")
                     return
                 if lease:
                     await publish_reconnect(bus, "paused", reason=f"{lease['holder']} holds the browse lease")
@@ -1032,6 +1041,7 @@ async def main() -> None:
         # play_item on reconnect) can race ahead of our own subscription and
         # have its command silently dropped (QoS0, no retain on /cmd).
         messages = await bus.subscribe(f"jukebox/{SERVICE_NAME}/cmd")
+        await bus.subscribe("jukebox/jb-core/source")
 
         await connect_current_phone(bus)
 
@@ -1087,7 +1097,13 @@ async def main() -> None:
         asyncio.create_task(poll_now_playing(bus))
         asyncio.create_task(watch_lease(bus))
         asyncio.create_task(watch_connection(bus))
-        async for _topic, payload in messages:
+        async for topic, payload in messages:
+            if topic == "jukebox/jb-core/source":
+                chosen["kind"] = ((payload or {}).get("active") or {}).get("kind")
+                if chosen["kind"] == "helper" and reconnect_task and not reconnect_task.done():
+                    log.info("the app has the jukebox: stopping the Bluetooth reconnect")
+                    reconnect_task.cancel()
+                continue
             try:
                 await handle_command(bus, payload)
             except Exception:

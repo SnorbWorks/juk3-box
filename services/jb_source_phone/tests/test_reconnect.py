@@ -21,3 +21,9 @@ def test_phone_book_orders_most_recent_first(tmp_path):
     assert again.phones["BB"]["name"] == "New phone"
     book.touch("AA", "Old phone", 300)                   # one entry per phone, overwritten
     assert list(rc.PhoneBook(tmp_path / "phones.json").phones) == ["AA", "BB"]
+
+
+def test_no_reconnecting_while_the_app_has_the_jukebox():
+    assert rc.window_for("drop", was_playing=True, app_has_it=True) is None
+    assert rc.window_for("boot", app_has_it=True) is None
+    assert rc.window_for("pick", app_has_it=True) == 180
