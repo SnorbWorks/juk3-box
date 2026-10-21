@@ -85,6 +85,7 @@ What the reference build actually publishes, as of this version. Retained = R.
 | `jb-source-helper/play-error` | event | `item_path`, `title`, `reason` (`no_answer`, `not_found`, `not_playable`, `no_subscription`, `not_authorized`, `offline`, `other`) |
 | `jb-source-helper/pairing` | R state | `state` (`code` or `none`), `code`, `device`, `expires`: the cabinet shows the code to type in the app |
 | `jb-source-helper/settings` | R state | the admin's Sources > App: `allow_pairing` (off once a phone pairs; unknown apps then get `pair_closed`), `ble` (wake-up), `name` (the jukebox's name in the app and as the AirPlay speaker) |
+| `jb-source-helper/artwork` | event | `at`: covers from the app landed (once a batch stops arriving); the screen reloads the cover images that failed before they were here |
 | `jb-source-helper/forgotten` | event | `mac`: `helper:<device>` (jb-library forgets its songs) |
 | `jb-source-helper/cmd` | command | `play_item` (`item_path`), `play`, `pause`, `stop`, `forget` (`device_id`), `rename` (`device_id`, `name`), `sync` (the active phone's library again, in full), `settings` (`allow_pairing`, `ble`, `name`) |
 | `jb-source-local/library` | state | `drives` (id, label, songs, pictures, videos, skipped, scanning), `tracks` (title, artist, album, genre, album_track, duration_ms, item_path `drive:<id>/<path>`) |

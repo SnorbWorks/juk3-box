@@ -3,6 +3,7 @@
 
 import { albumSongs, openFilter, openList, pick, setSort, upLevel } from './board.js';
 import { playList, startAutoplay } from './lists.js';
+import { reloadMissingCovers } from './bind.js';
 import { connectBus, PREVIEW, publish } from './bus.js';
 import { startFeatured } from './featured.js';
 import { click, currentMode, currentStopKey, enterMode, focusKey, goToRest, refocus, resetScroll, rotate } from './focus.js';
@@ -284,6 +285,7 @@ function phones() {
 }
 
 function watchSystem() {
+  store.watch(html, 'coversAt', at => { if (at) reloadMissingCovers(at); });
   // Only on a change: anything written to <html> can restyle the page.
   store.watch(html, 'source', s => {
     const phone = s?.active?.connected ? 'connected' : 'disconnected';

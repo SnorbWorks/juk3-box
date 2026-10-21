@@ -28,6 +28,9 @@ LIBRARY_WAIT_S = 300.0     # a big library over Wi-Fi
 # rather than refused. After that it counts as gone (left the house).
 REACHABLE_S = 12 * 3600
 ARTWORK_SIZE = 600
+# Covers arrive one upload at a time, hundreds at once: the screen is told
+# once they've stopped for this long (jukebox/jb-source-helper/artwork).
+ARTWORK_NOTE_S = 1.5
 # Codes in a row before the cabinet stops asking (an app left open on the
 # pairing screen, or one nobody is answering): about 6 minutes.
 PAIR_ROUNDS = 3
@@ -70,6 +73,7 @@ class Helper:
         self.failed_recently: dict[str, float] = {}
         self.chosen: str | None = None          # jb-core's choice, a device id, until it's heard
         self.on_rename = None                   # main.py: announce the new name
+        self._art_note: asyncio.TimerHandle | None = None
         self._settings = {**SETTINGS, **self._read("settings.json")}
         if self._settings["name"]:
             self.jukebox_name = self._settings["name"]
@@ -363,6 +367,16 @@ class Helper:
     def save_artwork(self, key: str, body: bytes) -> None:
         self.art_dir.mkdir(parents=True, exist_ok=True)
         write_atomic(self.art_dir / f"{key}.jpg", body)
+
+    def artwork_saved(self) -> None:
+        """A cover landed: once a batch stops arriving, say so, and the screen
+        loads the covers it drew before they were here (their tiles stayed
+        blank: Home's new songs, 2026-10-20)."""
+        if self._art_note:
+            self._art_note.cancel()
+        loop = asyncio.get_running_loop()
+        self._art_note = loop.call_later(ARTWORK_NOTE_S, lambda: asyncio.ensure_future(
+            self.bus.publish(f"{TOPIC}/artwork", {"at": time.time()})))
 
     # -- jb-core's commands --------------------------------------------------
 

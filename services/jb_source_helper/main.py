@@ -76,6 +76,7 @@ def make_app(helper: Helper) -> web.Application:
         if not body.startswith(b"\xff\xd8"):
             raise web.HTTPBadRequest(text="not a JPEG")
         await asyncio.to_thread(helper.save_artwork, key, body)
+        helper.artwork_saved()
         return web.Response(status=204)
 
     app = web.Application(client_max_size=MAX_ARTWORK + 1024)

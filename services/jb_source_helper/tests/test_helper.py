@@ -240,6 +240,10 @@ def test_artwork_needs_a_paired_phones_token(tmp_path):
         big = b"\xff\xd8" + bytes(range(256)) * 1200 + b"\xff\xd9"   # ~300 KB
         r = await client.post(f"/artwork/{key}", data=slowly(big), headers={"Authorization": f"Bearer {token}"})
         assert r.status == 204 and (tmp_path / "artwork" / f"{key}.jpg").read_bytes() == big
+        # Told once the batch stops, so the screen loads covers it drew too early.
+        assert bus.last("artwork") is None
+        await asyncio.sleep(source.ARTWORK_NOTE_S + 0.2)
+        assert [t for t, _ in bus.sent].count(f"{TOPIC}/artwork") == 1
     run(tmp_path, check)
 
 

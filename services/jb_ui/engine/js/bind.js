@@ -53,6 +53,19 @@ function setHidden(el, hidden) {
 
 // An icon from the engine's icon list: library SVG (already cleaned by
 // jb-ui), a theme's own image file, or one the engine draws itself.
+// Covers the app sent after their tiles were drawn: those images failed
+// (no file yet) and a browser doesn't ask again for the same address. Only
+// the ones that failed; the next bind puts the plain address back, which
+// now loads.
+export function reloadMissingCovers(at) {
+  for (const img of document.querySelectorAll('img[src*="/covers/"]')) {
+    if (!img.complete || img.naturalWidth) continue;
+    const url = new URL(img.getAttribute('src'), location.href);
+    url.searchParams.set('v', at);
+    img.setAttribute('src', url.pathname + url.search);
+  }
+}
+
 export function setIcon(el, icon) {
   const key = icon ? JSON.stringify(icon) : '';
   if (el.jbIcon === key) return;
