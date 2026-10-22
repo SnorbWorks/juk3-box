@@ -13,8 +13,10 @@ set -eu
 
 BASE_URL=${BASE_URL:-https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz}
 BASE_SHA256=${BASE_SHA256:-483db18a48da399b5b7022ffae9a07bc6d99daab30e593aedac09b69ff422843}
-GROW_MB=${GROW_MB:-4096}           # room for the packages while installing (shrunk back after)
-SLACK_MB=${SLACK_MB:-256}          # left free in the shrunk image; the first start fills the card
+GROW_MB=${GROW_MB:-4096}           # room for the packages while installing
+SYSTEM_MB=${SYSTEM_MB:-8192}       # the system partition, a fixed size: read-only once the
+                                   # setup wizard finishes; years of OS updates fit. The first
+                                   # start puts the data partition after it (deploy/jb-rootfs).
 JB_USER=admin
 
 SRC=${1:?source tarball}
@@ -51,7 +53,11 @@ echo "$BASE_SHA256  $BASE" | sha256sum -c - >/dev/null || die "the base image's 
 xz -dc "$BASE" > "$IMG"
 
 say "Room to install"
-truncate -s +"${GROW_MB}M" "$IMG"
+# At least GROW_MB more, and at least the system partition's final size.
+P2_START=$(parted -ms "$IMG" unit B print | awk -F: '$1 == 2 {sub("B", "", $2); print $2}')
+SIZE=$(( $(stat -c %s "$IMG") + GROW_MB * 1024 * 1024 ))
+[ "$SIZE" -ge $((P2_START + SYSTEM_MB * 1024 * 1024)) ] || SIZE=$((P2_START + SYSTEM_MB * 1024 * 1024))
+truncate -s "$SIZE" "$IMG"
 parted -s "$IMG" resizepart 2 100%
 LOOP=$(losetup -fP --show "$IMG")
 e2fsck -fy "${LOOP}p2" >/dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck failed"
@@ -87,6 +93,14 @@ say "Wi-Fi on from the first start (setup mode's hotspot; the setup wizard sets 
 mkdir -p "$ROOT/var/lib/systemd/rfkill"
 for dev in platform-1001100000.mmc platform-fe300000.mmcnr; do echo 0 > "$ROOT/var/lib/systemd/rfkill/$dev:wlan"; done
 
+say "The read-only system drive: the overlay in the start-up image, the data partition at the first start"
+in_root update-initramfs -u -k all
+# Raspberry Pi OS grows the system partition to the whole card at its first
+# start ("resize"); here the data partition takes the rest instead.
+sed -i 's/ resize\b//' "$ROOT/boot/firmware/cmdline.txt"
+install -d -m 0755 "$ROOT/etc/juk3-box"
+touch "$ROOT/etc/juk3-box/make-data-partition"
+
 say "Sealing"
 in_root sh /opt/juk3-box/deploy/install/seal.sh --yes --image
 
@@ -97,13 +111,14 @@ cleanup
 LOOP=
 trap - EXIT
 
-say "Shrinking (the first start grows it to fill the card)"
+say "The system partition at its fixed size (the first start adds the data partition after it)"
 LOOP=$(losetup -fP --show "$IMG")
 e2fsck -fy "${LOOP}p2" >/dev/null 2>&1 || [ $? -le 1 ] || die "e2fsck failed"
 resize2fs -M "${LOOP}p2" >/dev/null 2>&1
 BLOCKS=$(dumpe2fs -h "${LOOP}p2" 2>/dev/null | sed -n 's/^Block count: *//p')
 BSIZE=$(dumpe2fs -h "${LOOP}p2" 2>/dev/null | sed -n 's/^Block size: *//p')
-FS_BYTES=$((BLOCKS * BSIZE + SLACK_MB * 1024 * 1024))
+FS_BYTES=$((SYSTEM_MB * 1024 * 1024))
+[ $((BLOCKS * BSIZE)) -lt "$FS_BYTES" ] || die "the system needs more than SYSTEM_MB=$SYSTEM_MB"
 resize2fs "${LOOP}p2" "$((FS_BYTES / 1024))K" >/dev/null 2>&1
 START=$(parted -ms "$IMG" unit B print | awk -F: '$1 == 2 {sub("B", "", $2); print $2}')
 losetup -d "$LOOP"

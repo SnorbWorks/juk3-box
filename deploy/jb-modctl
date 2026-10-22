@@ -290,6 +290,20 @@ def cmd_setup():
     print("bus module listener ready")
 
 
+# What each command changes on the system drive: written through to it when
+# the system is protected (deploy/jb-rootfs), so it's there after a restart.
+PERSIST = {"unit": ["/etc/systemd/system"],
+           "install": ["/etc/systemd/system", "/etc/juk3-box", "/etc/mosquitto"],
+           "remove": ["/etc/systemd/system", "/etc/juk3-box", "/etc/mosquitto"],
+           "setup": ["/etc/systemd/system", "/etc/mosquitto", "/etc/tmpfiles.d"]}
+ROOTFS = "/usr/local/sbin/jb-rootfs"
+
+
+def persist(verb: str):
+    if os.path.exists(ROOTFS):
+        run(ROOTFS, "persist", *[p for p in PERSIST[verb] if os.path.exists(p)])
+
+
 def dispatch(a: list[str]):
     if len(a) == 3 and a[0] == "unit":
         cmd_unit(a[1], a[2])
@@ -301,6 +315,7 @@ def dispatch(a: list[str]):
         cmd_setup()
     else:
         die("unknown command")
+    persist(a[0])
 
 
 def serve():

@@ -25,6 +25,8 @@ it only ever does these:
                                           its CIRCUITPY drive ("replace" if it has other software)
     jb-setupctl hostname check|set NAME   the cabinet's address on the network (NAME.local, from
                                           its name): is another device already using it; use it
+    jb-setupctl rootfs on|off             protect the system drive from the next start, or stop
+                                          (deploy/jb-rootfs)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -497,7 +499,24 @@ def cmd_hostname(what: str, name: str) -> str:
     return name
 
 
+# What each command changes on the system drive: written through to it when
+# the system is protected (deploy/jb-rootfs), so it's there after a restart.
+# (config.txt and cmdline.txt are on the boot partition: never protected.)
+PERSIST = {"timezone": ["/etc/localtime", "/etc/timezone"],
+           "wifi-country": ["/etc/default/crda", "/etc/wpa_supplicant/wpa_supplicant.conf"],
+           "lastfm": ["/etc/juk3-box"],
+           "hostname": ["/etc/hostname", "/etc/hosts", "/etc/machine-info"]}
+ROOTFS = "/usr/local/sbin/jb-rootfs"
+
+
 def dispatch(a: list[str]) -> str:
+    out = act(a)
+    if a[0] in PERSIST and not (a[0] == "hostname" and a[1] == "check") and os.path.exists(ROOTFS):
+        run(ROOTFS, "persist", *[p for p in PERSIST[a[0]] if os.path.exists(p)])
+    return out
+
+
+def act(a: list[str]) -> str:
     if len(a) == 2 and a[0] == "psu":
         return cmd_psu(a[1])
     if len(a) == 2 and a[0] == "rtc-charge" and a[1] in ("on", "off"):
@@ -520,6 +539,11 @@ def dispatch(a: list[str]) -> str:
         return cmd_keypad(a[1:])
     if len(a) == 3 and a[0] == "hostname" and a[1] in ("check", "set"):
         return cmd_hostname(a[1], a[2])
+    if len(a) == 2 and a[0] == "rootfs" and a[1] in ("on", "off"):
+        r = run(ROOTFS, a[1], check=False)
+        if r.returncode:
+            die(r.stderr.strip().removeprefix("jb-rootfs: ") or "couldn't change it")
+        return r.stdout.strip()
     die("unknown command")
 
 

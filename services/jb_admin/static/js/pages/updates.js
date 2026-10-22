@@ -24,6 +24,7 @@ export async function show(main) {
       u.os.restart_needed ? restartNotice() : null,
       juk3boxCard(u.juk3box, refresh),
       osCard(u.os, refresh),
+      rootfsCard(u.rootfs, refresh),
       keypadCard(u.keypad),
       appCard(),
       insideCard(u)));
@@ -73,7 +74,8 @@ function restartNotice() {
     } }, 'power'));
 }
 
-const PHASES = { downloading: 'Downloading the update…', checking: 'Checking it\'s genuine…', installing: 'Installing…',
+const PHASES = { 'to install': 'Restarting to install (the system drive is protected)…',
+  downloading: 'Downloading the update…', checking: 'Checking it\'s genuine…', installing: 'Installing…',
   restarting: 'Restarting the jukebox…', 'rolling back': 'That didn\'t work; putting the last version back…' };
 
 const STEPS = [['downloading', 'Download'], ['checking', 'Check it\'s genuine'], ['installing', 'Install'],
@@ -124,7 +126,8 @@ function osCard(o, refresh) {
   const n = o.security.length + o.other.length;
   let line;
   const done = o.queue.filter(q => q.state === 'done').length;
-  if (o.phase) line = !done && o.download < 100 && o.queue.length
+  if (o.phase === 'to install') line = 'Restarting to install (the system drive is protected)…';
+  else if (o.phase) line = !done && o.download < 100 && o.queue.length
     ? `Downloading ${o.queue.length} update${o.queue.length === 1 ? '' : 's'}… ${o.download}%`
     : `Installing ${done + 1 > o.queue.length ? o.queue.length : done + 1} of ${o.queue.length}…`;
   else if (!o.checked_at) line = 'Not checked yet.';
@@ -152,6 +155,31 @@ function osCard(o, refresh) {
     shown,
     o.error ? h('div.notice', { style: { marginTop: '12px' } }, icon('triangle-alert'), h('span', o.error)) : null,
     o.phase ? null : list('Security fixes', o.security), o.phase ? null : list('Other updates', o.other));
+}
+
+// The read-only system drive (deploy/jb-rootfs).
+function rootfsCard(r, refresh) {
+  if (!r.data) {
+    return card(row('hard-drive', 'System drive',
+      'Not protected. A card made from the Juk3box image keeps its system read-only, so a pulled plug can\'t damage it; this one was set up another way.'));
+  }
+  let line;
+  if (r.protected && r.next_start) line = 'Protected: the system is read-only, so a pulled plug can\'t damage it. Your songs, settings and phones are kept on their own part of the card. Updates restart the jukebox to install, then once more.';
+  else if (r.next_start) line = 'Protected from the next start.';
+  else if (r.protected) line = 'Protected until the next start, then writable.';
+  else line = 'Off: the system drive is writable, so a pulled plug could damage it.';
+  const flip = async on => {
+    try {
+      await post(`/api/updates/rootfs/${on ? 'on' : 'off'}`, {});
+      toast(on ? 'The system drive is protected from the next start.' : 'The system drive is writable from the next start.', 'success');
+      refresh();
+    } catch (e) { showError(e); }
+  };
+  return card(
+    h('div.phone-row',
+      h('div.stat-icon', icon('hard-drive')),
+      h('div.phone-text', h('div.stat-value', 'System drive'), h('div.stat-sub', { style: WRAP }, line)),
+      switchControl(r.next_start, flip, r.next_start ? 'On' : 'Off')));
 }
 
 function keypadCard(k) {

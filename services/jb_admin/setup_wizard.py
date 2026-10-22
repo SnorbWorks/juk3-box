@@ -17,6 +17,7 @@ setup overlay; its yes/no answers come back on jukebox/jb-admin/setup-answer.
 import asyncio
 import json
 import math
+import os
 import re
 import socket
 import struct
@@ -845,6 +846,13 @@ class Finish(Step):
                 address = await w.admin.set_address(name)
             except WizardError as e:     # taken since the Name step: keep the old address
                 w.log.warning("setup: kept %s: %s", address, e)
+        if os.path.ismount("/data"):
+            # A card from the image: protect the system drive from the next
+            # start (deploy/jb-rootfs). Its first starts made its identity.
+            try:
+                await w.ctl("rootfs", "on")
+            except WizardError as e:
+                w.log.warning("setup: the system drive stays unprotected: %s", e)
         w.state["done"] = True
         w.state["finished_at"] = time.time()
         return {"address": address}

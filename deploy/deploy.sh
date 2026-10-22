@@ -54,7 +54,7 @@ ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/l
 
 # The setup wizard's privileged steps (docs/Setup Wizard — Plan.md): the same
 # arrangement as jb-modctl, with its own folder.
-ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-setupctl /usr/local/sbin/jb-setupctl && install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-update /usr/local/sbin/jb-update && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-update.service $REMOTE_DIR/deploy/systemd/jb-update.timer /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-setupctl.service $REMOTE_DIR/deploy/systemd/jb-setupctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupctl $DATA_DIR/setupctl/requests && systemctl daemon-reload && systemctl enable --now jb-setupctl.path jb-update.timer >/dev/null 2>&1"
+ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-setupctl /usr/local/sbin/jb-setupctl && install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-update $REMOTE_DIR/deploy/jb-rootfs /usr/local/sbin/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-update.service $REMOTE_DIR/deploy/systemd/jb-update.timer $REMOTE_DIR/deploy/systemd/jb-update-resume.service $REMOTE_DIR/deploy/systemd/jb-rootfs-data.service /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-setupctl.service $REMOTE_DIR/deploy/systemd/jb-setupctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupctl $DATA_DIR/setupctl/requests && systemctl daemon-reload && systemctl enable --now jb-setupctl.path jb-update.timer >/dev/null 2>&1 && systemctl enable jb-update-resume.service jb-rootfs-data.service >/dev/null 2>&1"
 
 # Setup mode's folder (shared/setup_net.py): jb-admin and jb-core ask, jb-netwatch
 # (root) runs the hotspot and answers. admin's own, so a Wi-Fi password on its
@@ -82,5 +82,9 @@ rm -f "$RENDERED_UNIT"
 ssh_pi_sudo "install -o root -g root -m 0644 /tmp/${UNIT_NAME}.service /etc/systemd/system/${UNIT_NAME}.service && rm -f /tmp/${UNIT_NAME}.service"
 
 ssh_pi_sudo "systemctl daemon-reload && systemctl enable --now ${UNIT_NAME}.service && systemctl restart ${UNIT_NAME}.service"
+
+# A protected system drive (deploy/jb-rootfs): write all of this through to
+# the drive underneath, or it's gone at the next start. Nothing to do otherwise.
+ssh_pi_sudo "/usr/local/sbin/jb-rootfs persist $REMOTE_DIR /usr/local/sbin /etc/systemd/system /etc/udev/rules.d /etc/polkit-1/rules.d >/dev/null"
 
 echo "Deployed and (re)started ${UNIT_NAME}.service"

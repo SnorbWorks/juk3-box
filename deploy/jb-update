@@ -9,6 +9,7 @@
     jb-update os-check       which Raspberry Pi OS packages have updates (security ones apart)
     jb-update os-apply security|all
                              install them: the security fixes, or everything
+    jb-update resume         after restarting without protection to install (below)
 
 latest.json on the newest release names the code bundle and its signature.
 The bundle is installed only if it's signed with the key this jukebox
@@ -24,6 +25,13 @@ each night when updates are automatic, everything else only when the owner
 asks (Chromium, the kernel and firmware are where a jukebox could break).
 Some packages only take effect on a restart: "restart_needed", which the
 admin acts on overnight when nothing is playing.
+
+On a protected system (deploy/jb-rootfs: the system drive read-only
+behind an overlay) nothing installed would survive a restart, so apply
+and os-apply instead note what to install (RESUME), turn the protection
+off for one start and restart; jb-update-resume.service installs it then,
+turns the protection back on and restarts again. Checking for OS updates
+keeps apt's lists on the data partition, not in memory.
 
 A copy without /opt/juk3-box/VERSION is a developer's (deploy.sh): it's
 never updated from here. Runs as root: from the timer (jb-update.timer),
@@ -64,6 +72,9 @@ UPGRADABLE_RE = re.compile(r"^([^/\s]+)/(\S+) (\S+) \S+ \[upgradable from: ([^\]
 # package may carry its arch; the message may hold colons).
 STATUS_RE = re.compile(r"^(dlstatus|pmstatus):(.+?):(\d+(?:\.\d+)?):(.*)$")
 RESTART_RE = re.compile(r"^(linux-image|linux-headers|raspi-firmware|rpi-eeprom|raspberrypi-sys-mods|libc6|systemd|dbus)")
+RESUME = DIR / "resume.json"
+ROOTFS = "/usr/local/sbin/jb-rootfs"
+APT_DATA = Path("/data/cache/apt")       # apt's lists and downloads while protected
 APT_OPTS = ("-y", "-q", "-o", "DPkg::Lock::Timeout=300",
             "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold")
 
@@ -129,6 +140,49 @@ def fetch(url: str, dest: Path | None = None) -> bytes | None:
 
 def run(*cmd, check=True, **kw):
     return subprocess.run(cmd, check=check, capture_output=True, text=True, **kw)
+
+
+# A protected system ----------------------------------------------------------
+
+def protected(proc_cmdline: str | None = None) -> bool:
+    """Started behind the overlay (deploy/jb-rootfs)."""
+    text = Path("/proc/cmdline").read_text() if proc_cmdline is None else proc_cmdline
+    return re.search(r"(^|\s)overlayroot=", text) is not None
+
+
+def apt_dirs() -> tuple:
+    """While protected, apt keeps its lists and downloads on the data
+    partition (in memory they'd take a good part of the RAM)."""
+    if not protected():
+        return ()
+    for d in (APT_DATA / "lists" / "partial", APT_DATA / "archives" / "partial"):
+        d.mkdir(parents=True, exist_ok=True)
+    return ("-o", f"Dir::State::Lists={APT_DATA / 'lists'}", "-o", f"Dir::Cache={APT_DATA}")
+
+
+def restart_to_install(verbs: list[list[str]]) -> None:
+    """Note what to install, start once without protection, restart."""
+    write_json(RESUME, {"verbs": verbs, "at": time.time()})
+    run(ROOTFS, "off")
+    run("systemctl", "--no-block", "reboot")
+
+
+def resume() -> dict:
+    """The start without protection: install what was noted, protect the
+    system again, restart. The note goes first, so a failure can't loop."""
+    note = read_json(RESUME, {})
+    RESUME.unlink(missing_ok=True)
+    s = {}
+    try:
+        for verb in note.get("verbs") or []:
+            if verb == ["apply"]:
+                s = apply()
+            elif len(verb) == 2 and verb[0] == "os-apply" and verb[1] in ("security", "all"):
+                s = {"os": os_apply(verb[1])}
+    finally:
+        run(ROOTFS, "on", check=False)
+        run("systemctl", "--no-block", "reboot", check=False)
+    return s
 
 
 # Checking --------------------------------------------------------------------
@@ -210,6 +264,9 @@ def apply() -> dict:
     s = check()
     if not s.get("available"):
         return s
+    if protected():
+        restart_to_install([["apply"]])
+        return state(phase="to install", error=None)
     current, latest, rel = s["current"], s["latest"], s["release"]
     state(phase="downloading", started_at=time.time(), error=None)
     work = DIR / "download"
@@ -282,11 +339,11 @@ def parse_upgradable(text: str) -> tuple[list, list]:
 
 
 def upgradable() -> tuple[list, list]:
-    return parse_upgradable(run("apt", "list", "--upgradable", check=False).stdout)
+    return parse_upgradable(run("apt", *apt_dirs(), "list", "--upgradable", check=False).stdout)
 
 
 def os_check() -> dict:
-    r = run("apt-get", "update", "-q", "-o", "DPkg::Lock::Timeout=300", check=False, timeout=900)
+    r = run("apt-get", *apt_dirs(), "update", "-q", "-o", "DPkg::Lock::Timeout=300", check=False, timeout=900)
     security, other = upgradable()
     error = None if r.returncode == 0 else \
         "Couldn't reach Raspberry Pi OS's servers: " + (r.stderr or r.stdout).strip()[-300:]
@@ -343,6 +400,9 @@ def os_apply(which: str) -> dict:
     chosen = security if which == "security" else security + other
     if not chosen:
         return os_state(security=security, other=other, phase=None)
+    if protected():
+        restart_to_install([["os-apply", which]])
+        return os_state(phase="to install", what=which, error=None, queue=[])
     progress = Progress([p["name"] for p in chosen])
     os_state(phase="installing", what=which, error=None, queue=progress.view(), download=0)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive", "APT_LISTCHANGES_FRONTEND": "none"}
@@ -396,14 +456,25 @@ def main():
     elif a == ["apply"]:
         s = apply()
     elif a == ["auto"]:
-        s = apply() if auto_on() else check()
-        os_check()
-        if auto_on():
-            os_apply("security")
+        if auto_on() and protected():
+            # Both in one start without protection, not a restart each.
+            s = check()
+            os_check()
+            security, _ = upgradable()
+            verbs = ([["apply"]] if s.get("available") else []) + ([["os-apply", "security"]] if security else [])
+            if verbs:
+                restart_to_install(verbs)
+        else:
+            s = apply() if auto_on() else check()
+            os_check()
+            if auto_on():
+                os_apply("security")
     elif a == ["os-check"]:
         s = os_check()
     elif len(a) == 2 and a[0] == "os-apply" and a[1] in ("security", "all"):
         s = os_apply(a[1])
+    elif a == ["resume"]:
+        s = resume()
     elif len(a) == 2 and a[0] == "set-auto" and a[1] in ("on", "off"):
         write_json(SETTINGS, {"auto": a[1] == "on"})
         s = {"auto": a[1] == "on"}

@@ -1,0 +1,16 @@
+# Updates on a protected system (deploy/jb-rootfs): jb-update asked for one
+# start without protection to install them. This installs them, protects
+# the system again and restarts (deploy/jb-update resume).
+[Unit]
+Description=juk3-box update (after restarting to install)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/juk3-box/update/resume.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jb-update resume
+TimeoutStartSec=90min
+
+[Install]
+WantedBy=multi-user.target

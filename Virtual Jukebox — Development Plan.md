@@ -14,17 +14,17 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 | 2c LED board | Done, all three chains with audio and at their caps. **Open: the level bar's strip 19-20 joint** (working now; reflow it) |
 | 3 Phone link test | Answered |
 | 4 Phone source | Bluetooth and the Helper app, one phone in charge at a time (Oct 20). Open: a second phone with a library; Bluetooth reliability in the cabinet |
-| 5 Library | Done. Open: real artists and albums, play counts for a popular view |
-| 6 Core | Done except: Up Next removal (gesture undecided), play counts; check Cancel clears an entry after the controls rewrite |
+| 5 Library | Done: exact artists and albums from the Helper app, borrowed by Bluetooth songs it also has (Oct 22); play counts and Most Played |
+| 6 Core | Done. Reset clears a half-typed pick (checked Oct 22); holding it cancels a song |
 | 6b Lights | Done, on the Pi 5's PIO driver (Oct 20) |
 | 7 UI platform | Done; Neon is the default (Oct 21) |
 | 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, Last.fm), Updates (Oct 22), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
-| 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Open: the live netwatch test, log rotation, read-only root, cold boot under a minute, pull-the-plug tests |
+| 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Read-only system drive built for image cards (Oct 22; test on a fresh card with the image). Open, later: the live netwatch test, log rotation, cold boot under a minute, pull-the-plug tests |
 | 9 Hard drive | Done (Oct 14) |
 
 ### Next (Oct 22, 2026)
 
-1. **The card image**: build one and start a copy (the code is in place; no release has been made yet).
+1. **The card image**: build one and start a copy (the code is in place; no release has been made yet). With it, test the read-only system drive on a fresh card: the data partition at the first start, protection on at setup's Finish, a rename and a module install surviving a restart, an OS update restarting to install and back.
 2. ~~An Updates tab~~ *Done Oct 22*: Admin › Updates: Juk3box, Raspberry Pi OS (security fixes nightly when automatic; the rest when asked), the keypad program, the app, what's inside a release; overnight restarts when nothing plays; the dashboard says when there's news. Later: whole-system (Juk3box OS) updates.
 3. Waiting on hardware or the owner: the level bar joint; an Android phone (Roadmap item 3); WMM off in setup mode (watch for it in the fresh-card test).
 
@@ -202,7 +202,7 @@ Ideas from a 2026-09-27 design conversation, not yet implemented — captured he
 - **Volume**: double-click = toggle mute (jb-audio's `toggle_mute` command already exists — see `services/jb_audio/main.py` — nothing currently triggers it), distinct from the existing single-click-to-enter-slider-adjust-mode.
 - **Phone** (Phase 4): click = quick glance at who's connected (already built); hold = open the phone pairing/management screen (pair new, forget old) — keeps the common case uncluttered by the rarer, more deliberate one.
 - **Reset** (built Oct 12, the user's design): click = cancel a waiting letter, or the power menu; **hold 1 s** while a song plays = cancel the song (the next queued plays; nothing queued = stopped and cleared from Now Playing); hold with nothing playing = the power menu; **keep holding to 4 s** during music = cancel, then the menu with playback paused. The menu: Reboot / Shut down / Cancel by the knob, starting on Cancel; Reset click or 20 s = cancel and resume. The Reset light is red while held and blinks twice on the cancel and again when the menu opens.
-- **Up Next — still undecided**: how to remove a specific queued item once it's reachable via Up Next's scroll mode (click vs. hold). Needs a decision before Phase 6/7 implement it.
+- **Up Next — decided (Oct 22)**: a long hold of Reset already does it (the song is cancelled and the queue moves on).
 
 ## Phase 2c: LED board build
 
@@ -271,12 +271,12 @@ Done when: the phone reconnects on boot, two phones switch from the command line
 
 A per-phone cache so the board appears instantly.
 
-- [x] SQLite keyed per phone (`/var/lib/juk3-box/library.db`): tracks (with duplicate titles), last played, added, favorites, iTunes artwork/artist/album/genre. Play counts not yet
+- [x] SQLite keyed per phone (`/var/lib/juk3-box/library.db`): tracks (with duplicate titles), last played, added, favorites, iTunes artwork/artist/album/genre. Play counts too
 - [x] Sync: jb-source-phone drives it (a fresh crawl per new BlueZ player, since IDs aren't stable); jb-library stores, prunes songs gone from the phone (skipped if a sync looks short) and republishes only on change
 - [x] Fallback for unstable IDs: the cached board shows instantly; IDs refresh on sync, and a dead ID self-heals on pick
-- [ ] Sort views: title, artist, album, recent, popular. Title, artist/album/genre drill-down, New and Recents work; popular needs play counts; artist/album are iTunes guesses until read from the phone's Artists folder
+- [x] Sort views: title, artist, album, recent, popular (Top 100 from Last.fm, Most Played from this jukebox's counts)
 - [x] Deep crawl (jb-crawl, separate capped service): Playlists live (a Home module and a board sort). Artists/Albums/Genres work but take ~19 s per folder over Bluetooth, so they're disabled on the Pi (`/etc/juk3-box/jb-crawl.json`). Findings and tools: `tools/avrcp/`
-- [ ] Album Play and real artist/album: decide the route -- an iPhone Shortcut that sends the full library over Wi-Fi (exact, seconds, no Bluetooth browsing) vs. a resumable, incremental Bluetooth crawl (hours the first time; risk of wedging the phone's Bluetooth)
+- [x] Real artist/album: the Juk3box Helper app sends the iPhone's own tags over Wi-Fi (exact, seconds). A Bluetooth phone's songs borrow them where the app has the same song (Oct 22: 893 of 910, 518 guesses corrected); without the app they stay iTunes guesses
 - [x] Serve pages of 100 slots (the UI pages the snapshot; 10–100 per page, owner setting)
 
 Done when: switching back to a known phone shows its library instantly and every sort view is correct.
@@ -286,12 +286,12 @@ Done when: switching back to a known phone shows its library instantly and every
 The jukebox behavior, working end to end with no UI.
 
 - [x] Slot labels A1–K0: each screen column holds two letters (A/B, C/D, E/F, G/H, J/K); digits run 1–9, then 0
-- [ ] Entry state machine: letter highlights its 10-slot block, digit completes; cancel or timeout clears (`jukebox/jb-core/entry`, `/selection`). Letter, digit and the 10 s timeout work; **Reset doesn't cancel yet** (jb-core ignores it)
+- [x] Entry state machine: letter highlights its 10-slot block, digit completes; cancel or timeout clears (`jukebox/jb-core/entry`, `/selection`). A digit first is rejected. Reset's click cancels (checked Oct 22)
 - [x] Paging and sorting (in the UI engine); menu state comes with the Settings and phone screens
 - [x] Selection queue using the Phase 3 end-of-track strategy; shuffle (picks go ahead of shuffle's own; turning shuffle on starts playback). Clearing the queue on phone switch comes with Phase 4 switching
-- [ ] Record plays for the popular view (last played is recorded; counts aren't)
+- [x] Record plays for the popular view: a play counts after 30 s, from every source (Most Played)
 - [ ] Now Playing double-click (skip to next) and hold (previous/restart) drive through this same queue mechanism, not a raw transport command (see the gesture-to-function mapping in Phase 2b)
-- [ ] Up Next item-removal gesture, once decided (see the open question in Phase 2b's gesture-to-function mapping)
+- [x] Up Next item removal: a long hold of Reset cancels the song
 
 Done when: select, queue three songs, they play in order, and paging and sorting change what each key selects.
 
@@ -312,7 +312,7 @@ The buttons and cabinet respond to what the jukebox is doing. Runs as `jb-lights
 
 - [x] Pixel-index to button map (`buttons.py`; chain order K…A, Single, Album, 1…0, Reset)
 - [x] buttons-theme1 (`themes/buttons_theme1.py`), currently driven straight from jb-input key presses
-- [ ] Drive the button lights from jb-core's entry state instead of raw keys, so the lights, the board and the 10 s timeout always agree
+- [x] Drive the button lights from jb-core's entry state instead of raw keys, so the lights, the board and the 10 s timeout always agree. Every key typed so far lights, so a numbers-only jukebox shows its digits too (Oct 22)
 - [ ] Menu and pairing scenes; accent-strip scenes (idle, playing, selection)
 - [x] Per-frame current limiter for the level bar (4A); estimate draw from pixel values and scale the frame
 - [ ] Limiter for the accent strip (6A)
@@ -453,7 +453,8 @@ It behaves like a machine, not a computer.
 - [ ] Boot order, auto-restart, watchdog. Partly there: every service restarts on failure, publish-only services exit when a task dies, and a clock jump at boot is survived (mosquitto drops clients when NTP jumps the clock; the kiosk uses native timers). The hardware watchdog is the Pi OS default (1 min)
 - [ ] Phone leaves range mid-song; power cut during a sync
 - [x] Power-loss-safe writes (Oct 14): every state file goes through shared/files.py (temp file, fsync, rename, fsync of the folder): phone book, Bluetooth on/off, crawl progress, jb-netwatch history, mood-tag cache, Weather Mix names; the optimized background video is synced before it counts as done. The admin's files already were; the library is SQLite (journaled, power-safe by default)
-- [ ] Log rotation; read-only or overlay root filesystem
+- [ ] Log rotation (later)
+- [x] Read-only system drive (Oct 22, deploy/jb-rootfs): image cards get a fixed 8 GB system partition and, at the first start, a data partition ("jbdata", /data) for the library and settings, Bluetooth pairings, Wi-Fi, the home folder (the screen's browser profile) and the logs, bound into place. The setup wizard's Finish turns on Raspberry Pi OS's overlay (overlayroot=tmpfs:recurse=0): the system reads from the card and writes to memory. The root helpers write the owner's system changes (name, time zone, modules) through to the drive underneath; updates restart without protection to install, then restart protected (jb-update resume); apt's lists stay on /data. Admin › Updates › System drive shows it, with the switch. **Not yet tried on a card**: test with the card image. The development cabinet stays writable (one partition; it refuses the switch)
 - [ ] Cold boot to a working jukebox in under a minute
 - [x] Stays online on its own: jb-netwatch (Oct 14) reconnects the Wi-Fi, turns it off and on, and as a last resort reboots (at once for the Pi 4's hung brcmfmac driver, seen Oct 8, 13/14 and 14). Spaced-out reboots, never in a loop, waits for the song
 - [ ] **Test to do: jb-netwatch live, end to end.** Turn the Pi's Wi-Fi off on purpose (`sudo nmcli radio wifi off`, from the Pi's own screen or a delayed command, since SSH goes with it) and watch it recover by itself in ~2 min: `offline`, `reconnect` at 1 min, `wifi-off-on` at 2 min, `back-online` in /var/lib/juk3-box/netwatch/events.jsonl. Then, ideally, a real driver hang should end in one `reboot` and a working jukebox
@@ -508,7 +509,7 @@ Also on the list: the jb-netwatch live test (Phase 8), power-loss safety (settin
 | Decision | Needed by | Current thinking |
 | --- | --- | --- |
 | Button and gesture mapping | Phase 2b config | Deferred. Draft: knob turn = volume, push + turn = paging, Reset = cancel/back, plus the click/double-click/hold mapping in Phase 2b's "Gesture-to-function mapping" section. Lives in config, costs nothing to change |
-| Up Next: removing a queued item | Phase 6/7 | Undecided — click vs. hold once an item is reachable via Up Next's scroll mode; see Phase 2b's gesture-to-function mapping |
+| Up Next: removing a queued item | Phase 6/7 | Decided Oct 22: a long hold of Reset cancels the song |
 | Connection policy: takeover vs. locked | Phase 4 | Locked: switching only from the jukebox menu |
 | Monitor size, resolution, aspect | Phase 7 | Decided: the UI is responsive, so any monitor works; the default theme mockups are 16:10 |
 | Coin-return retrofit feasibility | Phase 2a | Fallback: separate panel knob, still fits the pin budget |

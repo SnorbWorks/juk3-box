@@ -37,6 +37,9 @@ apt-get install -y -q mosquitto mosquitto-clients python3-venv \
 # Without their recommends, as on the first cabinet.
 apt-get install -y -q --no-install-recommends ffmpeg fonts-noto-cjk build-essential python3-dev \
   mpv shairport-sync grim
+# The read-only system drive (deploy/jb-rootfs): Raspberry Pi OS's overlay, and
+# what jb-rootfs uses to write through to the drive underneath.
+apt-get install -y -q overlayroot rsync
 # The AirPlay receiver runs as jb-airplay, not the package's own service.
 systemctl disable --now shairport-sync 2>/dev/null || true
 
@@ -53,9 +56,9 @@ done
 
 say "Root helpers, services, rules"
 install -o root -g root -m 0755 "$REPO/deploy/jb-modctl" "$REPO/deploy/jb-setupctl" "$REPO/deploy/jb-drive" \
-  "$REPO/deploy/jb-update" /usr/local/sbin/
+  "$REPO/deploy/jb-update" "$REPO/deploy/jb-rootfs" /usr/local/sbin/
 for u in jb-modctl.service jb-modctl.path jb-setupctl.service jb-setupctl.path jb-drive@.service \
-    jb-update.service jb-update.timer; do
+    jb-update.service jb-update.timer jb-update-resume.service jb-rootfs-data.service; do
   install -o root -g root -m 0644 "$REPO/deploy/systemd/$u" /etc/systemd/system/
 done
 for u in $OWN_UNITS; do
@@ -124,7 +127,8 @@ say "Clock from the internet"
 say "Turning it all on"
 systemctl daemon-reload
 [ -n "$IMAGE" ] || udevadm control --reload
-systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer var-swapoverflow.swap >/dev/null
+systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer jb-update-resume.service \
+  jb-rootfs-data.service var-swapoverflow.swap >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done
 

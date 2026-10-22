@@ -1,0 +1,245 @@
+#!/usr/bin/python3
+"""jb-rootfs: the read-only system drive (Phase 8: a pulled plug can't
+damage the system).
+
+A card made from the Juk3box image has three partitions: boot, the system
+(a fixed size, read-only once protected) and the data partition (the rest
+of the card, label "jbdata", mounted at /data). Protected, the system
+starts behind Raspberry Pi OS's overlay (overlayroot=tmpfs in cmdline.txt):
+it reads from the card and writes to memory, and every change is gone at
+the next start. What the jukebox must keep lives on the data partition,
+bound into place at each start (DATA_DIRS): the library and settings,
+Bluetooth pairings, Wi-Fi networks, the screen's browser profile, the
+logs. Changes the owner makes to the system itself (the name, the time
+zone, installed modules) are written through to the card underneath as
+well ("persist"); updates restart without protection, install, and
+restart protected (deploy/jb-update).
+
+    jb-rootfs status              JSON: protected now, at the next start, the data partition
+    jb-rootfs on|off              protect the system from the next start, or stop
+    jb-rootfs persist PATH...     write these through to the system drive underneath
+                                  (nothing to do when it isn't protected)
+    jb-rootfs make-data           the first start of an image card: the data partition
+                                  (deploy/systemd/jb-rootfs-data.service), then a restart;
+                                  the setup wizard's Finish turns the protection on
+
+Installed copy: /usr/local/sbin/jb-rootfs, root-owned.
+"""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+CMDLINE = Path("/boot/firmware/cmdline.txt")
+# recurse=0: only / is overlaid; /boot/firmware and /data stay as they are.
+OVERLAY = "overlayroot=tmpfs:recurse=0"
+OVERLAY_RE = re.compile(r"(^|\s)overlayroot=\S*")
+LOWER = Path("/media/root-ro")          # overlayroot puts the card's system here
+DATA = Path("/data")
+LABEL = "jbdata"
+# (folder on the data partition, where it's bound)
+DATA_DIRS = (("juk3-box", "/var/lib/juk3-box"), ("bluetooth", "/var/lib/bluetooth"),
+             ("network", "/etc/NetworkManager/system-connections"), ("home", "/home/admin"),
+             ("journal", "/var/log/journal"))
+FSTAB = Path("/etc/fstab")
+BEGIN = "# --- juk3box data: written by jb-rootfs; don't edit by hand ---"
+END = "# --- end juk3box data ---"
+FIRST_START = Path("/etc/juk3-box/make-data-partition")   # left by deploy/image/build-image.sh
+SWAP_UNIT = Path("/etc/systemd/system/var-swapoverflow.swap")
+SWAP_MB = 512
+
+
+class Refused(Exception):
+    pass
+
+
+def run(*cmd, check=True, **kw):
+    return subprocess.run(cmd, check=check, capture_output=True, text=True, **kw)
+
+
+def write(path: Path, text: str, mode: int = 0o644):
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+# The switch ---------------------------------------------------------------------
+
+def cmdline_with(text: str, on: bool) -> str:
+    """cmdline.txt (one line) with the overlay on or off, the rest kept."""
+    line = OVERLAY_RE.sub("", text.strip()).strip()
+    line = re.sub(r"\s+", " ", line)
+    return (f"{OVERLAY} {line}" if on else line) + "\n"
+
+
+def protected_now() -> bool:
+    """Started behind the overlay (the system drive underneath at LOWER)."""
+    return bool(OVERLAY_RE.search(Path("/proc/cmdline").read_text())) and LOWER.is_dir()
+
+
+def status() -> dict:
+    data = run("findmnt", "-n", "-o", "SOURCE", str(DATA), check=False).stdout.strip()
+    return {"protected": protected_now(),
+            "next_start": bool(OVERLAY_RE.search(CMDLINE.read_text())),
+            "data": bool(data), "overlayroot": shutil.which("overlayroot-chroot") is not None}
+
+
+def switch(on: bool) -> str:
+    s = status()
+    if on and not s["data"]:
+        raise Refused("this card has no data partition: protected, nothing the jukebox keeps would survive a restart")
+    if on and not s["overlayroot"]:
+        raise Refused("the overlayroot package isn't installed")
+    write(CMDLINE, cmdline_with(CMDLINE.read_text(), on), 0o755)
+    return "on at the next start" if on else "off at the next start"
+
+
+# Writing through ------------------------------------------------------------------
+
+class Writable:
+    """The system drive underneath, writable for a moment."""
+
+    def __enter__(self):
+        run("mount", "-o", "remount,rw", str(LOWER))
+        return LOWER
+
+    def __exit__(self, *exc):
+        os.sync()
+        run("mount", "-o", "remount,ro", str(LOWER), check=False)
+
+
+def persist(paths: list[str]) -> str:
+    """Each path as it is now (a file, a folder, a link, or gone) onto the
+    system drive underneath, so it's there at the next start."""
+    for p in paths:
+        if not p.startswith("/") or ".." in Path(p).parts or p.startswith(("/proc", "/sys", "/dev", "/run", "/data")):
+            raise Refused(f"not a system path: {p}")
+    if not protected_now():
+        return "not protected"
+    with Writable() as lower:
+        for p in paths:
+            src, dst = Path(p), lower / p.lstrip("/")
+            if src.is_dir() and not src.is_symlink():
+                dst.mkdir(parents=True, exist_ok=True)
+                run("rsync", "-a", "--delete", f"{src}/", f"{dst}/")
+            elif src.exists() or src.is_symlink():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                run("cp", "-a", "--remove-destination", str(src), str(dst))
+            elif dst.exists() or dst.is_symlink():
+                shutil.rmtree(dst) if dst.is_dir() and not dst.is_symlink() else dst.unlink()
+    return "written"
+
+
+# The data partition (first start) --------------------------------------------------
+
+def fstab_with(text: str) -> str:
+    """fstab with our block (the data partition and its folders bound into
+    place) at the end, replacing an earlier one."""
+    text = re.sub(rf"\n?{re.escape(BEGIN)}.*?{re.escape(END)}\n?", "\n", text, flags=re.S).rstrip("\n")
+    lines = [BEGIN, f"LABEL={LABEL}  {DATA}  ext4  defaults,noatime  0  2"]
+    lines += [f"{DATA}/{name}  {where}  none  bind,x-systemd.requires-mounts-for={DATA}  0  0"
+              for name, where in DATA_DIRS]
+    return text + "\n" + "\n".join(lines + [END]) + "\n"
+
+
+def swap_unit_with(text: str) -> str:
+    return re.sub(r"^What=.*$", f"What={DATA}/swapoverflow", text, flags=re.M)
+
+
+def root_disk() -> tuple[str, int]:
+    """The card ("/dev/mmcblk0") and the system's partition number."""
+    part = run("findmnt", "-n", "-o", "SOURCE", "/").stdout.strip()
+    disk = "/dev/" + run("lsblk", "-no", "pkname", part).stdout.strip()
+    num = int(Path(f"/sys/class/block/{Path(part).name}/partition").read_text())
+    return disk, num
+
+
+def make_data() -> str:
+    """The first start of an image card: a data partition after the system
+    (to the end of the card), the jukebox's folders moved onto it and bound
+    into place, the overflow swap moved there too; then a restart, so
+    everything starts with them in place."""
+    if not FIRST_START.exists():
+        return "nothing to do"
+    disk, num = root_disk()
+    if num != 2:
+        raise Refused(f"unexpected partitions: the system is partition {num}")
+    data_part = f"{disk}p3" if disk[-1].isdigit() else f"{disk}3"
+    if not Path(data_part).exists():
+        # After the system's partition, to the end of the card; the kernel
+        # is told about the new one (the system's is in use, so no re-read).
+        run("sh", "-c", f"echo ',,L' | sfdisk --append --no-reread {disk}")
+        run("partx", "--add", "--nr", "3", disk, check=False)
+        run("udevadm", "settle")
+        for _ in range(20):
+            if Path(data_part).exists():
+                break
+            time.sleep(0.5)
+        else:
+            raise Refused(f"{data_part} didn't appear")
+        run("mkfs.ext4", "-q", "-F", "-L", LABEL, data_part)
+    DATA.mkdir(exist_ok=True)
+    if not run("findmnt", "-n", str(DATA), check=False).stdout.strip():
+        run("mount", data_part, str(DATA))
+    for name, where in DATA_DIRS:
+        target = DATA / name
+        if not target.exists():
+            Path(where).mkdir(parents=True, exist_ok=True)
+            run("cp", "-a", f"{where}/.", str(target) + "/") if any(Path(where).iterdir()) \
+                else target.mkdir()
+            st = os.stat(where)
+            os.chown(target, st.st_uid, st.st_gid)
+            os.chmod(target, st.st_mode & 0o7777)
+    if SWAP_UNIT.exists():
+        swap = DATA / "swapoverflow"
+        if not swap.exists():
+            run("fallocate", "-l", f"{SWAP_MB}M", str(swap))
+            swap.chmod(0o600)
+            run("mkswap", str(swap))
+        write(SWAP_UNIT, swap_unit_with(SWAP_UNIT.read_text()))
+        Path("/var/swapoverflow").unlink(missing_ok=True)
+    write(FSTAB, fstab_with(FSTAB.read_text()))
+    # Not protected yet: this card still makes its own identity (machine id,
+    # SSH keys) on these first starts. The setup wizard's Finish turns it on.
+    FIRST_START.unlink()
+    os.sync()
+    run("systemctl", "--no-block", "reboot")
+    return "made; restarting"
+
+
+def main():
+    if os.geteuid() != 0:
+        print("jb-rootfs: must run as root", file=sys.stderr)
+        sys.exit(2)
+    a = sys.argv[1:]
+    try:
+        if a == ["status"]:
+            print(json.dumps(status()))
+        elif a in (["on"], ["off"]):
+            print(switch(a[0] == "on"))
+        elif len(a) >= 2 and a[0] == "persist":
+            print(persist(a[1:]))
+        elif a == ["make-data"]:
+            print(make_data())
+        else:
+            raise Refused("status | on | off | persist PATH... | make-data")
+    except Refused as e:
+        print(f"jb-rootfs: {e}", file=sys.stderr)
+        sys.exit(2)
+    except subprocess.CalledProcessError as e:
+        print(f"jb-rootfs: {' '.join(e.cmd)} failed: {(e.stderr or '').strip()[-300:]}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

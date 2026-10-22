@@ -11,6 +11,8 @@ place, with one switch for automatic updates.
     release is tested as a whole.
   - The main programs from Raspberry Pi OS, with their versions.
   - The iPhone app: the App Store updates it.
+  - The system drive: protected (read-only, deploy/jb-rootfs) or not, and
+    the switch. Protected, updates restart once to install and once more.
 
 Restarts: some OS updates only take effect after one. With automatic
 updates on, the admin restarts the jukebox overnight (RESTART_HOURS) when
@@ -19,6 +21,7 @@ nothing is playing; otherwise the tab offers a Restart button.
 
 import asyncio
 import json
+import os
 import re
 import subprocess
 import time
@@ -45,6 +48,18 @@ def boot_time() -> float:
     except OSError:
         pass
     return 0.0
+
+
+def rootfs_view(proc_cmdline: Path = Path("/proc/cmdline"), boot_cmdline: Path = Path("/boot/firmware/cmdline.txt"),
+                data: Path = Path("/data")) -> dict:
+    """The system drive's protection (deploy/jb-rootfs): now, from the next
+    start, and whether this card has the data partition it needs."""
+    def has(path):
+        try:
+            return re.search(r"(^|\s)overlayroot=", path.read_text()) is not None
+        except OSError:
+            return False
+    return {"protected": has(proc_cmdline), "next_start": has(boot_cmdline), "data": os.path.ismount(data)}
 
 
 def included(repo: Path = REPO) -> list[dict]:
@@ -141,7 +156,7 @@ class Updates:
         if self._system is None:
             self._system = system_versions()
         return {"auto": j["auto"], "juk3box": j, "os": o, "keypad": k, "included": included(),
-                "system": self._system, "announce": self.announcement(j, o, k)}
+                "system": self._system, "rootfs": rootfs_view(), "announce": self.announcement(j, o, k)}
 
     def quiet(self) -> bool:
         """Nothing playing, from any source."""
