@@ -69,6 +69,142 @@ html, body {
   justify-content: center;
 }
 
+/* ------------------------------------------------- Popups: the default look
+   Every popup (power, Now Playing, phones, pairing, confirmations, volume)
+   looks like Neon's unless the theme styles it: a theme that doesn't (Bare,
+   the fallback when another theme can't load) still gets readable popups
+   with the knob plainly on one button. Neon's own variables steer it when
+   the theme has them, Neon's colors when it doesn't. */
+#jb-popup-layer {
+  background: hsl(from var(--opt-panel, #0d1428) calc(h + 0.556) calc(s * 1.178) calc(l - 6.471) / 0.8);
+  /* No live blur: blurring the whole screen behind a popup made the Pi
+     crawl while it was open (every knob turn repainted it) and its extra
+     buffers ran it out of memory (2026-10-14). A deeper dim instead. */
+}
+.jb-popup {
+  min-width: 26vw;
+  padding: 3.4vh 2.4vw;
+  border-radius: calc(2.2vh * var(--opt-roundness, 1));
+  background: linear-gradient(160deg, hsl(from var(--opt-panel, #0d1428) calc(h + 1.709) calc(s * 0.945) calc(l + 10.784) / 0.82), hsl(from var(--opt-panel, #0d1428) calc(h + 1.709) calc(s * 1.021) calc(l - 0.588) / 0.88));
+  box-shadow: inset 0 0 0 1px hsl(from var(--opt-highlight, #c8d4ff) calc(h + 0.047) s calc(l - 11.765) / 0.28), 0 2vh 5vh rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+.jb-popup-title { margin-bottom: 2.4vh; font-size: 2.6vh; font-weight: 620; }
+.jb-volume-bar { height: 1.2vh; border-radius: calc(0.6vh * var(--opt-roundness, 1)); background: hsl(from var(--opt-button, #3c56e6) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
+.jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent, #3fd0ff) h s l), hsl(from var(--opt-accent2, #4a7dff) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent, #3fd0ff) h s l / 0.6); }
+.jb-volume-value { margin-top: 1.8vh; font-size: 3.4vh; font-weight: 600; }
+.jb-edge .jb-notice { max-width: 52vh; margin: 1.6vh auto 0; }
+.jb-notice, .jb-phones, .jb-pairing { font-size: 1.9vh; line-height: 1.5; color: var(--ink-soft, rgba(242, 244, 255, 0.72)); }
+.jb-phones, .jb-pairing { min-width: 52vh; max-width: 70vh; text-align: center; }
+.jb-phone-row { text-align: left; }
+.jb-phones-message b, .jb-pairing b { color: var(--ink, #f2f4ff); font-weight: 620; }
+.jb-phones-empty { color: var(--ink-faint, rgba(200, 212, 255, 0.5)); }
+
+/* Phones menu: one row per paired phone, then the buttons. */
+.jb-phones-list { display: flex; flex-direction: column; gap: 0.8vh; margin-bottom: 2.4vh; }
+.jb-phone-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 2vw;
+  padding: 1.4vh 1.6vw;
+  border-radius: calc(1.3vh * var(--opt-roundness, 1));
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: transform 180ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1));
+}
+.jb-phone-name { font-size: 2.2vh; font-weight: 620; color: var(--ink, #f2f4ff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-phone-status { flex: none; font-size: 1.6vh; color: var(--ink-faint, rgba(200, 212, 255, 0.5)); }
+.jb-phone-row[data-connected] .jb-phone-status { color: hsl(from var(--opt-accent, #3fd0ff) h s calc(l + 10)); }
+.jb-phone-row[data-pressed] { transform: scale(0.98); }
+
+/* Pairing: the code, big, to compare with the phone's. */
+.jb-pairing-code { margin: 2.4vh 0 1vh; font-size: 7vh; font-weight: 700; letter-spacing: 0.08em; color: var(--ink, #f2f4ff); text-align: center; font-variant-numeric: tabular-nums; }
+.jb-pairing-hint, .jb-pairing-countdown { margin-top: 1.2vh; font-size: 1.5vh; color: var(--ink-faint, rgba(200, 212, 255, 0.5)); }
+.jb-pairing .jb-popup-actions { margin-top: 2.4vh; }
+
+/* The Now Playing overlay: full screen glass, the song large. */
+.jb-popup-frame[data-popup="now-playing"] { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.jb-popup-frame[data-popup="now-playing"] .jb-popup { background: transparent; box-shadow: none; min-width: 0; padding: 0; }
+.jb-popup-frame[data-popup="now-playing"] .jb-popup-title { display: none; }
+.jb-np-overlay {
+  display: flex;
+  align-items: center;
+  gap: 4vw;
+  text-align: left;
+  --c1: var(--jb-art-1, #4f6dff);
+}
+.jb-npo-cover {
+  width: 52vh;
+  height: 52vh;
+  object-fit: cover;
+  border-radius: calc(2.2vh * var(--opt-roundness, 1));
+  box-shadow: 0 3vh 7vh rgba(0, 0, 0, 0.65), 0 1vh 2.4vh rgba(0, 0, 0, 0.45);
+}
+.jb-npo-info { width: 34vw; }
+.jb-npo-title { font-size: 6vh; font-weight: 680; font-stretch: 85%; line-height: 1.05; }
+.jb-npo-artist { margin-top: 1.6vh; font-size: 2.6vh; color: hsl(from var(--opt-secondary, #c3ceff) h s l); }
+.jb-npo-album { margin-top: 0.6vh; font-size: 2vh; font-style: italic; color: var(--ink-soft, rgba(242, 244, 255, 0.72)); }
+.jb-npo-idle { font-size: 3vh; color: var(--ink-soft, rgba(242, 244, 255, 0.72)); }
+.jb-npo-progress { height: 0.7vh; margin-top: 4vh; border-radius: calc(0.4vh * var(--opt-roundness, 1)); background: hsl(from var(--opt-button, #3c56e6) calc(h - 5.824) calc(s * 0.539) calc(l - 9.804) / 0.35); overflow: hidden; }
+.jb-npo-progress-fill { height: 100%; width: 100%; transform: scaleX(var(--jb-progress)); transform-origin: left center; will-change: transform; border-radius: inherit; background: linear-gradient(90deg, hsl(from var(--opt-accent, #3fd0ff) h s l), hsl(from var(--opt-accent2, #4a7dff) h s l)); box-shadow: 0 0 1.2vh hsl(from var(--opt-accent, #3fd0ff) h s l / 0.6); }
+.jb-npo-times { display: flex; justify-content: space-between; margin-top: 1vh; font-size: 1.6vh; color: var(--ink-soft, rgba(242, 244, 255, 0.72)); }
+.jb-npo-actions { display: flex; gap: 1vw; margin-top: 4.5vh; }
+.jb-npo-button {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  padding: 1.4vh 1.6vw;
+  border-radius: calc(3vh * var(--opt-roundness, 1));
+  font-size: 1.9vh;
+  font-weight: 550;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition: background 260ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1)), box-shadow 260ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1)), transform 180ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1));
+}
+.jb-npo-button span:first-child { display: flex; font-size: 2.4vh; }
+.jb-npo-button[data-focused] { background: rgba(255, 255, 255, 0.2); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.75), 0 0 2.4vh rgba(255, 255, 255, 0.2); }
+.jb-npo-button[data-pressed] { transform: scale(0.96); }
+.jb-npo-favorite[data-on] { background: linear-gradient(90deg, #e2386d, #b0349b); box-shadow: inset 0 0 0 1px rgba(255, 170, 200, 0.7), 0 0 2.4vh rgba(226, 56, 109, 0.5); }
+.jb-npo-favorite[data-on] svg { fill: currentColor; }
+/* Nothing playing: no cover, so the text centers. */
+.jb-npo-cover[hidden] + .jb-npo-info { text-align: center; }
+.jb-npo-cover[hidden] + .jb-npo-info .jb-npo-actions { justify-content: center; }
+
+/* The power menu (hold Reset): Reboot / Shut down / Cancel, knob-driven. */
+.jb-power { display: flex; flex-direction: column; align-items: center; gap: 2.4vh; padding: 1vh 1vw 0; }
+.jb-power-message { font-size: 2.2vh; color: rgba(255, 255, 255, 0.85); }
+.jb-power-actions, .jb-popup-actions { display: flex; gap: 1.2vw; }
+.jb-popup-actions { flex-wrap: wrap; justify-content: center; }
+.jb-power-button, .jb-popup-button {
+  padding: 1.4vh 2vw;
+  border-radius: calc(3vh * var(--opt-roundness, 1));
+  font-size: 2vh;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition: background 260ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1)), box-shadow 260ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1)), transform 180ms var(--ease, cubic-bezier(0.22, 0.8, 0.22, 1));
+}
+.jb-power-button[data-focused], .jb-popup-button[data-focused] { background: rgba(255, 255, 255, 0.2); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.75), 0 0 2.4vh rgba(255, 255, 255, 0.2); }
+.jb-power-button[data-pressed], .jb-popup-button[data-pressed] { transform: scale(0.96); }
+/* The way forward, and the phone rows, light up in the blue-violet pill
+   like Back and See All; Forget in red, like the power menu's. */
+.jb-popup-button.jb-popup-primary[data-focused], .jb-phone-row[data-focused] {
+  color: #fff;
+  background: linear-gradient(90deg, var(--pill-a, #3c56e6), var(--pill-b, #5a5fd0) 55%, var(--pill-c, #6a5bb8));
+  box-shadow: inset 0 0 1.4vh hsl(from var(--opt-highlight, #c8d4ff) calc(h - 4.159) s calc(l - 4.902) / 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 2.2vh hsl(from var(--opt-button, #3c56e6) calc(h + 0.086) calc(s * 1.294) calc(l + 10.784) / 0.55);
+}
+.jb-phone-row[data-focused] .jb-phone-status { color: rgba(255, 255, 255, 0.85); }
+.jb-popup-button.jb-popup-danger[data-focused] { background: rgba(255, 70, 70, 0.32); box-shadow: inset 0 0 0 1.5px rgba(255, 150, 150, 0.85), 0 0 2.4vh rgba(255, 60, 60, 0.35); }
+.jb-power-button[data-stop="reboot"][data-focused],
+.jb-power-button[data-stop="shutdown"][data-focused] { background: rgba(255, 70, 70, 0.32); box-shadow: inset 0 0 0 1.5px rgba(255, 150, 150, 0.85), 0 0 2.4vh rgba(255, 60, 60, 0.35); }
+.jb-power-countdown { font-size: 1.5vh; color: rgba(255, 255, 255, 0.5); }
+.jb-power-button[data-focused], .jb-popup-button[data-focused], .jb-npo-button[data-focused], .jb-phone-row[data-focused] { outline: none; }
+
+/* The knob, wherever a theme forgot to show it: a plain ring on the focused
+   stop. No weight (:where), so any theme rule for [data-focused] replaces it;
+   a theme that draws its own focus everywhere turns it off with
+   [data-focused] { outline: none; }. */
+:where([data-focused]) { outline: 0.4vmin solid #ffd54f; outline-offset: 0.3vmin; }
+
 /* Layout helpers for containers the owner adds in the page builder, so a
    new row or grid works under any theme. Themes may restyle them.
    docs/theme-format.md, "Layout helpers". */

@@ -111,31 +111,7 @@ jb-nav { display: flex; flex-direction: column; gap: 2vmin; flex: 1; min-height:
 .jb-nav-item[data-active] { background: rgba(255, 255, 255, 0.12); }
 .jb-nav-item[data-on] .jb-nav-label { color: #ffd54f; }
 
-/* Popups */
-#jb-popup-layer { background: rgba(0, 0, 0, 0.6); }
-.jb-popup {
-  min-width: 40vmin;
-  padding: 3vmin 4vmin;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 10px;
-  background: #15151c;
-  text-align: center;
-}
-.jb-popup-title { font-size: 2.4vmin; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 2vmin; }
-.jb-volume-bar { height: 2vmin; background: rgba(255, 255, 255, 0.15); border-radius: 1vmin; overflow: hidden; }
-.jb-volume-fill { height: 100%; width: calc(var(--jb-volume, 0) * 100%); background: #ffd54f; }
-.jb-volume-value { margin-top: 1.5vmin; font: 3vmin monospace; }
-.jb-edge .jb-notice { max-width: 60vmin; margin: 1.5vmin auto 0; }
-.jb-notice { font-size: 2vmin; }
-.jb-phones, .jb-pairing { font-size: 1.8vmin; min-width: 50vmin; }
-.jb-phones-list { display: flex; flex-direction: column; gap: 0.6vmin; margin-bottom: 2vmin; }
-.jb-phone-row { display: flex; justify-content: space-between; gap: 2vmin; padding: 1vmin 1.4vmin; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; }
-.jb-phone-status { opacity: 0.6; }
-.jb-pairing-code { margin: 2vmin 0; font: bold 6vmin monospace; text-align: center; }
-.jb-pairing-hint, .jb-pairing-countdown { opacity: 0.6; }
-.jb-popup-actions { display: flex; flex-wrap: wrap; gap: 1vmin; margin-top: 2vmin; }
-.jb-popup-button { padding: 1vmin 2vmin; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; }
-.jb-phone-row[data-focused], .jb-popup-button[data-focused] { background: rgba(255, 213, 79, 0.25); border-color: #ffd54f; }
+/* Popups: the engine's default look (engine.css). */
 
 /* All Songs: page info and pager in a bar above the board */
 .board-bar { display: flex; align-items: center; justify-content: space-between; gap: 2vmin; }
