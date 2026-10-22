@@ -224,6 +224,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .loading { display: flex; align-items: center; gap: 10px; color: var(--text-3); padding: 40px 0; justify-content: center; }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* The Updates tab's queue (pages/updates.js) */
+.update-queue { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.update-queue .q-title { color: var(--text-2); font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.update-queue ol { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; }
+.update-queue li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 2px; font-size: 14px; border-bottom: 1px solid var(--line); }
+.update-queue li:last-child { border-bottom: 0; }
+.update-queue .q-name { min-width: 0; overflow-wrap: anywhere; }
+.update-queue .q-mark { flex: none; display: flex; align-items: center; font-size: 13px; }
+.update-queue .q-mark .icon { width: 16px; height: 16px; margin-right: 5px; }
+.update-queue .q-running .q-name { font-weight: 600; }
+.update-queue .q-waiting { color: var(--text-3); }
+.update-queue .q-done { display: flex; align-items: center; color: var(--ok, #3fb96f); }
+.update-queue .q-failed { display: flex; align-items: center; color: var(--danger, #e5484d); }
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 48px 16px; color: var(--text-2); }
 .empty h3 { color: var(--text); font-size: 16px; }
 .empty .btn { margin-top: 8px; }

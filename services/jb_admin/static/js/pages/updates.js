@@ -15,7 +15,8 @@ export async function show(main) {
   try { u = await get('/api/updates'); } catch (e) { showError(e); return; }
   const refresh = () => show(main);
   const busy = u.juk3box.phase || u.juk3box.starting || u.os.phase;
-  if (busy) poll = setTimeout(refresh, 5000);      // jb-admin restarts partway through a Juk3box update
+  // Quicker while Raspberry Pi OS installs (its queue moves); jb-admin restarts partway through a Juk3box update.
+  if (busy) poll = setTimeout(refresh, u.os.phase ? 1500 : 5000);
   clear(main,
     pageHeader('Updates', 'Everything on the jukebox that updates, in one place.'),
     h('div.stack', { style: { maxWidth: '720px' } },
@@ -75,6 +76,20 @@ function restartNotice() {
 const PHASES = { downloading: 'Downloading the update…', checking: 'Checking it\'s genuine…', installing: 'Installing…',
   restarting: 'Restarting the jukebox…', 'rolling back': 'That didn\'t work; putting the last version back…' };
 
+const STEPS = [['downloading', 'Download'], ['checking', 'Check it\'s genuine'], ['installing', 'Install'],
+  ['restarting', 'Restart the jukebox']];
+
+// Updates in order: a spinner on the one under way, "Complete" when it's done.
+function queue(items, title) {
+  const mark = state => state === 'running' ? h('span.spinner', { 'aria-label': 'Installing' })
+    : state === 'done' ? h('span.q-done', icon('circle-check'), 'Complete')
+    : state === 'failed' ? h('span.q-failed', icon('circle-x'), 'Failed')
+    : h('span.q-waiting', 'Waiting');
+  return h('div.update-queue',
+    title ? h('div.q-title', title) : null,
+    h('ol', items.map(q => h(`li.q-${q.state}`, h('span.q-name', q.name), h('span.q-mark', mark(q.state))))));
+}
+
 function juk3boxCard(j, refresh) {
   const busy = j.phase || j.starting;
   let line;
@@ -91,8 +106,14 @@ function juk3boxCard(j, refresh) {
       { confirm: 'Update now' });
     if (ok) { toast('Updating. This page catches up when it\'s done.', 'success'); act('apply'); }
   } }, 'download') : null;
+  const steps = busy ? queue(STEPS.map(([phase, label]) => {
+    const at = STEPS.findIndex(([p]) => p === (j.phase || 'downloading'));
+    const i = STEPS.findIndex(([p]) => p === phase);
+    return { name: label, state: i < at ? 'done' : i === at ? 'running' : 'waiting' };
+  })) : null;
   return card(
     row('package', 'Juk3box', line, install, j.current && !busy ? button('Check now', { onclick: () => act('check') }, 'refresh-cw') : null),
+    steps,
     j.error ? h('div.notice', { style: { marginTop: '12px' } }, icon('triangle-alert'), h('span', j.error)) : null);
 }
 
@@ -102,7 +123,10 @@ function osCard(o, refresh) {
   };
   const n = o.security.length + o.other.length;
   let line;
-  if (o.phase) line = o.what === 'all' ? 'Installing every update…' : 'Installing the security fixes…';
+  const done = o.queue.filter(q => q.state === 'done').length;
+  if (o.phase) line = !done && o.download < 100 && o.queue.length
+    ? `Downloading ${o.queue.length} update${o.queue.length === 1 ? '' : 's'}… ${o.download}%`
+    : `Installing ${done + 1 > o.queue.length ? o.queue.length : done + 1} of ${o.queue.length}…`;
   else if (!o.checked_at) line = 'Not checked yet.';
   else if (!n) line = `Up to date. Last checked ${when(o.checked_at)}.`;
   else line = [o.security.length ? `${o.security.length} security fix${o.security.length === 1 ? '' : 'es'}` : null,
@@ -119,10 +143,15 @@ function osCard(o, refresh) {
   const check = o.phase ? null : button('Check now', { onclick: () => act('check', 'Checking. This takes a minute.') }, 'refresh-cw');
   const list = (title, pkgs) => pkgs.length ? h('details.advanced', h('summary', `${title} (${pkgs.length})`),
     h('div.advanced-body', h('dl.setup-summary', pkgs.flatMap(p => [h('dt', p.name), h('dd', `${p.from} → ${p.to}`)])))) : null;
+  // The queue while it installs, and the last one for half an hour after (all Complete).
+  const recent = o.updated_at && Date.now() / 1000 - o.updated_at < 1800;
+  const shown = o.queue.length && (o.phase || recent)
+    ? queue(o.queue, o.phase ? null : `Installed ${when(o.updated_at)}`) : null;
   return card(
     row('cpu', 'Raspberry Pi OS', line, security, all, check),
+    shown,
     o.error ? h('div.notice', { style: { marginTop: '12px' } }, icon('triangle-alert'), h('span', o.error)) : null,
-    list('Security fixes', o.security), list('Other updates', o.other));
+    o.phase ? null : list('Security fixes', o.security), o.phase ? null : list('Other updates', o.other));
 }
 
 function keypadCard(k) {

@@ -100,6 +100,8 @@ class Updates:
         restart = bool(o.get("restart_needed_at")) and o["restart_needed_at"] > boot_time()
         return {"checked_at": o.get("checked_at"), "security": o.get("security") or [], "other": o.get("other") or [],
                 "phase": o.get("phase"), "what": o.get("what"), "error": o.get("error"),
+                # The install's queue (jb-update's Progress): while it runs, and for a while after.
+                "queue": o.get("queue") or [], "download": o.get("download") or 0,
                 "updated_at": o.get("updated_at"), "updated": o.get("updated") or [], "restart_needed": restart}
 
     def keypad_view(self) -> dict:

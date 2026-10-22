@@ -199,3 +199,26 @@ def test_the_overnight_restart_waits_for_quiet(tmp_path):
     assert not u.quiet()
     Admin.live = {"now_playing_helper": {"status": "paused"}, "now_playing": {"status": "stopped"}}
     assert u.quiet()
+
+
+def test_the_install_queue_follows_apt():
+    p = up.Progress(["libssl3t64", "openssl", "chromium"])
+    states = lambda: [q["state"] for q in p.view()]
+    assert states() == ["waiting"] * 3
+    assert p.line("dlstatus:1:12.5:Retrieving file 1 of 3\n") and p.download == 10
+    assert not p.line("dlstatus:1:13.0:Retrieving file 1 of 3\n")            # same 5% step
+    assert p.line("pmstatus:libssl3t64:arm64:10:Preparing libssl3t64 (arm64)\n")
+    assert states() == ["running", "waiting", "waiting"]
+    p.line("pmstatus:openssl:20:Unpacking openssl (arm64)\n")              # apt unpacks ahead
+    assert states() == ["waiting", "running", "waiting"]
+    p.line("pmstatus:libssl3t64:arm64:40:Configuring libssl3t64 (arm64)\n")  # back to set it up
+    p.line("pmstatus:libssl3t64:arm64:45:Installed libssl3t64 (arm64)\n")
+    assert states() == ["done", "waiting", "waiting"]
+    p.line("pmstatus:openssl:60:Configuring openssl (arm64)\n")
+    p.line("pmstatus:openssl:62:Installed openssl (arm64)\n")
+    p.line("pmstatus:dpkg-exec:70:Running dpkg\n")                         # not one of ours
+    p.line("pmstatus:chromium:80:Installing chromium (arm64)\n")
+    assert states() == ["done", "done", "running"]
+    p.line("pmstatus:chromium:85:Installed chromium (arm64): 155.0\n")       # a colon in the message
+    assert states() == ["done"] * 3
+    assert not p.line("garbage\n") and not p.line("pmstatus:chromium:x:y\n")

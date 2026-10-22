@@ -60,6 +60,9 @@ VERSION_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 # "name/suite[,suite] version arch [upgradable from: old]" (apt list --upgradable)
 UPGRADABLE_RE = re.compile(r"^([^/\s]+)/(\S+) (\S+) \S+ \[upgradable from: ([^\]]+)\]")
 # Packages that only take effect on a restart.
+# APT::Status-Fd: "pmstatus:libc6:arm64:40.0000:Installing libc6 (arm64)" (the
+# package may carry its arch; the message may hold colons).
+STATUS_RE = re.compile(r"^(dlstatus|pmstatus):(.+?):(\d+(?:\.\d+)?):(.*)$")
 RESTART_RE = re.compile(r"^(linux-image|linux-headers|raspi-firmware|rpi-eeprom|raspberrypi-sys-mods|libc6|systemd|dbus)")
 APT_OPTS = ("-y", "-q", "-o", "DPkg::Lock::Timeout=300",
             "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold")
@@ -290,27 +293,92 @@ def os_check() -> dict:
     return os_state(checked_at=time.time(), security=security, other=other, error=error)
 
 
+class Progress:
+    """apt's status lines (APT::Status-Fd) into the queue the admin shows:
+    each package waiting, running, done; and the download as a whole.
+
+      dlstatus:<n>:<percent>:<message>
+      pmstatus:<package>:<percent>:<message>      ...  "Installed <package>" when it's done
+
+    A package is "running" from apt's first word about it until "Installed";
+    apt unpacks several before setting them up, so the newest one mentioned
+    is the one shown running."""
+
+    def __init__(self, names: list[str]):
+        self.queue = [{"name": n, "state": "waiting"} for n in names]
+        self.by_name = {q["name"]: q for q in self.queue}
+        self.download = 0
+
+    def line(self, line: str) -> bool:
+        """True when what's shown changed."""
+        m = STATUS_RE.match(line.rstrip("\n"))
+        if not m:
+            return False
+        kind, name, percent, message = m.group(1), m.group(2).split(":")[0], float(m.group(3)), m.group(4)
+        if kind == "dlstatus":
+            step = int(percent // 5) * 5
+            changed, self.download = step != self.download, step
+            return changed
+        q = self.by_name.get(name)          # "dpkg-exec" and the like aren't in it
+        if q is None or q["state"] == "done":
+            return False
+        if message.startswith("Installed "):
+            q["state"] = "done"
+            return True
+        if q["state"] != "running":
+            for other in self.queue:
+                if other["state"] == "running":
+                    other["state"] = "unpacked"     # set up later in the run
+            q["state"] = "running"
+            return True
+        return False
+
+    def view(self) -> list[dict]:
+        # "unpacked" waits its turn to be set up: shown as waiting.
+        return [{"name": q["name"], "state": "waiting" if q["state"] == "unpacked" else q["state"]} for q in self.queue]
+
+
 def os_apply(which: str) -> dict:
     security, other = upgradable()
     chosen = security if which == "security" else security + other
     if not chosen:
         return os_state(security=security, other=other, phase=None)
-    os_state(phase="installing", what=which, error=None)
+    progress = Progress([p["name"] for p in chosen])
+    os_state(phase="installing", what=which, error=None, queue=progress.view(), download=0)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive", "APT_LISTCHANGES_FRONTEND": "none"}
+    status_r, status_w = os.pipe()
+    opts = (*APT_OPTS, "-o", f"APT::Status-Fd={status_w}")
     if which == "security":
-        cmd = ("apt-get", *APT_OPTS, "install", "--only-upgrade", *[p["name"] for p in chosen])
+        cmd = ("apt-get", *opts, "install", "--only-upgrade", *[p["name"] for p in chosen])
     else:
-        cmd = ("apt-get", *APT_OPTS, "upgrade", "--with-new-pkgs")
-    r = run(*cmd, check=False, env=env, timeout=3600)
+        cmd = ("apt-get", *opts, "upgrade", "--with-new-pkgs")
+    with tempfile.TemporaryFile("w+") as log:
+        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env, pass_fds=(status_w,), text=True)
+        os.close(status_w)
+        with os.fdopen(status_r) as status:
+            for line in status:
+                if progress.line(line):
+                    os_state(queue=progress.view(), download=progress.download)
+        code = proc.wait()
+        log.seek(0)
+        output = log.read()
     security, other = upgradable()
-    if r.returncode != 0:
-        return os_state(phase=None, security=security, other=other,
-                        error="The update stopped: " + (r.stderr or r.stdout).strip()[-300:])
+    queue = progress.view()
+    if code != 0:
+        for q in queue:
+            if q["state"] == "running":
+                q["state"] = "failed"
+        return os_state(phase=None, security=security, other=other, queue=queue,
+                        error="The update stopped: " + output.strip()[-300:])
+    left = {p["name"] for p in security + other}
+    for q in queue:             # apt had nothing to do for some (pulled in by another): done
+        if q["state"] != "done" and q["name"] not in left:
+            q["state"] = "done"
     # Everything (Chromium, PipeWire...) takes effect on a restart too.
     restart = which == "all" or Path("/run/reboot-required").exists() or \
         any(RESTART_RE.match(p["name"]) for p in chosen)
     changes = {"phase": None, "security": security, "other": other, "updated_at": time.time(),
-               "updated": [p["name"] for p in chosen], "error": None}
+               "updated": [p["name"] for p in chosen], "error": None, "queue": queue}
     if restart:
         changes["restart_needed_at"] = time.time()
     return os_state(**changes)
