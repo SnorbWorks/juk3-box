@@ -80,6 +80,7 @@ function screen(s) {
   if (s.n) main.append(el('div', 'jb-setup-kicker', `Step ${s.n} of ${s.of}`));
   main.append(el('div', 'jb-setup-title', s.title));
   if (s.say) main.append(el('div', 'jb-setup-say', s.say));
+  if (s.problem) main.append(el('div', 'jb-setup-problem', `⚠ ${s.problem}`));
   if (s.live) main.append(live(s.live));
   if (s.ask) main.append(ask(s.step, s.ask));
 

@@ -1051,12 +1051,20 @@ class Wizard:
             return False
         if not self.admin.auth.has_password():
             return True
+        if not self.state.get("finished_at"):
+            # A jukebox's first setup: the cabinet shows it until it's finished
+            # (where to carry on, after joining the Wi-Fi with no phone looking).
+            return True
         return time.monotonic() - self.page_seen < PAGE_SEEN_S
 
     def cabinet(self) -> dict:
         if not self.active():
             return {"active": False}
         hs = self.hotspot()
+        join = hs.get("join") or {}
+        if hs.get("active") and join.get("state") == "joining":
+            return {"active": True, "waiting": True, "title": f"Connecting to {join.get('ssid')}",
+                    "say": "This takes up to a minute. Your phone drops the jukebox's own Wi-Fi meanwhile."}
         if not hs.get("active") and not self.online and not self.admin.auth.has_password():
             # A new jukebox just started: no network yet, and its own Wi-Fi
             # isn't up either (jb-netwatch waits ~30 s for one first). Nothing
@@ -1078,6 +1086,8 @@ class Wizard:
             out["hotspot"] = {"ssid": hs.get("ssid"), "password": hs.get("password"), "why": hs.get("why"),
                               "qr": qr_rows(setup_net.wifi_qr_text(hs.get("ssid", ""), hs.get("password", ""))),
                               "address": hs.get("url")}
+            if join.get("state") == "failed":
+                out["problem"] = f"Couldn't join {join.get('ssid')}. {join.get('reason') or ''}".strip()
         ask = step.ask(self) if hasattr(step, "ask") else None
         if ask:
             out["ask"] = ask
@@ -1099,7 +1109,20 @@ class Wizard:
         await self.check_restart()
         while True:
             self.online = bool((await self.system.network()).get("via"))
+            await self.joined_wifi()
             self.publish()
-            # Quicker while a new jukebox waits for its own Wi-Fi, so the
-            # cabinet shows the code as soon as there is one.
+            # Quicker while a new jukebox waits for its own Wi-Fi or joins
+            # the owner's, so the cabinet follows along.
             await asyncio.sleep(3 if self.cabinet().get("waiting") else 10)
+
+    async def joined_wifi(self) -> None:
+        """Setup mode joined the owner's Wi-Fi: the Wi-Fi step is done, whether
+        or not a phone was looking (it was just cut off from the hotspot)."""
+        if (self.hotspot().get("join") or {}).get("state") != "joined" or "wifi" in self.state["completed"]:
+            return
+        net = await self.system.network()
+        if net.get("via"):
+            self.state["answers"]["wifi"] = {**self.answer("wifi"), **net}
+            self.state["completed"].append("wifi")
+            self.save()
+            self.log.info("setup: wifi done (joined %s)", net.get("name"))

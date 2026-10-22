@@ -255,6 +255,7 @@ def test_the_admin_sees_where_setup_is_without_waking_the_cabinet(tmp_path):
         r = await client.get("/api/wizard-status")
         s = await r.json()
         assert r.status == 200 and s["done"] is False and s["step"] == "Name your jukebox" and s["finished"] == 0
+        admin.wizard.state["finished_at"] = 1        # run again from the admin: the cabinet waits for the page
         assert admin.wizard.cabinet() == {"active": False}
         await submit(client, "finish")
         s = await (await client.get("/api/wizard-status")).json()
@@ -369,3 +370,21 @@ def test_a_new_jukebox_shows_no_address_until_it_can_be_reached(tmp_path):
         w.online = True
         assert "waiting" not in w.cabinet() and w.cabinet()["address"].endswith(":8080/setup")
     run(tmp_path, check, password=False)
+
+
+def test_the_cabinet_follows_a_wifi_join_and_the_step_completes_by_itself(tmp_path):
+    async def check(client, admin, pi, calls):
+        w = admin.wizard
+        state = setup_net.state_path(w.setupnet_dir)
+        base = {"active": True, "ssid": "Juk3box Setup 1234", "password": "abcd2345", "url": "http://juk3box.local:8080/setup"}
+        write_atomic(state, json.dumps({**base, "join": {"state": "joining", "ssid": "Ducks Home"}}))
+        assert w.cabinet()["title"] == "Connecting to Ducks Home" and w.cabinet()["waiting"]
+        write_atomic(state, json.dumps({**base, "join": {"state": "failed", "ssid": "Ducks Home",
+                                                          "reason": "The password didn't work."}}))
+        assert w.cabinet()["problem"] == "Couldn't join Ducks Home. The password didn't work."
+        write_atomic(state, json.dumps({"active": False, "join": {"state": "joined", "ssid": "Ducks Home"}}))
+        await w.joined_wifi()
+        assert "wifi" in w.state["completed"]
+        out = w.cabinet()           # no phone on the page: the cabinet still says where to carry on
+        assert out["active"] and not out.get("waiting") and out["address"].endswith(":8080/setup")
+    run(tmp_path, check)

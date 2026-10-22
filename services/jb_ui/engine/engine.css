@@ -507,6 +507,7 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 .jb-setup-kicker { font-weight: 800; font-size: 2.4vmin; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; margin-top: 2vmin; }
 .jb-setup-title { font-family: "JB Setup Righteous", sans-serif; font-size: 6.4vmin; line-height: 1.1; }
 .jb-setup-say { font-size: 3.3vmin; line-height: 1.4; opacity: 0.92; max-width: 60ch; }
+.jb-setup-problem { font-size: 3.3vmin; line-height: 1.4; max-width: 60ch; padding: 1.4vmin 2.2vmin; border-radius: 1.6vmin; background: #fff1f0; color: #9f1d1d; font-weight: 700; }
 .jb-setup-live { display: flex; gap: 2vmin; flex-wrap: wrap; }
 .jb-setup-stat { background: rgba(255, 255, 255, 0.14); border-radius: 2vmin; padding: 1.6vmin 2.6vmin; min-width: 18vmin; }
 .jb-setup-stat .k { font-size: 2.2vmin; font-weight: 700; opacity: 0.8; }
