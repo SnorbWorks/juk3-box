@@ -51,13 +51,18 @@ PRIVATE = "localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 100.
 CONF_TEXT = """# Written by jb-modctl setup (docs/contracts/installed-modules.md).
 per_listener_settings true
 
-# The open listeners: built-in modules and the cabinet's screen (until the
-# core moves to logins, Phase 8).
-listener 1883
+# The core's listeners answer the jukebox only (Phase 8): the services, and
+# the screen's page. The admin's preview comes through the admin
+# (services/jb_admin/bus_relay.py), behind its login.
+listener 1883 127.0.0.1
 protocol mqtt
 allow_anonymous true
 
-listener 9001
+listener 1883 ::1
+protocol mqtt
+allow_anonymous true
+
+listener 9001 127.0.0.1
 protocol websockets
 allow_anonymous true
 

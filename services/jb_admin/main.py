@@ -30,7 +30,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, hardware, logging as jb_logging
-from services.jb_admin import schema, theme_store
+from services.jb_admin import bus_relay, schema, theme_store
 from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
@@ -102,16 +102,16 @@ ADMIN_CSP = "; ".join([
 
 
 def preview_csp(host: str) -> str:
-    """jb-ui's policy, but the bus is the jukebox's address on the network,
-    and only the admin may frame it."""
-    bus = f"ws://{host}:9001"
+    """jb-ui's policy, but the bus is the admin's relay (bus_relay.py: the
+    broker itself only answers the jukebox), and only the admin may frame it.
+    `host` with its port, as the browser has it."""
+    bus = f"ws://{host}/bus"
     return ui.CSP.replace("connect-src 'self' ws://localhost:9001 ws://127.0.0.1:9001",
                           f"connect-src 'self' {bus}") + "; frame-ancestors 'self'"
 
 
-def hostname(request: web.Request) -> str:
-    host = request.host.rsplit(":", 1)[0] if not request.host.startswith("[") else request.host.split("]")[0] + "]"
-    return host if re.fullmatch(r"[A-Za-z0-9.\-\[\]:]+", host) else "localhost"
+def host_port(request: web.Request) -> str:
+    return request.host if re.fullmatch(r"[A-Za-z0-9.\-\[\]:]+", request.host) else "localhost"
 
 
 class Admin:
@@ -1312,6 +1312,9 @@ class Admin:
 
     # Preview: the kiosk engine, served as jb-ui would ------------------------------
 
+    async def bus_socket(self, request):
+        return await bus_relay.relay(request, f"ws://127.0.0.1:{self.cfg.get('mqtt_ws_port', 9001)}")
+
     async def preview_page(self, request):
         # Always in preview mode: without ?preview the engine would act on the
         # jukebox (a keypad pick seen here and on the cabinet plays twice).
@@ -1428,8 +1431,10 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
                 raise error(401, "Log in first.")
             raise web.HTTPFound("/")
         response = await handler(request)
+        if isinstance(response, web.WebSocketResponse):
+            return response          # under way: its headers went with the handshake
         preview = path in ("/preview", "/api/theme") or path.startswith(("/engine/", "/themes/", "/media/"))
-        response.headers["Content-Security-Policy"] = preview_csp(hostname(request)) if preview else ADMIN_CSP
+        response.headers["Content-Security-Policy"] = preview_csp(host_port(request)) if preview else ADMIN_CSP
         response.headers["Cache-Control"] = "no-store" if path.startswith("/api/") else "no-cache"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
@@ -1509,6 +1514,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/media", admin.upload_media)
     r.add_delete("/api/media/{name}", admin.delete_media)
     r.add_get("/preview", admin.preview_page)
+    r.add_get("/bus", admin.bus_socket)
     r.add_get("/api/theme", admin.preview_theme)
     r.add_get("/themes/{theme_id}/{path:.+}", admin.theme_file)
     r.add_get("/media/{name}", admin.media_file)

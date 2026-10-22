@@ -130,9 +130,13 @@ export function connectBus() {
   // timerVariant 'native': the default keepalive timers break when NTP
   // jumps the Pi's clock forward at boot (no RTC), and the connection then
   // drops every few seconds forever. See the 2026-09-29 fix (6d1ccaf).
-  // The bus is on the same machine as the page: the kiosk loads it from
-  // 127.0.0.1, the admin preview from the jukebox's network name.
-  client = mqtt.connect(`ws://${location.hostname || 'localhost'}:9001`, { timerVariant: 'native' });
+  // The kiosk loads the page from the jukebox itself and reaches the broker
+  // directly; the admin's preview, in a browser elsewhere, through the
+  // admin's relay (the broker only answers the jukebox: jb_admin/bus_relay.py).
+  const local = ['127.0.0.1', 'localhost', ''].includes(location.hostname);
+  const url = local ? `ws://${location.hostname || 'localhost'}:9001`
+    : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bus`;
+  client = mqtt.connect(url, { timerVariant: 'native' });
   client.on('connect', () => {
     store.set('bus', 'connected');
     client.subscribe([...Object.keys(HANDLERS), ...extra]);

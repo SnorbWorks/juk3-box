@@ -326,14 +326,15 @@ def test_videos_are_optimized_in_the_background(tmp_path):
 
 # Preview
 
-def test_preview_is_always_in_preview_mode_with_the_bus_on_the_network(tmp_path):
+def test_preview_is_always_in_preview_mode_with_the_bus_through_the_admin(tmp_path):
     async def check(c, admin):
         r = await c.get("/preview", allow_redirects=False)
         assert r.status == 302 and "preview=1" in r.headers["Location"]
         r = await c.get("/preview?preview=1")
         assert r.status == 200 and "jb-root" in await r.text()
         csp = r.headers["Content-Security-Policy"]
-        assert "ws://127.0.0.1:9001" in csp and "frame-ancestors 'self'" in csp
+        assert f"ws://{c.server.host}:{c.server.port}/bus" in csp and "9001" not in csp and "frame-ancestors 'self'" in csp
+        assert (await c.get("/bus", headers={"Origin": "http://elsewhere.example"})).status == 403
         admin_csp = (await c.get("/")).headers["Content-Security-Policy"]
         assert "frame-ancestors 'none'" in admin_csp
     run(tmp_path, check)
