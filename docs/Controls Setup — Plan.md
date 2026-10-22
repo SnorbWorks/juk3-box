@@ -116,8 +116,33 @@ In from the start:
 Later, when someone needs it: 200 selections, the volume knob, extra buttons and their
 actions, Left/Right/OK buttons for cabinets without a knob, a touchscreen.
 
-Open: which Rock-Ola numbers (the range: 100–299? per model) and how its board looks;
-the 160 board's design. Both sketched with the owner before building.
+## How a selection is written (decided Oct 21)
+
+One setting, **the selection format**, decides three things together, so they can't
+disagree: which keys the wizard teaches, how presses are read (when an entry is
+complete, what's wrong), and how the song board numbers its slots and how many make a
+page.
+
+The questions (step 3, "The layout"):
+- **"What's on your selection buttons?"** Letters and numbers / Numbers only.
+- **Letters and numbers:** tick the letters (presets fill them: A–K or A–V, without I
+  and O) and the numbers (1–8 or 1–0). An entry is a letter, then a number. A page is
+  every pair: A–K × 1–0 = 100, A–V × 1–8 = 160.
+- **Numbers only:** "How many digits is a selection?" (usually 3), "the first number on
+  your cabinet?" and "the last?" (100 and 299, say), and optionally the digits each place
+  uses (some models use only 1–8 in the last place). An entry is complete at the last
+  digit. A page is the whole range: 100–299 = 200.
+- **A live preview** while answering: a small song board with its real numbers and "160
+  songs a page, A1 to V8". Then: "Compare with your cabinet's own title cards: do the
+  first and last match?"
+
+The board lays itself out from the format:
+- Letters and numbers: a group per letter, its numbers inside. 100: 10 groups of 10 (as
+  now); 160: 20 groups of 8, in two columns of 10, like a Seeburg.
+- Numbers only: a group per ten numbers (100–109, 110–119…). 200: 20 groups of 10, the
+  same two columns, labeled by number.
+- Sized by the number of groups and slots. If 200 to a page reads too small on the
+  cabinet's screen, the page splits in halves that the knob or a page key flips.
 
 ## Build order
 
