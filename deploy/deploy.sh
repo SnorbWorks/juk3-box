@@ -77,7 +77,9 @@ else
 fi
 scp -i "$PI_KEY" "$RENDERED_UNIT" "$PI_USER@$PI_HOST:/tmp/${UNIT_NAME}.service"
 rm -f "$RENDERED_UNIT"
-ssh_pi_sudo "mv /tmp/${UNIT_NAME}.service /etc/systemd/system/${UNIT_NAME}.service"
+# install, not mv: the copy is mktemp's (0600, the developer's), and systemd
+# warns on every reload about a unit file only its owner can read.
+ssh_pi_sudo "install -o root -g root -m 0644 /tmp/${UNIT_NAME}.service /etc/systemd/system/${UNIT_NAME}.service && rm -f /tmp/${UNIT_NAME}.service"
 
 ssh_pi_sudo "systemctl daemon-reload && systemctl enable --now ${UNIT_NAME}.service && systemctl restart ${UNIT_NAME}.service"
 
