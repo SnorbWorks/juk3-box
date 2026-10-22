@@ -201,8 +201,11 @@ function fillUpNext(el, node, ctx) {
   store.watch(el, 'library', render);
 }
 
-// The song board: one page of slots, grouped by letter. Slot codes match
-// the keypad; how they're arranged is the theme's CSS.
+// The song board: one page of slots in panels (a letter's, or ten numbers).
+// Slot codes match the keys (the selection format, selection.js). The
+// engine says how many panels and how to arrange them (--jb-cols,
+// --jb-rows, --jb-digits, --jb-slot-rows; data-compact when slots get
+// short); how they look is the theme's CSS.
 function fillBoard(el, node, ctx) {
   const groups = new Map();
   let lastTurn = 0;
@@ -249,16 +252,20 @@ function fillBoard(el, node, ctx) {
     if (shape !== built) {
       built = shape;
       el.style.setProperty('--jb-digits', v.digits);
+      el.style.setProperty('--jb-cols', v.shape.cols);
+      el.style.setProperty('--jb-rows', v.shape.rows);
+      el.style.setProperty('--jb-slot-rows', v.shape.rows * v.digits);
+      el.toggleAttribute('data-compact', v.shape.rows * v.digits > 20);   // shorter slots: one line each
       el.toggleAttribute('data-cards', !!v.cards);   // the album browser: cover cards
       groups.clear();
       slotEls.clear();
       for (const slotInfo of v.slots) {
-        let group = groups.get(slotInfo.letter);
+        let group = groups.get(slotInfo.group);
         if (!group) {
           group = document.createElement('div');
           group.className = 'jb-letter';
-          group.dataset.letter = slotInfo.letter;
-          groups.set(slotInfo.letter, group);
+          group.dataset.letter = slotInfo.group;
+          groups.set(slotInfo.group, group);
         }
         const s = document.createElement('div');
         s.className = 'jb-slot';
@@ -293,14 +300,20 @@ function fillBoard(el, node, ctx) {
     showEntry();
   };
 
-  // A letter pressed on the keypad, waiting for its digit.
+  // What's been entered so far (a letter waiting for its digit, or the
+  // first digits of a number): the slots it could still become light up,
+  // and their panels.
   const showEntry = () => {
     const e = store.get('entry');
-    const waiting = e?.state === 'partial' ? e.letter : null;
-    for (const [letter, group] of groups) {
-      const on = letter === waiting;
-      group.toggleAttribute('data-entry', on);
-      for (const s of group.children) s.toggleAttribute('data-entry', on);
+    const typed = e?.state === 'partial' ? (e.typed ?? e.letter) : null;
+    for (const group of groups.values()) {
+      let any = false;
+      for (const s of group.children) {
+        const on = !!typed && s.dataset.code.startsWith(typed);
+        s.toggleAttribute('data-entry', on);
+        any ||= on;
+      }
+      group.toggleAttribute('data-entry', any);
     }
   };
 

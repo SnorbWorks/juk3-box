@@ -128,12 +128,13 @@ jb-pager { display: flex; gap: 1vmin; }
   transition: outline-color 300ms;
 }
 
-/* The board: five columns, each holding two letters (A over B, C over D,
-   ...), each letter a stack of its slots. Fits any songs-per-page. */
+/* The board: panels in columns (five of two for 100, A over B, C over D,
+   ...; the engine's --jb-cols x --jb-rows for other selection formats),
+   each panel a stack of its slots. */
 jb-board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--jb-cols, 5), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--jb-rows, 2), minmax(0, 1fr));
   overflow: hidden;
   grid-auto-flow: column;
   gap: 1vmin;
@@ -162,6 +163,10 @@ jb-board {
 .jb-song-artist { opacity: 0.6; font-size: 1vmin; }
 .jb-song-length { opacity: 0.6; }
 .jb-slot[data-empty] { opacity: 0.25; }
+jb-board[data-compact] .jb-song-cover, jb-board[data-compact] .jb-song-length { display: none; }
+jb-board[data-compact] .jb-song-text { display: flex; gap: 0.6vmin; }
+jb-board[data-compact] .jb-song-title { flex: 0 1 auto; }
+jb-board[data-compact] .jb-song-artist { flex: 1 1 0; min-width: 0; }
 
 /* Home sections: New and Featured Artist share the top row, Browse and
    Recents get full rows. Empty sections (nothing new yet) are hidden. */

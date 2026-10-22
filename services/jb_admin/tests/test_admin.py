@@ -90,7 +90,7 @@ def test_setup_then_login_logout(tmp_path):
 
 def test_changes_need_the_admin_header(tmp_path):
     async def check(c, admin):
-        r = await c.put("/api/settings", json={"values": {"songs_per_page": 50}})
+        r = await c.put("/api/settings", json={"values": {"idle_home_minutes": 3}})
         assert r.status == 403
     run(tmp_path, check)
 
@@ -132,16 +132,16 @@ def test_settings_validate_and_keep_unknown_keys(tmp_path):
 
     async def check(c, admin):
         data = await (await c.get("/api/settings")).json()
-        assert data["values"]["songs_per_page"] == 100 and "nav" in data["schema"]
-        r = await c.put("/api/settings", json={"values": {"songs_per_page": 55}}, headers=H)
-        assert r.status == 400 and "songs_per_page" in (await r.json())["problems"]
+        assert data["values"]["idle_home_minutes"] == 5 and "nav" in data["schema"]
+        r = await c.put("/api/settings", json={"values": {"idle_home_minutes": -2}}, headers=H)
+        assert r.status == 400 and "idle_home_minutes" in (await r.json())["problems"]
         r = await c.put("/api/settings", json={"values": {"nav": ["home", "home"]}}, headers=H)
         assert r.status == 400
-        r = await c.put("/api/settings", json={"values": {"songs_per_page": 50, "nav": ["home", "all-songs"],
+        r = await c.put("/api/settings", json={"values": {"nav": ["home", "all-songs"],
                                                           "idle_home_minutes": 0}}, headers=H)
         assert r.status == 200
         saved = json.loads((tmp_path / "settings.json").read_text())
-        assert saved == {"theme": "bare", "future": 1, "songs_per_page": 50, "nav": ["home", "all-songs"],
+        assert saved == {"theme": "bare", "future": 1, "nav": ["home", "all-songs"],
                          "idle_home_minutes": 0}
     run(tmp_path, check)
 

@@ -27,12 +27,6 @@ SCHEMA = {
         "options": [{"value": b, "label": NAV_LABELS[b], "kind": "button"} for b in NAV_BUTTONS],
         "default": DEFAULT_NAV,
     },
-    "songs_per_page": {
-        "type": "enum", "label": "Songs per page", "group": "Song board",
-        "help": "Each letter gets the same number of slots, so the codes always match the keypad.",
-        "options": [{"value": n, "label": f"{n} songs ({n // 10} per letter)"} for n in range(10, 101, 10)],
-        "default": 100,
-    },
     "idle_home_minutes": {
         "type": "number", "label": "Back to Home after", "group": "Screen", "unit": "minutes",
         "help": "With nothing playing and nobody at the controls. 0 = never.",

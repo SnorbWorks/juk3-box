@@ -21,7 +21,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from shared import config, logging as jb_logging
+from shared import config, logging as jb_logging, selection
 from services.jb_ui import customize, icons, markup, media, module_blocks, themes
 
 SERVICE_NAME = "jb-ui"
@@ -188,11 +188,9 @@ def owner_settings(raw: dict) -> dict:
     replaced by the default."""
     nav = clean_nav(raw.get("nav"))
 
-    # Songs per board page: 10 to 100 in steps of 10, so every letter gets
-    # the same number of slots and the codes always match the keypad.
-    per_page = raw.get("songs_per_page")
-    if not (isinstance(per_page, int) and not isinstance(per_page, bool) and 10 <= per_page <= 100 and per_page % 10 == 0):
-        per_page = 100
+    # How selections are written (shared/selection.py): the board numbers
+    # its slots by it, so its codes always match the keys.
+    fmt = selection.clean(raw.get("selection")) or selection.DEFAULT
 
     # Idle minutes, with nothing playing, before the screen goes back to
     # Home. 0 = never.
@@ -202,7 +200,7 @@ def owner_settings(raw: dict) -> dict:
 
     return {
         "nav": nav,
-        "songs_per_page": per_page,
+        "selection": fmt,
         "idle_home_minutes": idle,
     }
 

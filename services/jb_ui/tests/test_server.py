@@ -115,11 +115,12 @@ def test_api_includes_settings_and_icons(tmp_path):
 
 def test_owner_board_and_idle_settings_are_cleaned():
     s = main.owner_settings({})
-    assert (s["songs_per_page"], s["idle_home_minutes"]) == (100, 5)
-    s = main.owner_settings({"songs_per_page": 50, "idle_home_minutes": 0})
-    assert (s["songs_per_page"], s["idle_home_minutes"]) == (50, 0)
-    for bad in (55, 0, 110, "50", True, 50.0):
-        assert main.owner_settings({"songs_per_page": bad})["songs_per_page"] == 100, bad
+    assert (s["selection"]["letters"], s["idle_home_minutes"]) == ("ABCDEFGHJK", 5)
+    seeburg = {"kind": "letters", "letters": "ABCDEFGHJKLMNPQRSTUV", "digits": "12345678"}
+    s = main.owner_settings({"selection": seeburg, "idle_home_minutes": 0})
+    assert (s["selection"], s["idle_home_minutes"]) == (seeburg, 0)
+    for bad in ({"kind": "letters", "letters": "", "digits": "1"}, "A-K", 100):
+        assert main.owner_settings({"selection": bad})["selection"]["letters"] == "ABCDEFGHJK", bad
     for bad in (-1, "5", None, False):
         assert main.owner_settings({"idle_home_minutes": bad})["idle_home_minutes"] == 5, bad
 

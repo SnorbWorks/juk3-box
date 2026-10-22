@@ -80,7 +80,7 @@ class Theme1:
     def show_entry(self, letter):
         """Resting look for jb-core's entry state: a waiting letter, or idle;
         RESET red while it's held down."""
-        colors = {buttons.index(letter): GREEN, buttons.RESET: RED} if letter else {}
+        colors = {buttons.index(letter): GREEN, buttons.RESET: RED} if buttons.has(letter) else {}
         if self.reset_held:
             colors[buttons.RESET] = RED
         self.paint(colors)
@@ -88,7 +88,7 @@ class Theme1:
     def reset_blink(self, letter):
         """RESET blinks red twice: the song was cancelled, or the power menu
         opened (holding Reset)."""
-        base = {buttons.index(letter): GREEN} if letter else {}
+        base = {buttons.index(letter): GREEN} if buttons.has(letter) else {}
         self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF}, RESET_BLINKS, RESET_ON_S, RESET_OFF_S)
 
     def blink(self, base, on, off, times, on_s, off_s):
@@ -100,16 +100,18 @@ class Theme1:
             time.sleep(off_s)
 
     def rejected(self, key):
+        if not buttons.has(key):
+            return
         i = buttons.index(key)
         self.blink({}, {i: RED}, {i: OFF}, REJECT_BLINKS, REJECT_ON_S, REJECT_OFF_S)
 
     def cancelled(self, letter):
-        base = {buttons.index(letter): GREEN} if letter else {}
+        base = {buttons.index(letter): GREEN} if buttons.has(letter) else {}
         self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF},
                    CANCEL_BLINKS, CANCEL_ON_S, CANCEL_OFF_S)
 
     def selected(self, slot):
-        picks = (buttons.index(slot[0]), buttons.index(slot[1]))
+        picks = [buttons.index(k) for k in dict.fromkeys(slot) if buttons.has(k)]
         self.blink({}, {i: GREEN for i in picks}, {i: OFF for i in picks},
                    CONFIRM_BLINKS, CONFIRM_ON_S, CONFIRM_OFF_S)
         self.comet()

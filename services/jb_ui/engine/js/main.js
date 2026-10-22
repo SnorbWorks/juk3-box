@@ -440,8 +440,8 @@ function watchSystem() {
     if (store.get('screen') !== 'all-songs') showScreen('all-songs');
   });
   store.watch(html, 'selection', s => {
-    if (!Number.isInteger(s?.index)) return;
-    const track = pick(s.index);
+    if (typeof s?.slot !== 'string') return;
+    const track = pick(s.slot);
     if (track) actions.pick(track);
   });
 }

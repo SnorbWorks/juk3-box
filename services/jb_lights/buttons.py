@@ -26,6 +26,12 @@ DIGITS = "1234567890"
 SINGLE, ALBUM, RESET = 10, 11, 22
 
 
+def has(key) -> bool:
+    """Whether this key has a light (the selection format may use keys this
+    keypad's lights don't cover: an L, a numbers-only jukebox's codes)."""
+    return isinstance(key, str) and len(key) == 1 and key in LETTERS + DIGITS
+
+
 def index(key: str) -> int:
     """Pixel index for a selection key ("A".."K" or "0".."9")."""
     if key in LETTERS:

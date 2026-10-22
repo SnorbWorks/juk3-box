@@ -1,9 +1,12 @@
 import asyncio
+import json
 import random
 import time
+from pathlib import Path
 
 from shared import config, logging as jb_logging, setup_net
 from shared.bus import Bus
+from shared import selection
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
 from services.jb_core.phone_choice import PhoneChoice
@@ -14,6 +17,17 @@ from services.jb_core.sources import HELPER, LOCAL, ONE_SONG, PHONE, cmd_topic, 
 SERVICE_NAME = "jb-core"
 ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no digit
 ENTRY_TICK_S = 0.25
+# The owner's settings (jb-admin writes them): the selection format is there.
+SETTINGS_PATH = Path("/var/lib/juk3-box/settings.json")
+
+
+def selection_format(path: Path = SETTINGS_PATH) -> selection.Format:
+    """How this jukebox's selections are written (shared/selection.py)."""
+    try:
+        raw = json.loads(path.read_text()).get("selection")
+    except (OSError, ValueError, AttributeError):
+        raw = None
+    return selection.load(raw)
 
 SHUFFLE_BUFFER_TARGET = 20
 SETTLE_S = 2.0            # retained messages at startup, before choosing a phone (phone_choice.py)
@@ -389,7 +403,7 @@ async def main() -> None:
         messages = await bus.subscribe("jukebox/#")
         asyncio.create_task(bus.run_heartbeat())
         await publish_queue(bus, q)
-        entry = Entry(ENTRY_TIMEOUT_MS)
+        entry = Entry(ENTRY_TIMEOUT_MS, selection_format())
         await bus.publish("jukebox/jb-core/entry", {"state": "idle", "letter": None, "reason": None}, retain=True)
         asyncio.create_task(entry_timeouts(bus, entry, log))
         menu = PowerMenu()
@@ -401,7 +415,15 @@ async def main() -> None:
         asyncio.create_task(choice_ticks(bus, q, log))
 
         async for topic, payload in messages:
-            if topic == "jukebox/jb-input/key":
+            if topic == "jukebox/jb-admin/changed":
+                # The owner may have changed the selection format (the
+                # controls step): the keys follow it at once.
+                fmt = selection_format()
+                if fmt.spec != entry.fmt.spec:
+                    log.info("selection format: %s", fmt.describe())
+                    await publish_entry_events(bus, entry.set_format(fmt), log)
+
+            elif topic == "jukebox/jb-input/key":
                 # Keypad letters and digits -> slot selections (letter first).
                 await publish_entry_events(bus, entry.key(payload["key"], time.monotonic()), log)
 

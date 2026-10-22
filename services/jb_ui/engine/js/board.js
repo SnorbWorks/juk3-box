@@ -4,10 +4,8 @@
 
 import { publish } from './bus.js';
 import { listSongs } from './lists.js';
+import { format } from './selection.js';
 import { store } from './store.js';
-
-export const LETTERS = 'ABCDEFGHJK';   // no I
-export const DIGITS = '1234567890';
 
 // Sorts the engine knows (docs/theme-format.md, "Home sections").
 // Category sorts list one slot per artist/album/genre first; picking one
@@ -102,18 +100,36 @@ function categoriesFor(tracks, field) {
 
 let state = { sort: 'title', filter: null, page: 0 };
 
-// The album browser shows cover cards, 40 a page (4 per letter: A1-A4 ...
-// K1-K4), 8 to a row in the theme -- the user's design. Everything else uses
-// the owner's songs per page.
+// The album browser shows cover cards, 40 a page (the first 4 codes of the
+// first 10 panels: A1-A4 ... K1-K4), 8 to a row in the theme -- the user's
+// design. Everything else uses every code of the selection format.
 const ALBUM_CARD_DIGITS = 4;
+const ALBUM_CARD_GROUPS = 10;
 
 function albumCards() {
   return state.sort === 'album' && !state.filter && phoneAlbums().length > 0;
 }
 
-function digitsPerLetter() {
-  if (albumCards()) return ALBUM_CARD_DIGITS;
-  return store.get('settings')?.songs_per_page / LETTERS.length || DIGITS.length;
+// This page's panels and their codes.
+function pageGroups() {
+  const groups = format().groups;
+  if (!albumCards()) return groups;
+  return groups.slice(0, ALBUM_CARD_GROUPS).map(g => ({ ...g, codes: g.codes.slice(0, ALBUM_CARD_DIGITS) }));
+}
+
+// How the panels sit on the board: columns x rows, chosen so a slot keeps
+// enough height for its title and a panel enough width. The classic 100
+// (10 panels of 10) stays five columns of two (A over B, C over D, ...).
+export function boardShape(groups, perGroup) {
+  if (groups <= 10 && perGroup <= 10) return { cols: Math.ceil(groups / Math.min(2, groups)), rows: Math.min(2, groups) };
+  let best = null;
+  for (let rows = 1; rows <= 6; rows++) {
+    const cols = Math.ceil(groups / rows);
+    // A slot is comfortable at 1/24 of the board's height, a panel at 1/6 of its width.
+    const score = Math.min((1 / (rows * perGroup)) / (1 / 24), (1 / cols) / (1 / 6)) - (cols * rows - groups) * 0.001;
+    if (!best || score > best.score) best = { cols, rows, score };
+  }
+  return { cols: best.cols, rows: best.rows };
 }
 
 // An album's cover: from its own songs once opened, else from a song the
@@ -143,16 +159,15 @@ export function view() {
   const all = isCategory
     ? categoriesFor(tracks, state.sort).map(value => (cards ? { category: value, cover: albumCover(tracks, value) } : { category: value }))
     : songsFor(tracks, state.sort, state.filter);
-  const digits = digitsPerLetter();
-  const perPage = digits * LETTERS.length;
+  const groups = pageGroups();
+  const perPage = groups.reduce((n, g) => n + g.codes.length, 0);
   const pages = Math.max(1, Math.ceil(all.length / perPage));
   const page = Math.min(state.page, pages - 1);
   const slots = [];
-  for (let i = 0; i < perPage; i++) {
-    const letter = LETTERS[Math.floor(i / digits)];
-    const digit = DIGITS[i % digits];
-    slots.push({ code: letter + digit, letter, item: all[page * perPage + i] || null });
+  for (const g of groups) {
+    for (const code of g.codes) slots.push({ code, group: g.label, item: all[page * perPage + slots.length] || null });
   }
+  const digits = Math.max(...groups.map(g => g.codes.length));
   return {
     sort: state.sort,
     sortLabel: SORTS[state.sort]?.label || state.sort,
@@ -160,7 +175,8 @@ export function view() {
     album: albumStatus(),
     page,
     pages,
-    digits,
+    digits,     // slots in the fullest panel
+    shape: boardShape(groups.length, digits),
     isCategory,
     cards,      // the album browser: cover cards rather than rows
     turn: state.turn || null,   // the last page turn: {seq, dir}
@@ -198,14 +214,11 @@ export function upLevel() {
   return true;
 }
 
-// The keypad picked slot `index` (A1 = 0 ... K0 = 99, jb-core's order).
-// Returns the song to queue, or null (empty slot, or a category opened).
-export function pick(index) {
-  const letter = Math.floor(index / DIGITS.length);
-  const digit = index % DIGITS.length;
-  const digits = digitsPerLetter();
-  if (digit >= digits) return null;  // e.g. A7 with 5 songs per letter
-  const slot = view().slots[letter * digits + digit];
+// The keypad picked the slot with this code ("B7", "214": jb-core's
+// selection). Returns the song to queue, or null (empty slot, a code this
+// page doesn't show, or a category opened).
+export function pick(code) {
+  const slot = view().slots.find(s => s.code === code);
   if (!slot?.item) return null;
   if (slot.item.category !== undefined) {
     state = { sort: state.sort, filter: { field: state.sort, value: slot.item.category }, page: 0, categoryPage: state.page };
