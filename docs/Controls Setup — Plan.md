@@ -91,13 +91,42 @@ are Cancel, ↑ ↓ are volume. Letters the jukebox doesn't use flash "This juke
   like a Seeburg), and three-digit entry for Rock-Ola. Entry stays letter-first unless a
   cabinet needs the number first.
 
+## First version (decided Oct 21)
+
+In from the start:
+- The Pico: detect, install, update (step 1).
+- Layouts: 100 (A–K, 1–0), 160 (A–V without I and O, 1–8), Rock-Ola's three-digit
+  numbers, and "something else" (tick the letters and numbers).
+- **A responsive song board**: it lays itself out for any letters × numbers (100, 160,
+  a custom set) and for three-digit numbers, instead of the fixed 10 × 10.
+- **Three-digit entry** (Rock-Ola) next to letter-and-number entry.
+- Teaching the knob, its press, Cancel and every key; the try-it screen; redo from Admin.
+- **Knob calibration**: "turn it one click to the right" counts what one click sends (encoders
+  send 1, 2 or 4 steps a click), so the knob never skips or moves two places a click;
+  the direction comes from the same turn.
+- **Bouncy buttons**: while teaching and trying, two presses of the same button closer
+  together than a person can press (under ~60 ms) mean a bouncing switch. The wizard says
+  so ("A looks bouncy: fixed") and lengthens that button's settle time (debounce), stored
+  per button. The Pico program takes a settle time per button too.
+- A keyboard always works.
+- **The README's build guide**: the recommended hardware (our build: the parts list), how
+  to wire the keypad board (pin diagram, a photo of the owner's), and how to install,
+  step by step.
+
+Later, when someone needs it: 200 selections, the volume knob, extra buttons and their
+actions, Left/Right/OK buttons for cabinets without a knob, a touchscreen.
+
+Open: which Rock-Ola numbers (the range: 100–299? per model) and how its board looks;
+the 160 board's design. Both sketched with the owner before building.
+
 ## Build order
 
-1. jb-input: any device, learn mode, the saved map, the keyboard always on, extra
-   buttons and their actions, a second knob.
-2. The wizard step for the 100 layout, so it's tried on the owner's cabinet first; the
-   Admin › Setup way back in.
-3. The Pico program by positions and the wizard's install and update; the owner's
-   cabinet moves to it (a re-teach, about two minutes).
-4. The other layouts: 160 and 200 boards (designed with the owner first), Rock-Ola's
-   three digits.
+1. jb-input: any device, learn mode, the saved map, knob calibration, per-button settle
+   times, the keyboard always on.
+2. The wizard step on the 100 layout, tried on the owner's cabinet first; the Admin ›
+   Setup way back in.
+3. The layout as a setting; the responsive board and three-digit entry (the 160 and
+   Rock-Ola boards designed with the owner first).
+4. The Pico program by positions, with settle times; the wizard's install and update; the
+   owner's cabinet moves to it (a re-teach, about two minutes).
+5. The README's build guide.
