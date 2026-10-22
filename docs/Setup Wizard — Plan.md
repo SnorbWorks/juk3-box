@@ -198,7 +198,7 @@ Built, in that order: 1–6 above, and the installer half of 8.
 - **6, the app**: "Set up a new jukebox" on Home (juk3box-helper `Features/Setup`): scans the code, notes the phone's network (`?ssid=` on the page), joins the hotspot, shows the page; the page tells the app when it starts joining (`webkit.messageHandlers.juk3box`), and the app lets go of the hotspot and finds the jukebox at its new address. Needs the Hotspot Configuration and Access Wi-Fi Information capabilities on the App ID (not enabled yet: the owner's call); without them it says to join from Settings.
 - **8, the card**: `deploy/make-card.sh` (from the Mac) runs `deploy/install/install.sh` on a fresh Raspberry Pi OS Lite and, after a check, `seal.sh`, which forgets the owner, Wi-Fi, phones, songs, the Last.fm key and setup so the next start opens setup mode. No Last.fm key is copied over (step 16a asks the owner).
 
-Still to do: 7 (services that reconnect to the bus); the knob step's key presses make real picks; the image for copying cards (machine id, SSH host keys, cloud-init).
+7 done Oct 22: `shared/bus.py` reconnects by itself, and mosquitto clears its module socket before each start (a restart used to fail until the next boot). Still to do: the knob step's key presses make real picks; the image for copying cards (machine id, SSH host keys, cloud-init).
 
 **The fresh-card test** (the owner's plan, Oct 20; the cabinet's own card is kept as it is):
 1. Raspberry Pi Imager: Raspberry Pi OS Lite (64-bit); hostname `juk3box`, user `admin` with the cabinet's password, the home Wi-Fi (only for the install), SSH with `~/.ssh/sidecar_ed25519.pub`.

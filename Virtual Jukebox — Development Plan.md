@@ -2,36 +2,32 @@
 
 Sep 24, 2026 · @shawn · updated Oct 19, 2026
 
-## Status (Oct 19, 2026)
+## Status (Oct 22, 2026)
 
-The jukebox works as an appliance on the Pi 4: an iPhone streams over Bluetooth, the library syncs to the themed UI, keypad picks queue and play, the knob drives the UI and volume, the whole cabinet's lights put on a show from the music, and the house's AirPlay speakers can play along in sync. Next: the helper app's first steps and the Pi 5 move (see Next, below).
+The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with the Juk3box Helper app (AirPlay) or over Bluetooth, the library syncs to the Neon theme, the keypad and knob pick and queue, the whole cabinet's lights put on a show from the music, and the house's AirPlay speakers can play along. A new owner sets it up from a phone (the setup wizard, over the jukebox's own Wi-Fi), and it updates itself from signed releases.
 
 | Phase | State |
 | --- | --- |
-| 0 Foundation, 1 Audio | Done. **Whole-home audio** (Oct 18): the cabinet and an AirPlay zone ("Inside") at once, in sync (delay 1425 ms, tuned by ear with music); the house follows the cabinet's knob and mute (airplay_match 1.45); the AirPlay feed drops 30 s after the music stops and comes back with the next song. The cabinet remembers its volume |
-| 2a Pico input | Done except encoder detent tuning and the coin-return retrofit |
-| 2b jb-input | Service done; gestures beyond click built but off, mapping not wired |
-| 2c LED board | Rev E built; all three chains working. **Level bar: an intermittent joint between strips 19 and 20** (found Oct 19): when it lets go, strips 20-36 freeze or go full white. Reflow it while the cabinet is open for the Pi 5 |
-| 3 Phone link test | Answered; only Q4's change counter untested |
-| 4 Phone source | Phone management built (Oct 14: pairing, the phone list, switch, forget, the lock; a second phone with a library still to test). **Pick doctor** (Oct 18-19): a pick that never plays is noticed, the screen says why and what to do, the keypad flashes, the admin keeps a record, and the source heals what it can; it spots a phone giving the jukebox Messages instead of Music; picks wait for the song list after a reconnect, with "Connecting and updating library" on screen and "Please connect a device" when there's no phone; stops when picks keep failing (no more shuffle loops). Open: **Bluetooth reliability in the cabinet** (radio frame errors in bursts; a distance test, then maybe a USB adapter with an external antenna) |
-| 5 Library | Done, plus playlists and albums (jb-crawl). Real artists and play counts still open |
-| 6 Core | Queue, shuffle, picks, album picks, Reset hold done. Up Next removal open |
-| 6b Lights | **Light show** (Oct 18): jb-analyzer hears drums, the beat, gaps, hits, sections, builds and drops; the director picks a style by genre and every part plays its role ([docs/Light Show Styles.md](docs/Light%20Show%20Styles.md)). **Idle** (Oct 19): the flowing waves for 3 minutes, then the city at night with the bar in colour stripes for 3, and round again. Open: the Pi 5 LED driver |
-| 7 UI platform | Engine, Neon theme, Home sections, albums, playlists, Settings (Bluetooth, Displays, buttons, modules), installable modules (Weather, Weather Mix), media and video backgrounds; **displays** (Oct 18: picture area, rotation, screen sleep) |
-| 7b Admin, 7c Page builder | Admin built (login, themes, phones, drives, displays, extensions, the pick record); page builder built. Setup wizard, Settings, Maintenance open |
-| 8 Appliance | Restarts on failure, power-loss-safe writes, jb-netwatch (Oct 14). Live netwatch test, log rotation, read-only root, pull-the-plug tests open |
-| 9 Hard drive | Done (Oct 14): USB drives merged with the phone's library, media import |
+| 0 Foundation, 1 Audio | Done, with whole-home audio (Oct 18) |
+| 2a Pico input | Done: program 2.0, installed and updated by the setup wizard (Oct 21). Encoder detent tuning and the coin-return retrofit open |
+| 2b jb-input | Done (Oct 21): any keypad or keyboard, learn mode, knob calibration, settle times. The gesture mapping isn't wired |
+| 2c LED board | Done, all three chains with audio and at their caps. **Open: the level bar's strip 19-20 joint** (working now; reflow it) |
+| 3 Phone link test | Answered |
+| 4 Phone source | Bluetooth and the Helper app, one phone in charge at a time (Oct 20). Open: a second phone with a library; Bluetooth reliability in the cabinet |
+| 5 Library | Done. Open: real artists and albums, play counts for a popular view |
+| 6 Core | Done except: Up Next removal (gesture undecided), play counts; check Cancel clears an entry after the controls rewrite |
+| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20) |
+| 7 UI platform | Done; Neon is the default (Oct 21) |
+| 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, updates, Last.fm), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
+| 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Open: the live netwatch test, log rotation, read-only root, cold boot under a minute, pull-the-plug tests |
+| 9 Hard drive | Done (Oct 14) |
 
-### Next (agreed Oct 19, 2026)
+### Next (Oct 22, 2026)
 
-One at a time:
-
-1. **Docs:** this status, and the helper app plan's revisions ([docs/JUK3BOX_HELPER_BUILD_PLAN.md](docs/JUK3BOX_HELPER_BUILD_PLAN.md)).
-2. **Bluetooth distance test**, then decide on a USB adapter with an external antenna (it would serve the Pi 5 too).
-3. **Pi 5 prep:** back up the SD card and data; the button and accent LED driver for the Pi 5's PIO; `[pi4]`/`[pi5]` settings ([docs/pi5-move.md](docs/pi5-move.md)).
-4. **Helper app Phase 0 and the sleep test:** the developer account is renewed (Oct 19) and an empty app builds signed; Xcode 26.3 is the newest this Intel MacBook Pro can run (Xcode 27 needs Apple silicon), which is fine for building to a phone; App Store uploads will need an Apple silicon Mac once Apple requires Xcode 27. Left: Xcode's first launch, Developer Mode on the phone, install, then the sleep test.
-5. **Pi 5 install**, with the cabinet open: swap the SD card, check every service, re-tune whole-home sync from 1425 ms, reflow the level bar's strip 19-20 joint.
-6. Then the helper app proper: its Phases 1-4 on the app side, then the AirPlay receiver and `jb-source-helper` on the Pi 5.
+1. **The card image**: build one and start a copy (the code is in place; no release has been made yet).
+2. **Security**: the bus is open to anyone on the network (see Roadmap item 4).
+3. **An Updates tab** (proposed Oct 22): everything that updates, in one place, with automatic updates on or off.
+4. Waiting on hardware or the owner: the level bar joint; an Android phone (Roadmap item 3); the App ID's hotspot capabilities; WMM off in setup mode.
 
 ## Architecture
 
@@ -218,11 +214,12 @@ The lighting hardware, built and proven before any animation code. Runs in paral
 - [ ] Set the Mean Well to 5.2–5.25V before connecting anything
 - [ ] Board only, no Pi: 5V at J2, each branch output reads 5V
 - [ ] Stack on the DAC Pro and power the Pi through the header; run `vcgencmd get_throttled` under load (must be `0x0`)
-- [ ] Pi on, audio playing: button chain on GPIO12 (SK6812\_STRIP\_GRBW), listen for clicks and watch for flicker. Chain works (23 px, Oct 10 stress test clean, no Wi-Fi errors); the audio test is still to do
-- [ ] Accent strip on GPIO13; build the three injection taps and C4; full-white test at the 6A cap, every point ≥ 4.7V. The port is proven (the button chain and the level bar both ran on it); the strip isn't built yet
+- [x] Pi on, audio playing: button chain on GPIO12 (SK6812\_STRIP\_GRBW), listen for clicks and watch for flicker
+- [x] Accent strip on GPIO13; build the three injection taps and C4; full-white test at the 6A cap, every point ≥ 4.7V
 - [x] Build the level bar (as built 36 × 5 px); run it on GPIO10 (SPI on, core\_freq=500, core\_freq\_min=500). Works through U2 after the D5 rework (Oct 11)
-- [ ] Run the bar with audio and both other chains running
-- [ ] Re-run `vcgencmd get_throttled` with all three chains at their caps
+- [x] Run the bar with audio and both other chains running
+- [x] Re-run `vcgencmd get_throttled` with all three chains at their caps
+- [ ] Level bar: reflow the intermittent joint between strips 19 and 20 (working now; when it lets go, strips 20-36 freeze or go full white)
 - [ ] Confirm button key caps: translucent (even glow) or opaque (halo); check clearance under each key
 - [ ] Next board revision: correct the Pixel Shifter output order (G, D5, !D5, C5) so no rework or software inversion is needed
 
