@@ -1,12 +1,8 @@
 # Neon background
 
-`background.jpg` and `background.mp4` were made for Juk3box, not taken from stock.
-
-- The picture: Z-Image-Turbo (Tongyi-MAI, Apache-2.0), 2048×1152, from a text prompt
-  (a rock concert seen from the crowd, an orange light rig, cyan beams through haze).
-- The motion: two 5-second clips from Wan 2.2 (Apache-2.0) in first-and-last-frame mode,
-  both starting and ending on that picture, so they join into a seamless loop.
-- The finish: joined into 20 s, smoothed to 30 fps and scaled to 1280×720 with ffmpeg; the
-  lighting turns slowly orange → pink → purple → blue and back, with a few soft strobe hits.
+`background.mp4` and `background.jpg` are original: the project owner made the two concert
+clips with Adobe Firefly for Juk3box. The video is both clips joined into a 14-second loop
+(1-second crossfades between them and across the loop point), 1280×720 at 24 fps, so a
+Raspberry Pi plays it without strain. The picture is a frame from the first clip.
 
 Same license as the rest of Juk3box (GPL-3.0).
