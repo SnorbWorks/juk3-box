@@ -202,7 +202,7 @@ Ideas from a 2026-09-27 design conversation, not yet implemented — captured he
 - **Volume**: double-click = toggle mute (jb-audio's `toggle_mute` command already exists — see `services/jb_audio/main.py` — nothing currently triggers it), distinct from the existing single-click-to-enter-slider-adjust-mode.
 - **Phone** (Phase 4): click = quick glance at who's connected (already built); hold = open the phone pairing/management screen (pair new, forget old) — keeps the common case uncluttered by the rarer, more deliberate one.
 - **Reset** (built Oct 12, the user's design): click = cancel a waiting letter, or the power menu; **hold 1 s** while a song plays = cancel the song (the next queued plays; nothing queued = stopped and cleared from Now Playing); hold with nothing playing = the power menu; **keep holding to 4 s** during music = cancel, then the menu with playback paused. The menu: Reboot / Shut down / Cancel by the knob, starting on Cancel; Reset click or 20 s = cancel and resume. The Reset light is red while held and blinks twice on the cancel and again when the menu opens.
-- **Up Next — decided (Oct 22)**: a long hold of Reset already does it (the song is cancelled and the queue moves on).
+- **Up Next — decided (Oct 22)**: holding Reset cancels the playing song; holding on empties Up Next and opens the power menu. Works as the owner wants; nothing more to do.
 
 ## Phase 2c: LED board build
 
@@ -291,7 +291,7 @@ The jukebox behavior, working end to end with no UI.
 - [x] Selection queue using the Phase 3 end-of-track strategy; shuffle (picks go ahead of shuffle's own; turning shuffle on starts playback). Clearing the queue on phone switch comes with Phase 4 switching
 - [x] Record plays for the popular view: a play counts after 30 s, from every source (Most Played)
 - [ ] Now Playing double-click (skip to next) and hold (previous/restart) drive through this same queue mechanism, not a raw transport command (see the gesture-to-function mapping in Phase 2b)
-- [x] Up Next item removal: a long hold of Reset cancels the song
+- [x] Up Next: holding Reset cancels the song; holding on empties Up Next and opens the power menu
 
 Done when: select, queue three songs, they play in order, and paging and sorting change what each key selects.
 
@@ -509,7 +509,7 @@ Also on the list: the jb-netwatch live test (Phase 8), power-loss safety (settin
 | Decision | Needed by | Current thinking |
 | --- | --- | --- |
 | Button and gesture mapping | Phase 2b config | Deferred. Draft: knob turn = volume, push + turn = paging, Reset = cancel/back, plus the click/double-click/hold mapping in Phase 2b's "Gesture-to-function mapping" section. Lives in config, costs nothing to change |
-| Up Next: removing a queued item | Phase 6/7 | Decided Oct 22: a long hold of Reset cancels the song |
+| Up Next: removing a queued item | Phase 6/7 | Decided Oct 22: holding Reset cancels the song; holding on empties Up Next and opens the power menu |
 | Connection policy: takeover vs. locked | Phase 4 | Locked: switching only from the jukebox menu |
 | Monitor size, resolution, aspect | Phase 7 | Decided: the UI is responsive, so any monitor works; the default theme mockups are 16:10 |
 | Coin-return retrofit feasibility | Phase 2a | Fallback: separate panel knob, still fits the pin budget |
