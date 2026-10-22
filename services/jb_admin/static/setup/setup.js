@@ -854,8 +854,8 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const KEYPAD_DIGITS = '1234567890';
 
 // The step's own actions answer with the step's view: keep the frame's parts.
-function controlsAct(name, data) {
-  return act(name, data, { quiet: true }).then(out => {
+function controlsAct(name, data, { quiet = true } = {}) {
+  return act(name, data, { quiet }).then(out => {
     if (out && out.phase) {
       const { id, title, skippable, back } = view.step;
       view.step = { ...out, id, title, skippable, back };
@@ -905,6 +905,45 @@ function miniBoard(p) {
     h('div.wz-board-codes', {}, g.codes.map(c => h('span', {}, c))))));
 }
 
+// Step 1: the keypad board (a Pico), when it needs something.
+function keypadCard(k) {
+  if (!k) return null;
+  const busy = local.acting?.startsWith('keypad_');
+  const go = (name, label, busyLabel) => h('button.wz-next', { type: 'button', style: 'flex:none', disabled: busy,
+    onClick: () => controlsAct(name, {}, { quiet: false }) }, busy && local.acting === name ? [h('span.wz-spin'), busyLabel] : label);
+  const look = h('button.wz-ghost', { type: 'button', disabled: busy, onClick: () => load('controls') }, 'Look again');
+  switch (k.state) {
+    case 'blank':
+      return h('div.wz-preview', {}, h('div.wz-preview-say', {}, 'Found a keypad board with nothing on it yet'),
+        h('p', {}, 'Install the keypad program on it? It takes about a minute.'),
+        go('keypad_install', 'Install the keypad program', 'Installing…'));
+    case 'not_pico':
+      return note('warn', `That board (${k.board || 'unknown'}) isn't a Raspberry Pi Pico. The keypad program is for the Pico.`);
+    case 'maintenance':
+      return h('div.wz-preview', {}, h('div.wz-preview-say', {}, 'Your keypad board is ready for its new program'),
+        go('keypad_update', `Install version ${k.latest}`, 'Installing…'));
+    case 'other':
+      return h('div.wz-preview', {}, h('div.wz-preview-say', {}, 'A Pico with other software on it'),
+        h('p', {}, 'It may be your own project. Replace what\'s on it with the keypad program?'),
+        go('keypad_replace', 'Replace it', 'Installing…'));
+    case 'older':
+      if (k.signal) {
+        return h('div.wz-preview', {}, h('div.wz-preview-say', {}, `Keypad program ${k.latest} is here (yours is ${k.running})`),
+          h('p', {}, 'The keypad stops for a few seconds while it updates.'),
+          go('keypad_update', 'Update it', 'Updating…'));
+      }
+      return h('div.wz-preview', {}, h('div.wz-preview-say', {}, `Keypad program ${k.latest} is here`),
+        h('p', {}, `Yours is the first version. This once, put it in update mode by hand; from ${k.latest} on it updates by itself.`),
+        h('ol.wz-howto', {}, h('li', {}, 'Unplug the keypad board\'s USB cable from the jukebox.'),
+          h('li', {}, 'Hold the A button and plug it back in. Keep holding for two seconds.')),
+        look);
+    case 'current':
+      return note('ok', `Keypad program ${k.running}: up to date.`);
+    default:
+      return null;
+  }
+}
+
 function controlsFormat(s) {
   local.spec ??= s.format.spec;
   local.preview ??= s.format;
@@ -915,6 +954,7 @@ function controlsFormat(s) {
   const letters = spec.kind === 'letters';
   const presetOn = id => JSON.stringify(s.presets.find(x => x.id === id)?.spec) === JSON.stringify(spec);
   const body = [
+    keypadCard(s.keypad),
     h('p', {}, 'Tell the jukebox what\'s on your selection buttons, so the song board\'s numbers match what people can press.'),
     h('div.wz-choices.two', {},
       choice({ title: 'The cabinet\'s buttons', sub: 'A keypad, and a knob if it has one', kind: 'radio', on: local.mode === 'buttons',
@@ -960,7 +1000,8 @@ function controlsFormat(s) {
         choice({ title: 'A knob', sub: 'It turns and presses', on: local.knob, onClick: () => { local.knob = !local.knob; render(); } }),
         choice({ title: 'A Cancel button', sub: 'Clears a half-entered pick', on: local.cancel, onClick: () => { local.cancel = !local.cancel; render(); } })));
     if (s.device === 'missing' && !s.keyboards) {
-      body.push(note('warn', 'No keypad or keyboard is plugged into the jukebox. Plug one in, then go on.'));
+      body.push(note('warn', 'No keypad or keyboard is plugged into the jukebox. Plug one in, then go on.',
+        h('div', { style: 'margin-top:6px' }, 'A Pico keypad board with other software on it shows up once you hold its white BOOTSEL button while plugging it in.')));
     }
   } else {
     body.push(note('info', 'A keyboard plugged into the jukebox always works: letters and numbers pick, the arrows and Enter are the knob, Backspace is Cancel, and up and down change the volume.'));

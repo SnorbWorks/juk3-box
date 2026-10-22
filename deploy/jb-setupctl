@@ -17,6 +17,11 @@ it only ever does these:
     jb-setupctl update check|apply|auto-on|auto-off
                                           the admin's Updates card (deploy/jb-update); apply
                                           runs on its own (it restarts the jukebox, jb-admin too)
+    jb-setupctl keypad status|install|update [replace]
+                                          the Pico keypad board (firmware/pico-keypad): what's
+                                          plugged in; CircuitPython and our program on a blank
+                                          one (its RPI-RP2 drive); our program onto one showing
+                                          its CIRCUITPY drive ("replace" if it has other software)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -54,6 +59,14 @@ ETC = Path("/etc/juk3-box")
 LASTFM_FIELDS = {"jb-library": "lastfm_api_key", "jb-analyzer": "lastfm_key"}
 LASTFM_KEY_RE = re.compile(r"^[0-9a-f]{32}$")
 TEST_UNIT = "jb-lighttest"
+# The keypad board (docs/Controls Setup — Plan.md, step 1).
+FIRMWARE = REPO / "firmware" / "pico-keypad"
+UF2 = FIRMWARE / "vendor" / "adafruit-circuitpython-raspberry_pi_pico-en_US-10.3.1.uf2"
+HID_LIB = FIRMWARE / "vendor" / "lib" / "adafruit_hid"
+PROGRAM = ("jbsignal.py", "config.py", "code.py", "boot.py")   # boot.py last: it takes effect on a restart
+KEYPAD_MOUNTS = Path("/run/juk3-box-keypad")
+PICO_VERSION_RE = re.compile(r'^VERSION = "([0-9][0-9.]*)"', re.M)
+CIRCUITPY_WAIT_S = 45
 
 BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
 END = "# --- end juk3box setup ---"
@@ -278,6 +291,165 @@ def cmd_update(what: str) -> str:
     die("update check|apply|auto-on|auto-off")
 
 
+def drive_with_label(label: str) -> str | None:
+    """/dev/sdX1 of the drive with this label, or None."""
+    out = run("lsblk", "-rno", "PATH,LABEL", check=False).stdout
+    for line in out.splitlines():
+        parts = line.split(" ", 1)
+        if len(parts) == 2 and parts[1].strip() == label:
+            return parts[0]
+    return None
+
+
+class Mounted:
+    """A keypad board's drive, mounted for a moment."""
+
+    def __init__(self, device: str, write: bool = False):
+        self.device, self.write = device, write
+
+    def __enter__(self) -> Path:
+        KEYPAD_MOUNTS.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.path = Path(tempfile.mkdtemp(dir=KEYPAD_MOUNTS))
+        opts = ("rw" if self.write else "ro") + ",nosuid,nodev,noexec"
+        run("mount", "-t", "vfat", "-o", opts, self.device, str(self.path))
+        return self.path
+
+    def __exit__(self, *exc):
+        os.sync()
+        if run("umount", str(self.path), check=False).returncode != 0:
+            run("umount", "--lazy", str(self.path), check=False)
+        try:
+            self.path.rmdir()
+        except OSError:
+            pass
+
+
+def read_text(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return ""
+
+
+def pico_board(info_uf2: str) -> str | None:
+    """INFO_UF2.TXT's board: "RPI-RP2" for a Pico (RP2040)."""
+    m = re.search(r"^Board-ID:\s*(\S+)", info_uf2, re.M)
+    return m.group(1) if m else None
+
+
+def our_program(config_py: str) -> tuple[bool, str | None]:
+    """Is this our keypad program, and which version ("1" before versions)."""
+    if "JB Keypad" not in config_py:
+        return False, None
+    m = PICO_VERSION_RE.search(config_py)
+    return True, m.group(1) if m else "1"
+
+
+def keypad_status() -> dict:
+    out = {"bootloader": False, "board": None, "circuitpy": False, "ours": False, "version": None}
+    dev = drive_with_label("RPI-RP2")
+    if dev:
+        with Mounted(dev) as root:
+            out.update(bootloader=True, board=pico_board(read_text(root / "INFO_UF2.TXT")))
+    dev = drive_with_label("CIRCUITPY")
+    if dev:
+        with Mounted(dev) as root:
+            ours, version = our_program(read_text(root / "config.py"))
+            out.update(circuitpy=True, ours=ours, version=version)
+    return out
+
+
+def copy_program(root: Path):
+    lib = root / "lib" / "adafruit_hid"
+    lib.mkdir(parents=True, exist_ok=True)
+    for f in sorted(HID_LIB.glob("*.py")):
+        shutil.copyfile(f, lib / f.name)
+    for name in PROGRAM:
+        shutil.copyfile(FIRMWARE / name, root / name)
+    os.sync()
+
+
+def pico_serial() -> str | None:
+    """The keypad board's serial console (it has one in maintenance mode)."""
+    by_id = Path("/dev/serial/by-id")
+    found = sorted(str(p) for p in by_id.glob("*")) if by_id.is_dir() else []
+    ours = [p for p in found if re.search(r"JB_Keypad|CircuitPython|Pico", p)]
+    if ours:
+        return ours[0]
+    acm = sorted(str(p) for p in Path("/dev").glob("ttyACM*"))
+    return acm[0] if len(acm) == 1 else None
+
+
+def restart_pico() -> bool:
+    """Restart it through its console, so boot.py runs again: a keyboard
+    and nothing else. False if there was no console (unplug it and back)."""
+    import termios
+    import time
+    import tty
+    path = pico_serial()
+    if not path:
+        return False
+    fd = os.open(path, os.O_RDWR | os.O_NOCTTY)
+    try:
+        tty.setraw(fd)
+        termios.tcflush(fd, termios.TCIOFLUSH)
+        os.write(fd, b"\r\x03\x03")          # stop code.py: the REPL
+        time.sleep(0.5)
+        os.write(fd, b"import microcontroller; microcontroller.reset()\r")
+        time.sleep(0.3)
+    except OSError:
+        pass                                  # it went away mid-write: restarted
+    finally:
+        os.close(fd)
+    return True
+
+
+def wait_for_label(label: str, seconds: float) -> str | None:
+    import time
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        run("udevadm", "settle", "--timeout=2", check=False)
+        dev = drive_with_label(label)
+        if dev:
+            return dev
+        time.sleep(1)
+    return None
+
+
+def put_program(dev: str, replace: bool) -> str:
+    with Mounted(dev, write=True) as root:
+        ours, _ = our_program(read_text(root / "config.py"))
+        if not ours and not replace and (root / "code.py").exists():
+            die("this board has other software on it; it's only replaced when you say so")
+        copy_program(root)
+    return "installed" if restart_pico() else "installed; unplug the keypad board and plug it back in"
+
+
+def cmd_keypad(args: list[str]) -> str:
+    what = args[0] if args else ""
+    if what == "status" and len(args) == 1:
+        return json.dumps(keypad_status())
+    if what == "install" and len(args) == 1:
+        dev = drive_with_label("RPI-RP2")
+        if not dev:
+            die("no keypad board waiting to be installed: hold its BOOTSEL button while you plug it in")
+        with Mounted(dev, write=True) as root:
+            board = pico_board(read_text(root / "INFO_UF2.TXT"))
+            if board != "RPI-RP2":
+                die(f"this board ({board or 'unknown'}) isn't a Raspberry Pi Pico; the keypad program is for the Pico")
+            shutil.copyfile(UF2, root / UF2.name)  # it restarts into CircuitPython once it has it
+        dev = wait_for_label("CIRCUITPY", CIRCUITPY_WAIT_S)
+        if not dev:
+            die("CircuitPython didn't start on the keypad board; unplug it and try again")
+        return put_program(dev, replace=True)
+    if what == "update" and args[1:] in ([], ["replace"]):
+        dev = drive_with_label("CIRCUITPY")
+        if not dev:
+            die("the keypad board isn't showing its drive: unplug it, hold A while you plug it back in")
+        return put_program(dev, replace=args[1:] == ["replace"])
+    die("unknown keypad command")
+
+
 def dispatch(a: list[str]) -> str:
     if len(a) == 2 and a[0] == "psu":
         return cmd_psu(a[1])
@@ -297,6 +469,8 @@ def dispatch(a: list[str]) -> str:
         return cmd_lastfm(a[1])
     if len(a) == 2 and a[0] == "update":
         return cmd_update(a[1])
+    if a and a[0] == "keypad":
+        return cmd_keypad(a[1:])
     die("unknown command")
 
 

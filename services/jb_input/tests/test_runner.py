@@ -14,8 +14,9 @@ from services.jb_input.runner import Runner
 class FakeDevice:
     grabbed = True
 
-    def __init__(self, events, held=(), path="/dev/input/fake", name="Jukebox JB Keypad"):
+    def __init__(self, events, held=(), path="/dev/input/fake", name="Jukebox JB Keypad", stays=False):
         self.script = events
+        self.stays = stays   # plugged in until the test ends
         self.held = list(held)
         self.closed = False
         self.path, self.name, self.id = path, name, f"239a:80f4:{name}"
@@ -27,6 +28,8 @@ class FakeDevice:
         for code, value in self.script:
             await asyncio.sleep(0)
             yield RawEvent(code, value, clock())
+        if self.stays:
+            await asyncio.Event().wait()
         raise DeviceLost("unplugged")
 
     def close(self):
@@ -35,7 +38,7 @@ class FakeDevice:
 
 class FakePublisher:
     def __init__(self):
-        self.device, self.keyboards, self.learning = "missing", 0, False
+        self.device, self.keyboards, self.learning, self.keypad = "missing", 0, False, None
         self.statuses = []   # (device, faults)
         self.published = []
         self.learned = []
@@ -134,3 +137,40 @@ def test_learning_ends_by_itself():
         return runner, publisher
     runner, publisher = asyncio.run(go())
     assert not runner.learning and not publisher.learning
+
+
+def test_our_keypad_is_asked_into_maintenance_mode_and_keyboards_are_not():
+    async def go():
+        signalled = []
+        keypad = FakeDevice([], name="Jukebox JB Keypad 2.0", stays=True)
+        keyboard = FakeDevice([], path="/dev/input/kbd", name="USB Keyboard", stays=True)
+        for d in (keypad, keyboard):
+            async def signal(d=d):
+                signalled.append(d.name)
+            d.signal = signal
+        runner, _, publisher = make_runner([])
+        runner._start(keypad, "keypad")
+        runner._start(keyboard, "keyboard")
+        await asyncio.sleep(0)
+        assert publisher.keypad == "Jukebox JB Keypad 2.0"
+        assert await runner.keypad_maintenance() == 1
+        for *_, task in list(runner.sessions.values()):
+            task.cancel()
+        return signalled
+    assert asyncio.run(go()) == ["Jukebox JB Keypad 2.0"]
+
+
+def test_the_signal_matches_the_keypad_programs():
+    import importlib.util
+    from pathlib import Path
+    from services.jb_input.device import MAINTENANCE_SIGNAL
+    path = Path(__file__).resolve().parents[3] / "firmware" / "pico-keypad" / "jbsignal.py"
+    spec = importlib.util.spec_from_file_location("jbsignal", path)
+    jbsignal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jbsignal)
+    assert jbsignal.PATTERN == MAINTENANCE_SIGNAL
+    s = jbsignal.Signal()
+    assert not any(s.feed(v, 10 + i * 0.08) for i, v in enumerate((0, 1, 2, 4, 2, 1, 7)))
+    assert s.feed(0, 11)                                    # the last one completes it
+    s = jbsignal.Signal()
+    assert not any(s.feed(v, 20 + i * 1.0) for i, v in enumerate(MAINTENANCE_SIGNAL))   # too slow

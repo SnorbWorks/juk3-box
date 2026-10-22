@@ -15,9 +15,16 @@ console or the kiosk browser. Unplugging surfaces as DeviceLost; the runner
 opens it again when it comes back.
 """
 
+import asyncio
 import os
 
 from services.jb_input.events import RawEvent
+
+# The keypad program's "restart into maintenance mode" signal: its keyboard
+# lights in this order (firmware/pico-keypad/jbsignal.py; keep them alike).
+# Bits: 1 Num Lock, 2 Caps Lock, 4 Scroll Lock.
+MAINTENANCE_SIGNAL = (1, 2, 4, 2, 1, 7, 0)
+SIGNAL_STEP_S = 0.08
 
 
 class DeviceLost(Exception):
@@ -43,6 +50,14 @@ class EvdevKeypad:
     @property
     def id(self) -> str:
         return device_id(self.dev)
+
+    async def signal(self, pattern=MAINTENANCE_SIGNAL):
+        """Flash the keyboard lights in a pattern (our keypad program listens)."""
+        from evdev import ecodes
+        for lights in pattern:
+            for bit, led in ((1, ecodes.LED_NUML), (2, ecodes.LED_CAPSL), (4, ecodes.LED_SCROLLL)):
+                self.dev.set_led(led, 1 if lights & bit else 0)
+            await asyncio.sleep(SIGNAL_STEP_S)
 
     def active_key_names(self) -> list:
         from evdev import ecodes

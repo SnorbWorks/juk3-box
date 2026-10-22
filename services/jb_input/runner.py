@@ -47,6 +47,7 @@ class Runner:
 
     async def _status(self, t):
         self.publisher.device = "connected" if self._count("keypad") else "missing"
+        self.publisher.keypad = next((d.name for d, r, _, _ in self.sessions.values() if r == "keypad"), None)
         self.publisher.keyboards = self._count("keyboard")
         self.publisher.learning = self.learning
         await self.publisher.status(self.faults, t)
@@ -121,6 +122,20 @@ class Runner:
                     await self.publisher.events(pipeline.reset_state(t), self.faults, t)
         self.log.info("learning %s", "on" if on else "off")
         await self._status(t)
+
+    async def keypad_maintenance(self) -> int:
+        """Ask our keypad program to restart with its drive showing, for an
+        update (the setup wizard's controls step). Returns how many were asked."""
+        asked = 0
+        for dev, role, _, _ in list(self.sessions.values()):
+            if role == "keypad" and dev.name.startswith(self.settings.device_name):
+                self.log.info("asking %s to restart into maintenance mode", dev.name)
+                try:
+                    await dev.signal()
+                    asked += 1
+                except OSError as e:
+                    self.log.warning("couldn't signal %s: %s", dev.name, e)
+        return asked
 
     async def reload(self, settings):
         """New settings (the wizard saved what it learned): close every device;

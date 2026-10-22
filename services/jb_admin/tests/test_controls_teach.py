@@ -117,3 +117,20 @@ def test_skip_back_and_try_it():
     assert t.trial["said"] == "A letter comes first."
     press(t, c, "KEY_Q")
     assert t.trial["said"] == "That button wasn't taught."
+
+
+def test_what_the_keypad_board_needs():
+    from services.jb_admin.setup_wizard import keypad_latest, keypad_running, keypad_state
+    assert keypad_running("Jukebox JB Keypad") == "1" and keypad_running("Jukebox JB Keypad 2.0") == "2.0"
+    assert keypad_running("USB Keyboard") is None
+    latest = keypad_latest()
+    assert latest == "2.0"
+    assert keypad_state(None, {"bootloader": True, "board": "RPI-RP2"}, latest)["state"] == "blank"
+    assert keypad_state(None, {"bootloader": True, "board": "RP2350"}, latest)["state"] == "not_pico"
+    assert keypad_state("1", {"circuitpy": True, "ours": True, "version": "1"}, latest)["state"] == "maintenance"
+    assert keypad_state(None, {"circuitpy": True, "ours": False}, latest)["state"] == "other"
+    old = keypad_state("1", {}, latest)
+    assert old["state"] == "older" and old["signal"] is False        # the first version: hold A
+    assert keypad_state("2.0", {}, "2.1")["signal"] is True
+    assert keypad_state("2.0", {}, latest)["state"] == "current"
+    assert keypad_state(None, {}, latest)["state"] == "none"

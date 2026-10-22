@@ -23,6 +23,7 @@
   ],
   "commands": [
     "learn",
-    "reload"
+    "reload",
+    "keypad_maintenance"
   ]
 }

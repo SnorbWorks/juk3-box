@@ -6,6 +6,8 @@ Commands on jukebox/jb-input/cmd:
   {"action": "learn", "on": true|false}   the setup wizard's teaching (runner.py)
   {"action": "reload"}                    read the learned controls again (also
                                           on jukebox/jb-admin/changed "controls")
+  {"action": "keypad_maintenance"}        our keypad program restarts with its drive
+                                          showing, for an update (device.py's signal)
 
     python -m services.jb_input.main [--config /etc/juk3-box/jb-input.json]
 """
@@ -47,6 +49,8 @@ async def listen(bus, runner, config_path, log):
         try:
             if topic == CMD and payload.get("action") == "learn":
                 await runner.set_learning(bool(payload.get("on")))
+            elif topic == CMD and payload.get("action") == "keypad_maintenance":
+                await runner.keypad_maintenance()
             elif (topic == CMD and payload.get("action") == "reload") or (
                     topic == CHANGED and "controls" in (payload.get("what") or [])):
                 await runner.reload(load_settings(config_path, log))

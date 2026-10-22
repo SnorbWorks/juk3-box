@@ -2,7 +2,8 @@
 namespace and style as the other jb-* services.
 
   jukebox/jb-input/status   retained: {"online", "device": "connected"|"missing" (a keypad),
-                            "keyboards": n, "learning": bool, "faults"}
+                            "keypad": its name ("Jukebox JB Keypad 2.0": our program
+                            and its version) or None, "keyboards": n, "learning": bool, "faults"}
   jukebox/jb-input/key      {"key": "B", "kind": "letter"|"digit"} on each selection key down
   jukebox/jb-input/gesture  {"control": "knob"|"reset", "gesture": "click"|"turn"|...,
                              "steps": n (turn/push_turn only)}
@@ -30,9 +31,10 @@ def topic(name: str) -> str:
     return f"{PREFIX}/{name}"
 
 
-def status_payload(online: bool, device: str, faults, keyboards: int = 0, learning: bool = False) -> dict:
-    return {"online": online, "device": device, "keyboards": keyboards, "learning": learning,
-            "faults": sorted(faults)}
+def status_payload(online: bool, device: str, faults, keyboards: int = 0, learning: bool = False,
+                   keypad: str | None = None) -> dict:
+    return {"online": online, "device": device, "keypad": keypad, "keyboards": keyboards,
+            "learning": learning, "faults": sorted(faults)}
 
 
 def learn_payload(dev, role: str, raw) -> dict:
@@ -65,10 +67,11 @@ class Publisher:
         self.device = "missing"
         self.keyboards = 0
         self.learning = False
+        self.keypad = None
 
     async def status(self, faults, t: float, online: bool = True):
         await self.bus.publish(topic("status"), status_payload(online, self.device, faults, self.keyboards,
-                                                               self.learning), retain=True)
+                                                               self.learning, self.keypad), retain=True)
 
     async def learn(self, dev, role: str, raw):
         await self.bus.publish(topic("learn"), learn_payload(dev, role, raw))

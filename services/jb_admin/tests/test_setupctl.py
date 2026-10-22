@@ -71,3 +71,13 @@ def test_the_lastfm_key_is_set_and_cleared_keeping_the_other_settings():
     assert json.loads(ctl.with_field(text, "lastfm_api_key", None)) == {"enrich_delay": 1}
     assert json.loads(ctl.with_field("", "lastfm_key", key)) == {"lastfm_key": key}
     assert ctl.with_field("", "lastfm_key", None) is None
+
+
+def test_the_keypad_boards_drives_are_read():
+    assert ctl.pico_board("UF2 Bootloader v3.0\nModel: Raspberry Pi RP2\nBoard-ID: RPI-RP2\n") == "RPI-RP2"
+    assert ctl.pico_board("Board-ID: RP2350\n") == "RP2350"
+    assert ctl.our_program('USB_PRODUCT = "JB Keypad " + VERSION\nVERSION = "2.0"\n') == (True, "2.0")
+    assert ctl.our_program('USB_PRODUCT = "JB Keypad"\n') == (True, "1")
+    assert ctl.our_program("print('hello')") == (False, None)
+    with pytest.raises(ctl.Refused):
+        ctl.dispatch(["keypad", "flash"])

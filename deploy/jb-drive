@@ -7,6 +7,9 @@ and systemd stops when it goes away (BindsTo the device).
     jb-drive add <device>       mount /dev/<device> under MOUNTS, describe it in STATE
     jb-drive remove <device>    unmount it (lazily: it's usually already gone)
 
+A Pico keypad board's own drives (RPI-RP2, CIRCUITPY) aren't music: they're
+left alone for the keypad installer (jb-setupctl keypad).
+
 Read-only always: the jukebox only reads music and pictures, so a drive
 pulled mid-song, or a power cut, can't damage what's on it. Only the
 filesystems people format drives with on a Mac or a PC are taken (exFAT,
@@ -33,6 +36,7 @@ UUID_RE = re.compile(r"[^A-Za-z0-9-]")
 # blkid's TYPE -> the kernel filesystem to mount it with.
 TYPES = {"exfat": "exfat", "vfat": "vfat", "ntfs": "ntfs3", "hfsplus": "hfsplus"}
 SAFE = "ro,nosuid,nodev,noexec"
+PICO_LABELS = ("RPI-RP2", "CIRCUITPY")
 
 
 def props(device: str) -> dict:
@@ -63,6 +67,9 @@ def add(device: str) -> None:
     if not fstype:
         sys.exit(f"{device}: {info.get('ID_FS_TYPE') or 'no'} filesystem, not one the jukebox reads")
     if mount_point(device):
+        return
+    if decode_label(info.get("ID_FS_LABEL_ENC", "")) in PICO_LABELS:
+        print(f"{device}: a keypad board's drive, left for the keypad installer")
         return
     uuid = UUID_RE.sub("", info.get("ID_FS_UUID", "")) or device
     target = MOUNTS / uuid

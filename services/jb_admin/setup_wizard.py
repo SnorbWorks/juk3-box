@@ -15,6 +15,7 @@ setup overlay; its yes/no answers come back on jukebox/jb-admin/setup-answer.
 """
 
 import asyncio
+import json
 import math
 import re
 import socket
@@ -601,6 +602,45 @@ class Screen(Step):
         return "Check that everything fits inside the cabinet's glass."
 
 
+KEYPAD_CONFIG = Path(__file__).resolve().parents[2] / "firmware" / "pico-keypad" / "config.py"
+KEYPAD_NAME = "Jukebox JB Keypad"
+KEYPAD_SIGNAL_FROM = (2,)      # versions that restart into maintenance mode when asked
+KEYPAD_WAIT_S = 20
+
+
+def version_tuple(v) -> tuple:
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except ValueError:
+        return (0,)
+
+
+def keypad_latest() -> str | None:
+    m = re.search(r'^VERSION = "([0-9.]+)"', KEYPAD_CONFIG.read_text(), re.M) if KEYPAD_CONFIG.exists() else None
+    return m.group(1) if m else None
+
+
+def keypad_running(name) -> str | None:
+    """Our program's version from the keypad's name ("1" before versions)."""
+    if not isinstance(name, str) or not name.startswith(KEYPAD_NAME):
+        return None
+    return name[len(KEYPAD_NAME):].strip() or "1"
+
+
+def keypad_state(running, drives: dict, latest) -> dict:
+    """What the keypad board needs (docs/Controls Setup — Plan.md, step 1)."""
+    out = {"running": running, "latest": latest}
+    if drives.get("bootloader"):
+        return {**out, "state": "blank" if drives.get("board") == "RPI-RP2" else "not_pico", "board": drives.get("board")}
+    if drives.get("circuitpy"):
+        return {**out, "state": "maintenance" if drives.get("ours") else "other", "version": drives.get("version")}
+    if running is None:
+        return {**out, "state": "none"}
+    if latest and version_tuple(running) < version_tuple(latest):
+        return {**out, "state": "older", "signal": version_tuple(running) >= KEYPAD_SIGNAL_FROM}
+    return {**out, "state": "current"}
+
+
 def format_preview(spec) -> dict:
     """What a selection format makes, for the page's live preview."""
     clean = selection.clean(spec)
@@ -625,6 +665,7 @@ class Controls(Step):
             raw = w.admin.raw_settings().get("selection")
             presets = {k: {kk: vv for kk, vv in v.items() if kk != "label"} for k, v in selection.PRESETS.items()}
             return {**out, "phase": "format", "format": format_preview(selection.clean(raw) or selection.DEFAULT),
+                    "keypad": await w.keypad(),
                     "presets": [{"id": k, "label": v["label"], "spec": presets[k]} for k, v in selection.PRESETS.items()],
                     "had": w.answer("controls")}
         await w.keep_learning()
@@ -635,6 +676,9 @@ class Controls(Step):
         t = w.teacher
         if name == "preview":
             return format_preview(data.get("spec"))
+        if name in ("keypad_install", "keypad_update", "keypad_replace"):
+            await w.keypad_program(name.removeprefix("keypad_"))
+            return await self.view(w)
         if name == "start":
             fmt = selection.Format(format_preview(data.get("spec"))["spec"])
             w.teacher = Teacher(fmt, knob=data.get("knob", True) is not False, cancel=data.get("cancel", True) is not False)
@@ -1135,6 +1179,34 @@ class Wizard:
     async def keep_learning(self) -> None:
         if time.monotonic() - self.learn_sent > 120:
             await self.learn(True)
+
+    async def keypad(self) -> dict:
+        running = keypad_running((self.admin.live.get("input") or {}).get("keypad"))
+        try:
+            drives = json.loads(await self.ctl("keypad", "status"))
+        except (WizardError, ValueError):
+            drives = {}
+        return keypad_state(running, drives if isinstance(drives, dict) else {}, keypad_latest())
+
+    async def keypad_program(self, how: str) -> None:
+        """Put our program on the keypad board: on a blank one (install), over
+        an older one (update: it's asked to show its drive first, if it can),
+        or over other software (replace, only when the owner said so)."""
+        if how == "install":
+            out = await self.admin.setup_ctl("keypad", "install", timeout=150)
+        else:
+            k = await self.keypad()
+            if how == "update" and k["state"] == "older" and k.get("signal"):
+                await self.admin.bus_cmd("jukebox/jb-input/cmd", {"action": "keypad_maintenance"})
+                end = time.monotonic() + KEYPAD_WAIT_S
+                while k["state"] != "maintenance" and time.monotonic() < end:
+                    await asyncio.sleep(1.5)
+                    k = await self.keypad()
+            if k["state"] not in ("maintenance", "other"):
+                raise WizardError("The keypad board isn't showing its drive. Unplug it, hold A while you plug it back in, "
+                                  "and keep holding for two seconds.")
+            out = await self.admin.setup_ctl("keypad", "update", *(["replace"] if how == "replace" else []), timeout=60)
+        self.log.info("setup: keypad program %s: %s", how, out)
 
     async def stop_teaching(self) -> None:
         if self.teacher is not None:

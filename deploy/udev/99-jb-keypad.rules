@@ -1,5 +1,6 @@
 # Stable name for the Pico keypad's keyboard event device, so jb-input can
 # open /dev/input/jb-keypad instead of scanning. Matches the USB identity the
-# firmware sets in boot.py (manufacturer "Jukebox", product "JB Keypad").
+# firmware sets in boot.py (manufacturer "Jukebox", product "JB Keypad", with
+# the program's version after it from 2.0: "JB Keypad 2.0").
 # Install: sudo cp 99-jb-keypad.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
-SUBSYSTEM=="input", KERNEL=="event*", ATTRS{manufacturer}=="Jukebox", ATTRS{product}=="JB Keypad", SYMLINK+="input/jb-keypad", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{manufacturer}=="Jukebox", ATTRS{product}=="JB Keypad*", SYMLINK+="input/jb-keypad", GROUP="input", MODE="0660"
