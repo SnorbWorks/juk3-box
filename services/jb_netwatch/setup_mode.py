@@ -23,6 +23,7 @@ restart always ends it too (the access point never starts by itself).
 import json
 import logging
 import secrets
+import socket
 import subprocess
 import threading
 import time
@@ -35,6 +36,29 @@ from shared.files import write_atomic
 CON_NAME = "juk3box-setup"
 ADDRESS = "10.42.0.1"           # NetworkManager's shared mode gives itself this
 SETUP_URL = f"http://{ADDRESS}:8080/setup"
+
+
+def local_url() -> str:
+    """The setup page by the jukebox's own name: the address it keeps after
+    setup, so a password a phone saves here is filed under it (not 10.42.0.1)
+    and fills in again later."""
+    return f"http://{socket.gethostname()}.local:8080/setup"
+
+
+# What anything on port 80 gets: a page that opens setup by the jukebox's
+# name if this phone can reach it that way (mDNS), else by the address.
+PORTAL_PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Set up Juk3box</title></head>
+<body style="margin:0;padding:48px 16px;font:600 19px -apple-system,system-ui,sans-serif;background:#7a3db0;color:#fff;text-align:center">
+<p>Opening setup…</p><p style="font-size:16px"><a style="color:#fff" href="{ip}">Tap here if it doesn't open</a></p>
+<script>
+var named = "{named}", ip = "{ip}", done = false;
+function go(url) {{ if (!done) {{ done = true; location.replace(url); }} }}
+setTimeout(function () {{ go(ip); }}, 3000);
+fetch(named.replace(/\/setup$/, "/api/session"), {{ mode: "no-cors", cache: "no-store" }})
+  .then(function () {{ go(named); }}, function () {{ go(ip); }});
+</script></body></html>
+"""
 DNS_CONF = Path("/etc/NetworkManager/dnsmasq-shared.d/juk3box-setup.conf")
 SETUP_JSON = Path("/var/lib/juk3-box/setup.json")
 CHANNEL = 6
@@ -137,14 +161,17 @@ def join_reason(out: str) -> str:
 # The portal ------------------------------------------------------------------------
 
 class _ToSetup(BaseHTTPRequestHandler):
-    """Every request on port 80 goes to the setup pages."""
+    """Every request on port 80 goes to the setup pages (PORTAL_PAGE)."""
 
     def _send(self):
-        self.send_response(302)
-        self.send_header("Location", SETUP_URL)
+        body = PORTAL_PAGE.format(named=local_url(), ip=SETUP_URL).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", "0")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     do_GET = do_HEAD = do_POST = _send
 
@@ -297,7 +324,7 @@ class SetupMode:
             return
         self.portal.start()
         log.warning("setup mode on (%s): %s", why, ssid)
-        self.write(active=True, why=why, started=self.clock(), address=ADDRESS, url=SETUP_URL,
+        self.write(active=True, why=why, started=self.clock(), address=ADDRESS, url=local_url(),
                    networks=networks, scanned=self.clock(), join=None, error=None)
 
     def clean_up(self) -> None:

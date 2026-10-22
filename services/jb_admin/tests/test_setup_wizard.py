@@ -353,3 +353,19 @@ def test_lastfm_can_be_skipped_and_added_later_from_the_admin(tmp_path):
         assert r.status == 200 and (await r.json())["set"] is False
         assert ("lastfm", "clear") in calls and ("call", "jb-weathermix", "lastfm-key", None) in calls
     run(tmp_path, check)
+
+
+def test_a_new_jukebox_shows_no_address_until_it_can_be_reached(tmp_path):
+    async def check(client, admin, pi, calls):
+        w = admin.wizard
+        w.online = False
+        assert w.cabinet() == {"active": True, "waiting": True, "title": "Getting ready",
+                               "say": "Looking for a network. Its own Wi-Fi comes up in about half a minute."}
+        write_atomic(setup_net.state_path(w.setupnet_dir), json.dumps(
+            {"active": True, "ssid": "Juk3box Setup 1234", "password": "abcd2345", "url": "http://juk3box.local:8080/setup"}))
+        out = w.cabinet()
+        assert "waiting" not in out and out["hotspot"]["ssid"] == "Juk3box Setup 1234"
+        write_atomic(setup_net.state_path(w.setupnet_dir), json.dumps({"active": False}))
+        w.online = True
+        assert "waiting" not in w.cabinet() and w.cabinet()["address"].endswith(":8080/setup")
+    run(tmp_path, check, password=False)

@@ -140,3 +140,10 @@ def test_asked_for_and_unused_it_goes_back_after_a_while(tmp_path):
     s.tick()
     assert not s.active and setup_net.read_state(tmp_path / "setupnet")["ended"] == "unused"
     assert ["nmcli", "device", "connect", "wlan0"] in nm.cmds
+
+
+def test_the_portal_opens_setup_by_the_jukeboxs_name_or_else_its_address(monkeypatch):
+    monkeypatch.setattr(setup_mode.socket, "gethostname", lambda: "juk3box")
+    page = setup_mode.PORTAL_PAGE.format(named=setup_mode.local_url(), ip=setup_mode.SETUP_URL)
+    assert '"http://juk3box.local:8080/setup"' in page and '"http://10.42.0.1:8080/setup"' in page
+    assert 'href="http://10.42.0.1:8080/setup"' in page          # the link works without the name

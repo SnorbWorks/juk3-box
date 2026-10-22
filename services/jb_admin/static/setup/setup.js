@@ -121,7 +121,7 @@ async function load(step) {
 function show(next) {
   const moved = !view || next.step.id !== view.step.id;
   view = next;
-  if (moved) local = {};
+  if (moved) { local = {}; window.scrollTo(0, 0); }
   render();
   if (moved) enter();
 }
@@ -168,7 +168,9 @@ function startPolling() {
     if (r.ok && r.data.step.id === view.step.id) {
       view = r.data;
       onLive();
-      render();
+      // Not while someone's typing (a Wi-Fi password): redrawing would close
+      // the phone's keyboard. The news shows at the next redraw.
+      if (!typing()) render();
     }
   }, POLL_MS);
 }
@@ -180,9 +182,32 @@ function stopPolling() {
 
 // -- The frame ----------------------------------------------------------------------
 
+function typing() {
+  const a = document.activeElement;
+  return !!a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+}
+
 function render() {
   stopPolling();
   if (!view) return;
+  // Redrawing replaces the page: keep where it was scrolled to, and the box
+  // being typed in (with its cursor), so a redraw never jumps or drops it.
+  const y = window.scrollY;
+  const a = document.activeElement;
+  const focusId = a && root.contains(a) && a.id ? a.id : null;
+  const caret = focusId && typeof a.selectionStart === 'number' ? [a.selectionStart, a.selectionEnd] : null;
+  draw();
+  if (focusId) {
+    const again = document.getElementById(focusId);
+    if (again) {
+      again.focus({ preventScroll: true });
+      if (caret) try { again.setSelectionRange(...caret); } catch { /* not a text box */ }
+    }
+  }
+  window.scrollTo(0, y);
+}
+
+function draw() {
   if (view.done && !local.again) return renderFinished(false);
   if (!seenWelcome() && !view.steps.some(s => s.done)) return renderWelcome();
   const r = STEPS[view.step.id] ? STEPS[view.step.id](view.step) : { body: [h('p', {}, 'This step is coming soon.')] };
@@ -327,6 +352,7 @@ const STEPS = {
   password(s) {
     local.pw ??= '';
     local.pw2 ??= '';
+    const kind = local.showPw ? 'text' : 'password';
     const go = async () => {
       if (local.pw.length < 8) { local.error = 'Use at least 8 characters.'; return render(); }
       if (local.pw !== local.pw2) { local.error = 'The two passwords don\'t match.'; return render(); }
@@ -339,11 +365,18 @@ const STEPS = {
     return {
       body: [
         h('p', {}, 'It keeps your jukebox\'s settings yours. You\'ll use it to open the admin from a phone or computer.'),
+        // The account name a phone's password manager files the password
+        // under (with this page's address); not shown, there's only one.
+        h('input', { id: 'pwuser', type: 'text', name: 'username', autocomplete: 'username', value: 'admin', readonly: true,
+          tabindex: '-1', 'aria-hidden': 'true', style: 'position:absolute;left:-9999px;width:1px;height:1px;opacity:0' }),
         h('div.wz-field', {}, h('label.wz-label', { for: 'pw1' }, 'Password'),
-          h('input.wz-input', { id: 'pw1', type: 'password', autocomplete: 'new-password', value: local.pw, onInput: e => { local.pw = e.target.value; } })),
+          h('input.wz-input', { id: 'pw1', type: kind, name: 'password', autocomplete: 'new-password', value: local.pw, onInput: e => { local.pw = e.target.value; } })),
         h('div.wz-field', {}, h('label.wz-label', { for: 'pw2' }, 'Type it again'),
-          h('input.wz-input', { id: 'pw2', type: 'password', autocomplete: 'new-password', value: local.pw2, onInput: e => { local.pw2 = e.target.value; } })),
+          h('input.wz-input', { id: 'pw2', type: kind, autocomplete: 'new-password', value: local.pw2, onInput: e => { local.pw2 = e.target.value; } })),
+        h('label.wz-switch', {}, h('input', { type: 'checkbox', checked: !!local.showPw, onChange: e => { local.showPw = e.target.checked; render(); } }),
+          h('span', {}, 'Show the password')),
         h('p', {}, 'At least 8 characters.'),
+        note('info', `If your phone suggests a strong password and saves it, look for it in your Passwords app under ${location.hostname}, user admin.`),
       ],
       next: { label: 'Next', onClick: go },
       back: false,

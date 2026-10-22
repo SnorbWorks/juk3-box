@@ -744,6 +744,7 @@ class Wizard:
         self.asked_at = 0.0                 # when the open yes/no was asked: the cabinet's ask id
         self.answers_in: dict[str, dict] = {}     # the cabinet's yes/no answers, by step
         self.input_seen = {"turn": False, "click": False, "keys": []}
+        self.online = None                  # on a network (run() keeps it current); None until known
         self._published = None
         self._viewing = None
         self._tasks = set()
@@ -1055,6 +1056,13 @@ class Wizard:
     def cabinet(self) -> dict:
         if not self.active():
             return {"active": False}
+        hs = self.hotspot()
+        if not hs.get("active") and not self.online and not self.admin.auth.has_password():
+            # A new jukebox just started: no network yet, and its own Wi-Fi
+            # isn't up either (jb-netwatch waits ~30 s for one first). Nothing
+            # on the screen can be reached yet, so show no address or code.
+            return {"active": True, "waiting": True, "title": "Getting ready",
+                    "say": "Looking for a network. Its own Wi-Fi comes up in about half a minute."}
         step = BY_ID.get(self._viewing) or self.current()
         steps = [s for s in self.steps() if s.id != "password"]
         ids = [s.id for s in steps]
@@ -1064,7 +1072,6 @@ class Wizard:
                "steps": [{"short": s.short, "done": self.completed(s), "now": s.id == step.id} for s in steps],
                "address": address, "qr": qr_rows(address),
                "restarting": bool(self.state.get("restart"))}
-        hs = self.hotspot()
         if hs.get("active"):
             # Join the jukebox's own Wi-Fi first: its name, password and a QR code
             # a phone's camera joins with; then the address on it.
@@ -1091,5 +1098,8 @@ class Wizard:
         """Takes the cabinet's setup screen down once the page goes quiet."""
         await self.check_restart()
         while True:
+            self.online = bool((await self.system.network()).get("via"))
             self.publish()
-            await asyncio.sleep(10)
+            # Quicker while a new jukebox waits for its own Wi-Fi, so the
+            # cabinet shows the code as soon as there is one.
+            await asyncio.sleep(3 if self.cabinet().get("waiting") else 10)

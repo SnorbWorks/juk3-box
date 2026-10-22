@@ -44,7 +44,7 @@ function show(s) {
   layer.hidden = false;
   // The knob stays here while setup shows: nothing behind it gets picked.
   layer.dataset.modal = '';
-  layer.replaceChildren(s.restarting && s.step === 'apply' ? restarting() : screen(s));
+  layer.replaceChildren(s.waiting ? waiting(s) : s.restarting && s.step === 'apply' ? restarting() : screen(s));
   refocus();
   if (opening) answered = null;
 }
@@ -62,6 +62,13 @@ function restarting() {
   const box = el('div', 'jb-setup-restart');
   box.append(logo(), el('div', 'jb-setup-spin'), el('div', 'jb-setup-title', 'Restarting to apply your settings'),
     el('div', 'jb-setup-say', 'Back in about a minute.'));
+  return box;
+}
+
+// A new jukebox that just started: nothing to join or open yet.
+function waiting(s) {
+  const box = el('div', 'jb-setup-restart');
+  box.append(logo(), el('div', 'jb-setup-spin'), el('div', 'jb-setup-title', s.title), el('div', 'jb-setup-say', s.say));
   return box;
 }
 
