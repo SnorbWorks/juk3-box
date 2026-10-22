@@ -1,15 +1,19 @@
 // The setup wizard's page (docs/Setup Wizard — Plan.md). The Pi keeps the
 // progress (/api/wizard); this page shows one step at a time and sends the
 // answers. Steps that watch the cabinet (the light check, the power check,
-// the sound, the knob) poll while they're open.
+// the sound, the controls) poll while they're open.
 
 const root = document.getElementById('wizard');
 // Inside the Juk3box Helper app, which has its own title bar.
 if (/Juk3boxHelper/.test(navigator.userAgent)) document.documentElement.classList.add('in-app');
 const POLL_MS = 1500;
-const LIVE_STEPS = new Set(['wifi', 'lightcheck', 'loadtest', 'sound', 'knob', 'sources']);
+const LIVE_STEPS = new Set(['wifi', 'lightcheck', 'loadtest', 'sound', 'controls', 'sources']);
+const TEACH_POLL_MS = 400;   // the controls step follows each press at the cabinet
 // The Juk3box Helper app opens setup with the phone's own network to suggest.
 const SUGGESTED_SSID = new URLSearchParams(location.search).get('ssid');
+// Admin › Setup opens one step on its own (/setup?step=controls): just that
+// step, then back to the admin.
+const ONLY_STEP = new URLSearchParams(location.search).get('step');
 const COLORS = ['#22e7d4', '#009da4', '#0068a6', '#ff2198', '#ff63d5', '#ff9959'];
 
 let view = null;          // the server's view of the open step
@@ -129,7 +133,6 @@ function show(next) {
 // A step that does something as soon as it opens.
 function enter() {
   const id = view.step.id;
-  if (id === 'knob') act('reset', {}, { quiet: true });
   if (id === 'lightcheck' && view.step.chains.length) showChain(0);
 }
 
@@ -142,6 +145,7 @@ async function submit(data = {}) {
   busy = false;
   if (r.ok && r.data.restarting) return renderRestarting();
   if (r.ok && r.data.done) return renderFinished(true);
+  if (r.ok && ONLY_STEP) return renderSaved();
   if (!r.ok) {
     local.error = r.data.error || 'That didn\'t work. Try again.';
     return render();
@@ -162,6 +166,7 @@ async function act(name, data = {}, { quiet = false } = {}) {
 function startPolling() {
   stopPolling();
   if (!view || !LIVE_STEPS.has(view.step.id)) return;
+  if (view.step.id === 'controls' && view.step.phase === 'format') return;
   pollTimer = setInterval(async () => {
     if (busy || document.hidden) return;
     const r = await api('GET', `/api/wizard?step=${view.step.id}`);
@@ -172,7 +177,7 @@ function startPolling() {
       // the phone's keyboard. The news shows at the next redraw.
       if (!typing()) render();
     }
-  }, POLL_MS);
+  }, view.step.id === 'controls' ? TEACH_POLL_MS : POLL_MS);
 }
 
 function stopPolling() {
@@ -208,8 +213,8 @@ function render() {
 }
 
 function draw() {
-  if (view.done && !local.again) return renderFinished(false);
-  if (!seenWelcome() && !view.steps.some(s => s.done)) return renderWelcome();
+  if (view.done && !local.again && !ONLY_STEP) return renderFinished(false);
+  if (!ONLY_STEP && !seenWelcome() && !view.steps.some(s => s.done)) return renderWelcome();
   const r = STEPS[view.step.id] ? STEPS[view.step.id](view.step) : { body: [h('p', {}, 'This step is coming soon.')] };
   frame(r);
   startPolling();
@@ -236,7 +241,7 @@ function frame({ body, next, back = true, skip = false }) {
     h('div.wz-progress', {}, h('div', {}, stepLabel),
       h('div.wz-dots', { 'aria-hidden': 'true' }, steps.map((s, k) => h(`span${k === i ? '.now' : s.done ? '.done' : ''}`)))));
   const foot = h('div.wz-foot', {},
-    back && view.step.back ? h('button.wz-back', { type: 'button', onClick: () => load(view.step.back) }, 'Back') : null,
+    back && view.step.back && !ONLY_STEP ? h('button.wz-back', { type: 'button', onClick: () => load(view.step.back) }, 'Back') : null,
     h('span.wz-spacer'),
     skip && view.step.skippable ? h('button.wz-skip', { type: 'button', onClick: () => submit({ skip: true }) }, 'Skip for now') : null,
     next ? h('button.wz-next', { type: 'button', disabled: next.disabled || busy, onClick: next.onClick },
@@ -278,6 +283,17 @@ function renderFinished(justNow) {
       const r = await api('POST', '/api/wizard-again', {});
       if (r.ok) { local = { again: true }; load(); }
     } }, 'Run setup again')));
+}
+
+// One step opened from the admin, saved.
+function renderSaved() {
+  stopPolling();
+  root.replaceChildren(h('section.wz-hero', {},
+    h('img.wz-hero-logo', { src: '/static/setup/logo.png', alt: 'Juk3box' }),
+    eq(44),
+    h('h1', {}, 'Saved'),
+    h('p', {}, 'The jukebox is using it now.'),
+    h('a.wz-next', { href: '/#/setup', style: 'text-decoration:none' }, 'Back to the admin')));
 }
 
 function renderRestarting() {
@@ -670,20 +686,10 @@ const STEPS = {
     };
   },
 
-  knob(s) {
-    const seen = s.input || {};
-    return {
-      body: [
-        h('p', {}, 'At the cabinet: turn the knob, press it, then press a few letter and number keys.'),
-        s.device === 'missing' ? note('warn', 'The keypad isn\'t connected. You can still use the jukebox from your phone and the admin.') : null,
-        h('div.wz-checks', {},
-          check(seen.turn, 'Knob turned'),
-          check(seen.click, 'Knob pressed'),
-          check(seen.keys?.length, seen.keys?.length ? `Keys pressed: ${seen.keys.join(' ')}` : 'Keys pressed')),
-      ],
-      next: { onClick: () => submit() },
-      skip: true,
-    };
+  controls(s) {
+    if (s.phase === 'teach') return controlsTeach(s);
+    if (s.phase === 'try') return controlsTry(s);
+    return controlsFormat(s);
   },
 
   sources(s) {
@@ -842,6 +848,179 @@ function hotspotWifi(s) {
   };
 }
 
+// -- The controls step (docs/Controls Setup — Plan.md) ---------------------------------
+
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const KEYPAD_DIGITS = '1234567890';
+
+// The step's own actions answer with the step's view: keep the frame's parts.
+function controlsAct(name, data) {
+  return act(name, data, { quiet: true }).then(out => {
+    if (out && out.phase) {
+      const { id, title, skippable, back } = view.step;
+      view.step = { ...out, id, title, skippable, back };
+      render();
+    }
+    return out;
+  });
+}
+
+let previewTimer = null;
+function controlsPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    const r = await api('POST', '/api/wizard/controls/preview', { spec: local.spec });
+    local.preview = r.ok ? r.data : null;
+    local.previewError = r.ok ? null : r.data.error;
+    render();
+  }, 250);
+}
+
+function setSpec(spec) {
+  local.spec = spec;
+  controlsPreview();
+  render();
+}
+
+function toggleIn(str, ch, order) {
+  const set = new Set(str);
+  if (set.has(ch)) set.delete(ch); else set.add(ch);
+  return [...order].filter(c => set.has(c)).join('');
+}
+
+function keyGrid(chars, chosen, onToggle) {
+  return h('div.wz-keys', {}, [...chars].map(ch => h(`button.wz-key${chosen.includes(ch) ? '.on' : ''}`,
+    { type: 'button', 'aria-pressed': chosen.includes(ch) ? 'true' : 'false', onClick: () => onToggle(ch) }, ch)));
+}
+
+function numberField(id, label, value, onChange) {
+  return h('div.wz-field', {}, h('label.wz-label', { for: id }, label),
+    h('input.wz-input', { id, type: 'number', inputmode: 'numeric', min: '0', value: String(value ?? ''),
+      onInput: e => onChange(e.target.value === '' ? null : Number(e.target.value)) }));
+}
+
+function miniBoard(p) {
+  return h('div.wz-board', {}, p.groups.map(g => h('div.wz-board-group', {},
+    h('div.wz-board-label', {}, g.label),
+    h('div.wz-board-codes', {}, g.codes.map(c => h('span', {}, c))))));
+}
+
+function controlsFormat(s) {
+  local.spec ??= s.format.spec;
+  local.preview ??= s.format;
+  local.mode ??= s.had?.buttons === false ? 'none' : 'buttons';
+  local.knob ??= true;
+  local.cancel ??= true;
+  const spec = local.spec;
+  const letters = spec.kind === 'letters';
+  const presetOn = id => JSON.stringify(s.presets.find(x => x.id === id)?.spec) === JSON.stringify(spec);
+  const body = [
+    h('p', {}, 'Tell the jukebox what\'s on your selection buttons, so the song board\'s numbers match what people can press.'),
+    h('div.wz-choices.two', {},
+      choice({ title: 'The cabinet\'s buttons', sub: 'A keypad, and a knob if it has one', kind: 'radio', on: local.mode === 'buttons',
+        onClick: () => { local.mode = 'buttons'; render(); } }),
+      choice({ title: 'No buttons yet', sub: 'A plugged-in keyboard, or the phone only', kind: 'radio', on: local.mode === 'none',
+        onClick: () => { local.mode = 'none'; render(); } })),
+    h('label.wz-label', {}, 'Common layouts'),
+    h('div.wz-choices', {}, s.presets.map(pr => choice({ title: pr.label, kind: 'radio', on: presetOn(pr.id),
+      onClick: () => setSpec(pr.spec) }))),
+    h('label.wz-label', {}, 'Or set your own'),
+    h('div.wz-row', {},
+      h(`button.wz-ghost${letters ? '.on' : ''}`, { type: 'button', onClick: () => !letters && setSpec({ kind: 'letters', letters: 'ABCDEFGHJK', digits: '1234567890' }) }, 'Letters and numbers'),
+      h(`button.wz-ghost${letters ? '' : '.on'}`, { type: 'button', onClick: () => letters && setSpec({ ...s.presets.find(x => x.id === 'rockola').spec }) }, 'Numbers only')),
+  ];
+  if (letters) {
+    body.push(h('p', {}, 'Tick the letters on your buttons. Most jukeboxes skip I and O.'),
+      keyGrid(ALPHABET, spec.letters, ch => setSpec({ ...spec, letters: toggleIn(spec.letters, ch, ALPHABET) })),
+      h('p', {}, 'And the numbers.'),
+      keyGrid(KEYPAD_DIGITS, spec.digits, ch => setSpec({ ...spec, digits: toggleIn(spec.digits, ch, KEYPAD_DIGITS) })));
+  } else {
+    const places = spec.places || 3;
+    body.push(h('div.wz-row', {},
+      numberField('cplaces', 'Digits in a selection', places, v => setSpec({ ...spec, places: v, place_digits: Array(Math.max(1, Math.min(4, v || 1))).fill('0123456789') })),
+      numberField('cfirst', 'The first number', spec.first, v => setSpec({ ...spec, first: v })),
+      numberField('clast', 'The last number', spec.last, v => setSpec({ ...spec, last: v }))),
+    h('details.wz-more', {}, h('summary', {}, 'Some places use fewer digits?'),
+      h('p', {}, 'Some jukeboxes use only 1–8 in the last place, say. Untick the digits a place never uses.'),
+      (spec.place_digits || []).map((pd, i) => h('div.wz-field', {}, h('span.wz-label', {}, `Place ${i + 1}`),
+        keyGrid('0123456789', pd, ch => {
+          const next = [...spec.place_digits];
+          next[i] = toggleIn(pd, ch, '0123456789');
+          setSpec({ ...spec, place_digits: next });
+        })))));
+  }
+  const p = local.preview;
+  body.push(h('div.wz-preview', {},
+    p ? [h('div.wz-preview-say', {}, p.describe), miniBoard(p),
+      h('p', {}, `Compare with your cabinet's own title cards: is the first ${p.first} and the last ${p.last}?`)]
+      : note('warn', local.previewError || 'That doesn\'t make a page of songs yet.')));
+  if (local.mode === 'buttons') {
+    body.push(h('label.wz-label', {}, 'Your cabinet also has'),
+      h('div.wz-choices.two', {},
+        choice({ title: 'A knob', sub: 'It turns and presses', on: local.knob, onClick: () => { local.knob = !local.knob; render(); } }),
+        choice({ title: 'A Cancel button', sub: 'Clears a half-entered pick', on: local.cancel, onClick: () => { local.cancel = !local.cancel; render(); } })));
+    if (s.device === 'missing' && !s.keyboards) {
+      body.push(note('warn', 'No keypad or keyboard is plugged into the jukebox. Plug one in, then go on.'));
+    }
+  } else {
+    body.push(note('info', 'A keyboard plugged into the jukebox always works: letters and numbers pick, the arrows and Enter are the knob, Backspace is Cancel, and up and down change the volume.'));
+  }
+  return {
+    body,
+    next: local.mode === 'buttons'
+      ? { label: 'Teach the buttons', disabled: !p, onClick: () => controlsAct('start', { spec: p.spec, knob: local.knob, cancel: local.cancel }) }
+      : { disabled: !p, onClick: () => submit({ no_buttons: true, spec: p.spec }) },
+    skip: true,
+  };
+}
+
+function teachKeys(s) {
+  return h('div.wz-keys.teach', {}, s.targets.map(t => h(`span.wz-key.${t.state}${t.kind === 'key' ? '' : '.wide'}`,
+    { title: t.state }, t.label)));
+}
+
+function controlsTeach(s) {
+  const left = s.targets.filter(t => t.state === 'todo' || t.state === 'now').length;
+  return {
+    body: [
+      h('div.wz-center', { style: 'display:flex;flex-direction:column;gap:10px;align-items:center' },
+        h('div.wz-kicker', {}, `At the cabinet · ${left} to go`),
+        h('p.wz-prompt', {}, s.turning ? 'Counting…' : s.prompt)),
+      s.message ? note('warn', s.message) : null,
+      s.quick ? note('info', 'Your keypad already sends letters and numbers: press every key, in any order.') : null,
+      s.steps_per_click && s.now !== 'knob.cw' ? note('ok', `The knob sends ${plural(s.steps_per_click, 'step')} a click.`) : null,
+      teachKeys(s),
+      h('div.wz-row', {},
+        h('button.wz-ghost', { type: 'button', disabled: !s.can_back, onClick: () => controlsAct('back') }, 'Back one'),
+        h('button.wz-ghost', { type: 'button', onClick: () => controlsAct('skip') }, 'This one doesn\'t work'),
+        h('button.wz-ghost', { type: 'button', onClick: () => controlsAct('restart') }, 'Start over')),
+    ],
+    next: null,
+  };
+}
+
+function controlsTry(s) {
+  const t = s.trial || {};
+  const picked = t.picked ? `${t.picked.code}: song ${t.picked.n}` : t.typed ? `${t.typed}…` : '–';
+  const skipped = s.targets.filter(x => x.state === 'skipped').map(x => x.label);
+  return {
+    body: [
+      h('p', {}, 'Try it at the cabinet: pick a song, turn and press the knob, press Cancel. Nothing plays.'),
+      h('div.wz-stats', {},
+        stat('Picked', picked),
+        stat('Knob', t.clicks ? `${Math.abs(t.clicks)} ${t.clicks > 0 ? '→' : '←'}` : '–'),
+        stat('Knob presses', String(t.pressed || 0)),
+        stat('Cancel', String(t.cancelled || 0))),
+      t.said ? note('warn', t.said) : null,
+      s.message ? note('warn', s.message) : null,
+      s.bouncy.length ? note('ok', `Fixed bouncy buttons: ${s.bouncy.join(', ')}.`) : null,
+      skipped.length ? note('warn', `Not working yet: ${skipped.join(', ')}. Teach them again once they're fixed.`) : null,
+      h('button.wz-ghost', { type: 'button', onClick: () => controlsAct('again') }, 'Teach again'),
+    ],
+    next: { label: 'Looks right', onClick: () => submit() },
+  };
+}
+
 function check(ok, label) {
   return h(`div.wz-check${ok ? '.yes' : ''}`, {},
     h('span.dot', {}, ok ? icon(I.check, { color: '#fff', size: 16, width: 3.5 }) : null), label);
@@ -884,4 +1063,4 @@ function nextChain() {
   else submit();
 }
 
-load();
+load(ONLY_STEP);

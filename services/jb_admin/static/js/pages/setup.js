@@ -24,6 +24,9 @@ export async function show(main) {
       } catch (e) { showError(e); }
     },
   }, 'rotate-ccw');
+  // The cabinet's buttons, taught again (a new keypad, a key to fix).
+  const controls = h('a.btn', { href: '/setup?step=controls', target: '_blank', rel: 'noopener' },
+    icon('keyboard'), h('span', 'Teach the buttons again'));
   const state = s.done
     ? h('div.notice', icon('circle-check'), h('span', 'Setup is finished.'))
     : h('div.notice', icon('info'), h('span', `${s.finished} of ${s.of} steps done. Next: ${s.step}.`));
@@ -32,7 +35,7 @@ export async function show(main) {
     h('dl.setup-summary', s.summary.flatMap(r => [h('dt', r.k), h('dd', r.v)])));
   clear(main,
     pageHeader('Setup', 'The step-by-step setup: name, network, power, lights, sound and more.'),
-    h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null), summary,
+    h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null, controls), summary,
       updatesCard(upd, () => show(main)), lastfmCard(s.lastfm, () => show(main))));
 }
 

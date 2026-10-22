@@ -53,6 +53,8 @@ DEFAULTS = {
     "http_port": 8080,
     "theme_dirs": [str(REPO_DIR / "themes"), str(DATA / "themes")],
     "settings_path": str(DATA / "settings.json"),
+    # What the setup wizard learned about the cabinet's buttons (jb-input reads it).
+    "controls_path": str(DATA / "controls.json"),
     "owner_layouts_dir": str(DATA / "layouts"),
     "drafts_dir": str(DATA / "drafts"),
     "revisions_dir": str(DATA / "revisions"),
@@ -121,6 +123,7 @@ class Admin:
         self.theme_dirs = [Path(d) for d in cfg["theme_dirs"]]
         self.added_dir = self.theme_dirs[-1]
         self.settings_path = Path(cfg["settings_path"])
+        self.controls_path = Path(cfg["controls_path"])
         self.layouts = Layouts(Path(cfg["owner_layouts_dir"]), Path(cfg["drafts_dir"]), Path(cfg["revisions_dir"]))
         # The owner's theme options: one "custom" entry per theme, with the
         # same draft, publish and revisions as layouts.
@@ -173,8 +176,9 @@ class Admin:
         "jukebox/jb-library/drives-in": "drives_in",
         "jukebox/jb-input/status": "input",
     }
-    # The setup wizard listens to these: the cabinet's yes/no and the knob step.
-    WIZARD_TOPICS = (ANSWER_TOPIC, "jukebox/jb-input/gesture", "jukebox/jb-input/key")
+    # The setup wizard listens to these: the cabinet's yes/no and the controls
+    # step's teaching (jb-input's learn mode).
+    WIZARD_TOPICS = (ANSWER_TOPIC, "jukebox/jb-input/learn")
 
     # What the Phones page may ask jb-source-phone to do.
     PHONE_ACTIONS = {"bluetooth", "pair_start", "pair_stop", "pair_confirm", "switch", "disconnect", "forget"}

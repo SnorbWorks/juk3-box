@@ -675,4 +675,12 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 .jb-setup-creds > div { display: flex; justify-content: space-between; gap: 2vmin; }
 .jb-setup-creds .k { color: #5d5470; font-weight: 700; }
 .jb-setup-creds .v { font-weight: 900; color: #5b2491; letter-spacing: 0.04em; }
+.jb-setup-controls { display: flex; flex-direction: column; gap: 2vmin; }
+.jb-setup-prompt { font-family: "JB Setup Righteous", sans-serif; font-size: 7vmin; line-height: 1.1; color: #ffe27a; }
+.jb-setup-keys { display: flex; flex-wrap: wrap; gap: 0.9vmin; }
+.jb-setup-key { min-width: 5.4vmin; height: 5.4vmin; padding: 0 1.2vmin; box-sizing: border-box; border-radius: 1.2vmin; display: inline-flex;
+  align-items: center; justify-content: center; font-weight: 900; font-size: 2.6vmin; background: rgba(255, 255, 255, 0.12); }
+.jb-setup-key.done { background: #22c55e; color: #08240f; }
+.jb-setup-key.now { background: #ffffff; color: #5b2491; box-shadow: 0 0 0 0.5vmin #ffe27a; }
+.jb-setup-key.skipped { opacity: 0.35; text-decoration: line-through; }
 .jb-setup-hint { font-size: 2vmin; color: #5d5470; text-align: center; }

@@ -82,6 +82,7 @@ function screen(s) {
   if (s.say) main.append(el('div', 'jb-setup-say', s.say));
   if (s.problem) main.append(el('div', 'jb-setup-problem', `⚠ ${s.problem}`));
   if (s.live) main.append(live(s.live));
+  if (s.controls) main.append(controls(s.controls));
   if (s.ask) main.append(ask(s.step, s.ask));
 
   const side = el('div', 'jb-setup-side');
@@ -140,6 +141,24 @@ function live(t) {
   if (!t.running && t.passed !== undefined && t.passed !== null) {
     box.append(stat('Result', t.passed ? 'Passed' : 'Too low'));
   }
+  return box;
+}
+
+// The controls step: each button lights as it's learned, then the try-it.
+function controls(c) {
+  const box = el('div', 'jb-setup-controls');
+  if (c.phase === 'teach' && c.prompt) box.append(el('div', 'jb-setup-prompt', c.prompt));
+  if (c.phase === 'try') {
+    const t = c.trial || {};
+    const picked = t.picked ? `${t.picked.code}: song ${t.picked.n}` : t.typed ? `${t.typed}…` : 'Pick a song';
+    box.append(el('div', 'jb-setup-prompt', picked));
+    const knob = t.clicks ? `Knob ${Math.abs(t.clicks)} ${t.clicks > 0 ? '→' : '←'}` : '';
+    if (knob || t.said) box.append(el('div', 'jb-setup-say', [knob, t.said].filter(Boolean).join(' · ')));
+  }
+  if (c.message) box.append(el('div', 'jb-setup-problem', c.message));
+  const keys = el('div', 'jb-setup-keys');
+  for (const k of c.targets || []) keys.append(el('span', `jb-setup-key ${k.state}`, k.label));
+  box.append(keys);
   return box;
 }
 

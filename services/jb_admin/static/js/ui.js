@@ -49,7 +49,7 @@ export function clear(el, ...children) {
 
 // Icons: the bundled Lucide set, fetched once at start.
 const ICON_NAMES = [
-  'house', 'layout-template', 'palette', 'image', 'settings', 'boxes', 'user', 'log-out', 'plus',
+  'house', 'keyboard', 'layout-template', 'palette', 'image', 'settings', 'boxes', 'user', 'log-out', 'plus',
   'trash-2', 'copy', 'chevron-up', 'chevron-down', 'chevron-right', 'chevron-left', 'grip-vertical',
   'eye', 'undo-2', 'redo-2', 'monitor', 'smartphone', 'check', 'x', 'upload', 'heading', 'type',
   'rows-3', 'list-music', 'disc-3', 'layout-grid', 'info', 'menu', 'navigation', 'panel-left',

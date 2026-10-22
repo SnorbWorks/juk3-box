@@ -160,5 +160,28 @@ label.wz-label { font-weight: 800; font-size: 15px; color: var(--heading); }
 .wz-big-icon { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: 28px; background: var(--tint-2); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
+/* The controls step: key grids, the live preview, teaching */
+.wz-keys { display: flex; flex-wrap: wrap; gap: 8px; }
+.wz-key { min-width: 44px; height: 44px; padding: 0 10px; border-radius: 12px; border: 2px solid var(--line); background: #fff;
+  font-weight: 800; font-size: 18px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.wz-key.on { background: var(--purple); border-color: var(--purple); color: #fff; }
+.wz-ghost.on { border-color: var(--purple); background: var(--tint); }
+.wz-keys.teach .wz-key { cursor: default; }
+.wz-key.wide { min-width: 72px; font-size: 16px; }
+.wz-key.done { background: var(--ok-bg); border-color: var(--ok-mark); color: var(--ok-ink); }
+.wz-key.now { border-color: var(--purple); color: var(--purple-deep); box-shadow: 0 0 0 4px var(--tint-2); animation: wzpulse 1.2s ease-in-out infinite; }
+.wz-key.skipped { color: var(--line-strong); text-decoration: line-through; }
+@keyframes wzpulse { 50% { box-shadow: 0 0 0 8px var(--tint-2); } }
+@media (prefers-reduced-motion: reduce) { .wz-key.now { animation: none; } }
+.wz-prompt { font: 400 clamp(28px, 8vw, 40px) Righteous, sans-serif !important; color: var(--heading) !important; text-align: center; }
+.wz-preview { display: flex; flex-direction: column; gap: 10px; border-radius: 16px; background: var(--tint); padding: 14px 16px; }
+.wz-preview-say { font-weight: 800; font-size: 17px; color: var(--heading); }
+.wz-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; max-height: 320px; overflow: auto; }
+.wz-board-group { background: #fff; border-radius: 10px; padding: 6px 8px; }
+.wz-board-label { font-weight: 900; color: var(--purple-deep); font-size: 14px; }
+.wz-board-codes { display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wz-more summary { cursor: pointer; font-weight: 700; color: var(--purple-deep); }
+.wz-more { display: flex; flex-direction: column; gap: 10px; }
+
 /* Inside the Juk3box Helper app (setup.js): its own bar shows the name. */
 .in-app .wz-top img { display: none; }

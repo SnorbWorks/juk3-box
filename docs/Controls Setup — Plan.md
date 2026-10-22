@@ -144,6 +144,17 @@ The board lays itself out from the format:
 - Sized by the number of groups and slots. If 200 to a page reads too small on the
   cabinet's screen, the page splits in halves that the knob or a page key flips.
 
+## Where it is (Oct 21)
+
+- Done: jb-input opens every keypad and keyboard, with learn mode, the learned controls
+  (`/var/lib/juk3-box/controls.json`), knob calibration and settle times
+  (`services/jb_input`). The selection format as a setting, the responsive board and
+  three-digit entry (`shared/selection.py`). The wizard step: format questions with a
+  live preview, teaching (`services/jb_admin/controls_teach.py`), the try-it, and
+  Admin › Setup › "Teach the buttons again" (`/setup?step=controls`).
+- Next: the Pico program by positions and its install and update (step 1), then the
+  README's build guide.
+
 ## Build order
 
 1. jb-input: any device, learn mode, the saved map, knob calibration, per-button settle

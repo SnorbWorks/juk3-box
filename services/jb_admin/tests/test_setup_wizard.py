@@ -5,7 +5,7 @@ import logging
 from aiohttp.test_utils import TestClient, TestServer
 
 from services.jb_admin import main, setup_wizard
-from shared import setup_net
+from shared import selection, setup_net
 from shared.files import write_atomic
 from services.jb_admin.tests.test_admin import H, config
 
@@ -387,4 +387,42 @@ def test_the_cabinet_follows_a_wifi_join_and_the_step_completes_by_itself(tmp_pa
         assert "wifi" in w.state["completed"]
         out = w.cabinet()           # no phone on the page: the cabinet still says where to carry on
         assert out["active"] and not out.get("waiting") and out["address"].endswith(":8080/setup")
+    run(tmp_path, check)
+
+
+def test_the_controls_step_teaches_the_buttons_and_saves_them(tmp_path):
+    async def check(client, admin, pi, calls):
+        v = await view(client, "controls")
+        assert v["step"]["phase"] == "format" and v["step"]["format"]["count"] == 100
+        r = await client.post("/api/wizard/controls/preview", json={"spec": {"kind": "letters", "letters": "", "digits": "1"}}, headers=H)
+        assert r.status == 400
+        r = await client.post("/api/wizard/controls/preview", json={"spec": {"kind": "letters", "letters": "AB", "digits": "12"}}, headers=H)
+        assert (await r.json())["describe"] == "4 songs a page, A1 to B2"
+        r = await client.post("/api/wizard/controls/start", headers=H,
+                              json={"spec": {"kind": "letters", "letters": "AB", "digits": "12"}, "knob": False})
+        assert (await r.json())["prompt"] == "Press Cancel"
+        assert ("call", "jukebox/jb-input/cmd", {"action": "learn", "on": True}) in calls
+        assert admin.wizard.cabinet()["controls"]["prompt"] == "Press Cancel"
+        t = 1000
+        for code in ("KEY_ESC", "KEY_A", "KEY_B", "KEY_1", "KEY_2"):
+            for state in ("down", "up"):
+                t += 300
+                admin.wizard.heard_input("jukebox/jb-input/learn", {"device": "239a:80f4:Jukebox JB Keypad",
+                                                                    "role": "keypad", "code": code, "state": state, "t": t})
+        v = await view(client, "controls")
+        assert v["step"]["phase"] == "try"
+        v = await submit(client, "controls")
+        assert v["step"]["id"] != "controls"
+        saved = json.loads((tmp_path / "controls.json").read_text())
+        assert saved["keymap"]["KEY_ESC"] == "reset" and saved["keypads"] == ["239a:80f4:Jukebox JB Keypad"]
+        assert json.loads((tmp_path / "settings.json").read_text())["selection"] == {"kind": "letters", "letters": "AB", "digits": "12"}
+        assert ("call", "jukebox/jb-input/cmd", {"action": "learn", "on": False}) in calls
+    run(tmp_path, check)
+
+
+def test_no_buttons_saves_only_the_format(tmp_path):
+    async def check(client, admin, pi, calls):
+        await submit(client, "controls", {"no_buttons": True, "spec": selection.PRESETS["rockola"]})
+        assert json.loads((tmp_path / "settings.json").read_text())["selection"]["kind"] == "numbers"
+        assert not (tmp_path / "controls.json").exists()
     run(tmp_path, check)

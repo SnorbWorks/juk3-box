@@ -21,6 +21,7 @@ def config(tmp_path):
     return {**main.DEFAULTS,
             "theme_dirs": [str(SHIPPED), str(tmp_path / "themes")],
             "settings_path": str(tmp_path / "settings.json"),
+            "controls_path": str(tmp_path / "controls.json"),
             "owner_layouts_dir": str(tmp_path / "layouts"),
             "drafts_dir": str(tmp_path / "drafts"),
             "revisions_dir": str(tmp_path / "revisions"),

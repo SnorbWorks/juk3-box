@@ -26,9 +26,10 @@ from pathlib import Path
 
 import aiohttp
 
+from services.jb_admin.controls_teach import Teacher
 from services.jb_admin.files import read_json, write_json
 from services.jb_lights import present
-from shared import hardware, setup_net
+from shared import hardware, selection, setup_net
 
 SETUP_TOPIC = "jukebox/jb-admin/setup"
 ANSWER_TOPIC = "jukebox/jb-admin/setup-answer"
@@ -600,20 +601,91 @@ class Screen(Step):
         return "Check that everything fits inside the cabinet's glass."
 
 
-class Knob(Step):
-    id, title, short = "knob", "Knob and keys", "Knob"
+def format_preview(spec) -> dict:
+    """What a selection format makes, for the page's live preview."""
+    clean = selection.clean(spec)
+    if clean is None:
+        raise WizardError("That doesn't make a page of songs. Pick at least one letter and one number "
+                          f"(at most {selection.MAX_PAGE} songs), or a first number no bigger than the last.")
+    fmt = selection.Format(clean)
+    return {"spec": clean, "describe": fmt.describe(), "count": fmt.page_size,
+            "first": fmt.codes[0], "last": fmt.codes[-1],
+            "groups": [{"label": g.label, "codes": list(g.codes)} for g in fmt.groups()]}
+
+
+class Controls(Step):
+    """The cabinet's buttons (docs/Controls Setup — Plan.md): the selection
+    format, then teaching each button (controls_teach.py), then trying it."""
+    id, title, short = "controls", "Your controls", "Controls"
 
     async def view(self, w):
-        return {"input": w.input_seen, "device": (w.admin.live.get("input") or {}).get("device")}
+        status = w.admin.live.get("input") or {}
+        out = {"device": status.get("device"), "keyboards": status.get("keyboards", 0)}
+        if w.teacher is None:
+            raw = w.admin.raw_settings().get("selection")
+            presets = {k: {kk: vv for kk, vv in v.items() if kk != "label"} for k, v in selection.PRESETS.items()}
+            return {**out, "phase": "format", "format": format_preview(selection.clean(raw) or selection.DEFAULT),
+                    "presets": [{"id": k, "label": v["label"], "spec": presets[k]} for k, v in selection.PRESETS.items()],
+                    "had": w.answer("controls")}
+        await w.keep_learning()
+        w.teacher.tick(time.monotonic())
+        return {**out, **w.teacher.view(), "format": format_preview(w.teacher.fmt.spec)}
 
     async def action(self, w, name, data):
-        if name == "reset":
-            w.input_seen = {"turn": False, "click": False, "keys": []}
-            return {"input": w.input_seen}
-        return await super().action(w, name, data)
+        t = w.teacher
+        if name == "preview":
+            return format_preview(data.get("spec"))
+        if name == "start":
+            fmt = selection.Format(format_preview(data.get("spec"))["spec"])
+            w.teacher = Teacher(fmt, knob=data.get("knob", True) is not False, cancel=data.get("cancel", True) is not False)
+            await w.learn(True)
+            return await self.view(w)
+        if name == "restart":
+            w.teacher = None
+            await w.learn(False)
+            return await self.view(w)
+        if t is None:
+            raise WizardError("Start teaching first.")
+        if name == "skip":
+            t.skip()
+        elif name == "back":
+            t.back()
+        elif name == "again":            # the try-it's "Teach again"
+            w.teacher = Teacher(t.fmt, t.knob, t.cancel)
+        else:
+            return await super().action(w, name, data)
+        return await self.view(w)
+
+    async def submit(self, w, data):
+        spec = None
+        if data.get("no_buttons"):
+            # A keyboard or the phone only: just the format (the board's numbering).
+            spec = format_preview(data.get("spec"))["spec"]
+            kept = {"buttons": False}
+        else:
+            t = w.teacher
+            if t is None or t.phase != "try":
+                raise WizardError("Teach the buttons first, or choose no buttons.")
+            spec = t.fmt.spec
+            result = t.result()
+            write_json(w.admin.controls_path, result)
+            kept = {"buttons": True, "keys": len(result["keymap"]), "steps_per_click": result["knob_steps_per_click"],
+                    "bouncy": t.bouncy, "skipped": [x for x, v in t.learned.items() if v.get("skipped")]}
+        raw = w.admin.raw_settings()
+        raw["selection"] = spec
+        write_json(w.admin.settings_path, raw)
+        w.teacher = None
+        await w.learn(False)
+        await w.admin.announce("controls", "settings")
+        return {**kept, "format": spec}
 
     def cabinet(self, w):
-        return "Turn the knob, press it, then press a few letter and number keys."
+        t = w.teacher
+        if t is None:
+            return "Choose your buttons' letters and numbers on your phone."
+        if t.phase == "try":
+            return "Try it: pick a song, turn and press the knob, press Cancel. Nothing plays."
+        return "Each button turns green as it's learned. One that doesn't work can be skipped on your phone."
 
 
 class Sources(Step):
@@ -721,9 +793,9 @@ class Finish(Step):
 
 
 STEPS = [Password(), Name(), Wifi(), Time(), Board(), Power(), Battery(), Cooling(), Lights(), Apply(),
-         LightCheck(), LoadTest(), Sound(), Screen(), Knob(), Sources(), LastFm(), WholeHome(), Suggestions(), Finish()]
+         LightCheck(), LoadTest(), Sound(), Screen(), Controls(), Sources(), LastFm(), WholeHome(), Suggestions(), Finish()]
 BY_ID = {s.id: s for s in STEPS}
-SKIPPABLE = {"screen", "knob", "sources", "lastfm", "wholehome"}
+SKIPPABLE = {"screen", "controls", "sources", "lastfm", "wholehome"}
 
 
 class Wizard:
@@ -743,7 +815,8 @@ class Wizard:
         self.played = False
         self.asked_at = 0.0                 # when the open yes/no was asked: the cabinet's ask id
         self.answers_in: dict[str, dict] = {}     # the cabinet's yes/no answers, by step
-        self.input_seen = {"turn": False, "click": False, "keys": []}
+        self.teacher = None                 # the controls step's teaching, while it's open
+        self.learn_sent = 0.0
         self.online = None                  # on a network (run() keeps it current); None until known
         self._published = None
         self._viewing = None
@@ -812,6 +885,8 @@ class Wizard:
                 step = self.current()
                 if step.id == "password":
                     step = self.after("password")
+        if step.id != "controls":
+            await self.stop_teaching()
         steps = self.steps()
         view = {
             "done": self.done,
@@ -1034,19 +1109,41 @@ class Wizard:
             self.answers_in[payload["step"]] = {"yes": payload["yes"], "chain": self.showing, "at": time.time()}
 
     def heard_input(self, topic: str, payload) -> None:
-        if not isinstance(payload, dict):
+        """A press while the controls step is teaching (jukebox/jb-input/learn)."""
+        if not isinstance(payload, dict) or self.teacher is None or not topic.endswith("/learn"):
             return
-        if topic.endswith("/gesture") and payload.get("control") == "knob":
-            if payload.get("gesture") == "turn":
-                self.input_seen["turn"] = True
-            elif payload.get("gesture") == "click":
-                self.input_seen["click"] = True
-        elif topic.endswith("/key") and isinstance(payload.get("key"), str):
-            self.input_seen["keys"] = (self.input_seen["keys"] + [payload["key"]])[-12:]
+        self.teacher.heard(payload, time.monotonic())
+        self.publish()
+        # A turn ends when it goes quiet: look again then.
+        self.later(0.5, self._tick_teacher)
+
+    async def _tick_teacher(self) -> None:
+        if self.teacher is not None:
+            self.teacher.tick(time.monotonic())
+            self.publish()
+
+    async def learn(self, on: bool) -> None:
+        """jb-input's learn mode: on while teaching (it ends by itself after
+        5 minutes, so a closed page can't leave the buttons dead)."""
+        try:
+            await self.admin.bus_cmd("jukebox/jb-input/cmd", {"action": "learn", "on": on})
+            self.learn_sent = time.monotonic() if on else 0.0
+        except WizardError:
+            if on:
+                raise
+
+    async def keep_learning(self) -> None:
+        if time.monotonic() - self.learn_sent > 120:
+            await self.learn(True)
+
+    async def stop_teaching(self) -> None:
+        if self.teacher is not None:
+            self.teacher = None
+            await self.learn(False)
 
     def active(self) -> bool:
-        if self.hotspot().get("active"):
-            return True
+        if self.hotspot().get("active") or self.teacher is not None:
+            return True     # (teaching the controls again, from the admin, shows too)
         if self.done:
             return False
         if not self.admin.auth.has_password():
@@ -1091,6 +1188,9 @@ class Wizard:
         ask = step.ask(self) if hasattr(step, "ask") else None
         if ask:
             out["ask"] = ask
+        if step.id == "controls" and self.teacher is not None:
+            v = self.teacher.view()
+            out["controls"] = {k: v[k] for k in ("phase", "prompt", "targets", "message", "trial", "steps_per_click")}
         if step.id == "loadtest" and self.load_test:
             t = self.load_test
             out["live"] = {"running": t.get("running"), "min_volts": t.get("min_volts"), "max_temp": t.get("max_temp"),
