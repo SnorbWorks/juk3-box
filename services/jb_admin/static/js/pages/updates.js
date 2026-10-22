@@ -7,6 +7,7 @@ import { get, post, put } from '../api.js';
 import { button, clear, confirmDialog, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
 
 let poll = null;
+const WRAP = { whiteSpace: 'normal', overflow: 'visible' };   // these say more than one line's worth
 
 export async function show(main) {
   clearTimeout(poll);
@@ -38,7 +39,7 @@ function when(t) {
 function row(iconName, title, sub, ...actions) {
   return h('div.phone-row',
     h('div.stat-icon', icon(iconName)),
-    h('div.phone-text', h('div.stat-value', title), sub ? h('div.stat-sub', sub) : null),
+    h('div.phone-text', h('div.stat-value', title), sub ? h('div.stat-sub', { style: WRAP }, sub) : null),
     actions.some(Boolean) ? h('div.phone-actions', actions) : null);
 }
 
@@ -51,7 +52,7 @@ function autoCard(u) {
     h('div.phone-row',
       h('div.phone-text',
         h('h2', { style: { marginBottom: '4px' } }, 'Automatic updates'),
-        h('div.stat-sub', u.auto
+        h('div.stat-sub', { style: WRAP }, u.auto
           ? 'On: each night between 3:30 and 4:30, Juk3box updates itself and installs Raspberry Pi OS\'s security fixes. If one needs a restart, the jukebox restarts before 5 when nothing is playing.'
           : 'Off: nothing installs by itself. Check and install here.')),
       switchControl(u.auto, async on => {
