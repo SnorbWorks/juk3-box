@@ -108,8 +108,8 @@ Detects: the DAC (from its HAT EEPROM, `aplay -l`; jb-audio's `pw.find_dac`); Pi
 **14. Screen.**
 The cabinet's Settings > Displays steps (jb-display: `/var/lib/juk3-box/display.json`): rotation (keep it or it goes back in 15 s), the picture area with the edge guide so the contents fit the cabinet's glass, screen sleep. Done on the cabinet with the knob, or from the phone (the admin's Displays page); the cabinet shows the guide either way.
 
-**15. Knob and keys.**
-Detects: the Pico keypad (jb-input's device, `/etc/juk3-box/jb-input.json`). Asks the owner to turn the knob, click it, and press a few keys; the cabinet shows each one as it arrives (`jukebox/jb-input/*`). Mapping and calibration (roadmap item 5: buttons, encoder, touch) start with the current defaults; remapping is later work. No keypad: the cabinet works from the phone and the admin, and the step says so.
+**15. Your controls.**
+The keypad board (installed or updated first, if it's a Pico), the layout, the knob and other controls, teaching each button, extra buttons, a try. Planned Oct 21: `Controls Setup — Plan.md`.
 
 **16. Sources.** At least one, or "Not now".
 - **The helper app.** Came in through the app: the app pairs now (the code on the cabinet; helper `allow_pairing` is on by itself while no phone is paired, `Helper.settings`), then MusicKit authorization, the AirPlay route step (the app's route warning), the first library sync. Didn't: a QR code to the app and the same steps when it opens.
