@@ -94,6 +94,5 @@ def test_backgrounds_may_be_videos_where_the_option_allows():
     assert not customize.valid(plain, "/media/loop.mp4", t.root)      # an Image setting takes pictures only
     assert not customize.valid(bg, "/media/loop.mov", t.root)         # uploads are always converted to MP4
     assert not customize.valid(bg, "/media/notes.txt", t.root)
-    if (t.root / "assets" / "background.mp4").is_file():               # licensed, not in git
-        assert customize.valid(bg, "assets/background.mp4", t.root)
-        assert not customize.valid(plain, "assets/background.mp4", t.root)
+    assert customize.valid(bg, "assets/background.mp4", t.root)
+    assert not customize.valid(plain, "assets/background.mp4", t.root)

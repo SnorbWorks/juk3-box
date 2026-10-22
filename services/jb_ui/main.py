@@ -38,7 +38,7 @@ DEFAULTS = {
     "theme_dirs": [str(REPO_DIR / "themes"), "/var/lib/juk3-box/themes"],
     # Owner choices: active theme, nav buttons (later Home sections, ...).
     "settings_path": "/var/lib/juk3-box/settings.json",
-    "default_theme": "bare",
+    "default_theme": "neon",
     # Always shipped; used when the chosen theme can't load.
     "fallback_theme": "bare",
     # Background videos re-encoded for the hardware (see media.py).

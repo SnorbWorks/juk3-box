@@ -73,7 +73,7 @@ DEFAULTS = {
     "setupnet_dir": str(DATA / "setupnet"),
     # Updates from the project's releases (deploy/jb-update, root): what it last found.
     "update_dir": str(DATA / "update"),
-    "default_theme": "bare",
+    "default_theme": "neon",
     "max_upload_mb": 600,
     # Pictures and videos imported from USB drives stop once the media
     # library is this big (drive_import.py); music is never copied.

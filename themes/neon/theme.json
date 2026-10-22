@@ -27,8 +27,8 @@
     "shuffle-on": "lucide:list-music"
   },
   "background": {
-    "type": "image",
-    "src": "assets/background.jpg"
+    "type": "video",
+    "src": "assets/background.mp4"
   },
   "sizing": {
     "mode": "fluid"
@@ -134,7 +134,7 @@
         "type": "picture",
         "role": "background",
         "default": "",
-        "help": "A picture or a video from Media, or the theme's own. Empty: the theme's stage picture.",
+        "help": "A picture or a video from Media, or the theme's own. Empty: the theme's concert video.",
         "video": true
       },
       {

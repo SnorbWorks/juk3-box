@@ -41,8 +41,8 @@ def test_engine_page_has_the_security_policy(tmp_path):
 def test_default_theme(tmp_path):
     async def check(client):
         data = await (await client.get("/api/theme")).json()
-        assert data["id"] == "bare" and data["fallback"] is None
-        assert data["base"] == "/themes/bare/"
+        assert data["id"] == "neon" and data["fallback"] is None
+        assert data["base"] == "/themes/neon/"
         assert "frame" in data["layouts"]
     run(tmp_path, check)
 
@@ -139,7 +139,7 @@ def test_owner_layouts_replace_the_themes_and_bad_ones_are_ignored(tmp_path):
         assert data["layouts"]["frame"]["children"]          # the theme's frame, still whole
         assert any("all-songs" in w for w in data["warnings"])
         assert any("frame" in w for w in data["warnings"])
-    run(tmp_path, check)
+    run(tmp_path, check, theme="bare")
 
 
 def test_media_library_serves_plain_pictures_only(tmp_path):
