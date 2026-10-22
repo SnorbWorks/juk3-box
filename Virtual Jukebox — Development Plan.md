@@ -18,14 +18,14 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 | 6 Core | Done except: Up Next removal (gesture undecided), play counts; check Cancel clears an entry after the controls rewrite |
 | 6b Lights | Done, on the Pi 5's PIO driver (Oct 20) |
 | 7 UI platform | Done; Neon is the default (Oct 21) |
-| 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, updates, Last.fm), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
+| 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, Last.fm), Updates (Oct 22), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
 | 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Open: the live netwatch test, log rotation, read-only root, cold boot under a minute, pull-the-plug tests |
 | 9 Hard drive | Done (Oct 14) |
 
 ### Next (Oct 22, 2026)
 
 1. **The card image**: build one and start a copy (the code is in place; no release has been made yet).
-2. **An Updates tab** (Oct 22): everything that updates, in one place, with automatic updates on or off.
+2. ~~An Updates tab~~ *Done Oct 22*: Admin › Updates: Juk3box, Raspberry Pi OS (security fixes nightly when automatic; the rest when asked), the keypad program, the app, what's inside a release; overnight restarts when nothing plays; the dashboard says when there's news. Later: whole-system (Juk3box OS) updates.
 3. Waiting on hardware or the owner: the level bar joint; an Android phone (Roadmap item 3); WMM off in setup mode (watch for it in the fresh-card test).
 
 ## Architecture
