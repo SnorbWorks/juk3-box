@@ -152,8 +152,12 @@ The board lays itself out from the format:
   three-digit entry (`shared/selection.py`). The wizard step: format questions with a
   live preview, teaching (`services/jb_admin/controls_teach.py`), the try-it, and
   Admin › Setup › "Teach the buttons again" (`/setup?step=controls`).
-- Next: the Pico program by positions and its install and update (step 1), then the
-  README's build guide.
+- Done too: the Pico program 2.0 by positions (`firmware/pico-keypad`), its install on a
+  blank Pico and its update (jb-setupctl `keypad`, jb-input's light signal), step 1 in the
+  wizard; the README's build guide with the parts list and `docs/keypad-wiring.svg`.
+- Waiting on the owner: moving the cabinet's own Pico from version 1 to 2.0 (version 1
+  can't be asked: hold A while plugging it in, then the wizard's Update), and a photo of
+  the keypad board for the README.
 
 ## Build order
 
