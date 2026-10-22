@@ -462,6 +462,16 @@ function watchIdle() {
   }, IDLE_CHECK_MS);
 }
 
+// Volume keys turn the volume as the knob does in its volume mode, opening
+// it if it isn't open.
+function watchVolumeKeys() {
+  store.watch(document.documentElement, 'volumeKey', v => {
+    if (!v) return;
+    if (currentMode() !== 'volume') volumeMode();
+    rotate(v.steps);
+  });
+}
+
 // A real keyboard works too, for development: arrows turn, Enter clicks.
 function watchKeyboard() {
   document.addEventListener('keydown', e => {
@@ -517,6 +527,7 @@ async function start() {
   showScreen(first && first !== 'collection' && layoutFor(first) ? first : 'home');
   goToRest();
   watchKeyboard();
+  watchVolumeKeys();
   connectBus();
   reveal();
 }

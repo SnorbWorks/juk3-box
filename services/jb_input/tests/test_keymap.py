@@ -5,10 +5,10 @@ from services.jb_input.keymap import Keymap, selection_kind
 km = Keymap(DEFAULT_KEYMAP)
 
 
-def test_all_24_codes_map_to_their_controls():
+def test_every_letter_digit_and_control_maps():
     expected = {f"KEY_{c}": f"key.{c}" for c in LETTERS + DIGITS}
     expected.update(KEY_ESC="reset", KEY_ENTER="knob.push", KEY_RIGHT="knob.cw", KEY_LEFT="knob.ccw")
-    assert len(expected) == 24
+    assert len(expected) == 40
     for code, control in expected.items():
         down = km.translate(RawEvent(code, 1, 1.0))
         up = km.translate(RawEvent(code, 0, 2.0))
@@ -16,8 +16,10 @@ def test_all_24_codes_map_to_their_controls():
         assert (up.control, up.state) == (control, "up")
 
 
-def test_no_letter_i():
-    assert km.translate(RawEvent("KEY_I", 1, 0.0)) is None
+def test_every_letter_passes_through():
+    # Which letters a jukebox uses is its selection format: jb-core rejects
+    # the rest ("This jukebox has no I").
+    assert km.translate(RawEvent("KEY_I", 1, 0.0)).control == "key.I"
 
 
 def test_unknown_codes_are_ignored_without_error():

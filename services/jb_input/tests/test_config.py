@@ -38,7 +38,8 @@ def test_json_overrides_values_and_tables(tmp_path):
     {"actions": {"knob.click": ""}},
     {"gestures": {"knob": ["triple"]}},
     {"gestures": {"pedal": []}},
-    {"keymap": {"KEY_Z": "key.Z"}},
+    {"keymap": {"KEY_Z": "key.Ä"}},
+    {"knob_steps_per_click": 0},
 ])
 def test_bad_config_fails_loudly(tmp_path, data):
     with pytest.raises(config.ConfigError):
@@ -48,3 +49,32 @@ def test_bad_config_fails_loudly(tmp_path, data):
 def test_long_hold_must_be_longer_than_hold(tmp_path):
     with pytest.raises(config.ConfigError):
         config.load(write(tmp_path, {"hold_ms": 4000, "long_hold_ms": 1000}))
+
+
+def controls(tmp_path, data):
+    p = tmp_path / "controls.json"
+    p.write_text(json.dumps(data))
+    return p
+
+
+def test_learned_controls_lay_over_the_settings(tmp_path):
+    s = config.load_controls(config.Settings(), controls(tmp_path, {
+        "keypads": ["16c0:27db:Arcade Board"], "keymap": {"KEY_Q": "key.A", "KEY_W": "knob.cw"},
+        "knob_steps_per_click": 4, "settle_ms": {"KEY_Q": 90}}))
+    assert s.keypads == ["16c0:27db:Arcade Board"]
+    assert s.keymap == {"KEY_Q": "key.A", "KEY_W": "knob.cw"}
+    assert (s.knob_steps_per_click, s.settle_by_code) == (4, {"KEY_Q": 90})
+
+
+def test_no_controls_file_keeps_the_defaults(tmp_path):
+    s = config.load_controls(config.Settings(), tmp_path / "none.json")
+    assert s.keymap == config.DEFAULT_KEYMAP and s.keypads == [] and s.knob_steps_per_click == 1
+
+
+@pytest.mark.parametrize("data", [
+    [], {"keymap": {"KEY_Q": "launch"}}, {"keypads": "pico"},
+    {"knob_steps_per_click": 9}, {"settle_ms": {"KEY_Q": 900}},
+])
+def test_bad_controls_file_raises(tmp_path, data):
+    with pytest.raises(config.ConfigError):
+        config.load_controls(config.Settings(), controls(tmp_path, data))

@@ -78,3 +78,51 @@ def test_message_shapes():
         "jukebox/jb-input/raw", {"control": "reset", "state": "down"})
     assert message_for(ControlEvent("key.B", "down", 1.0), True) == (
         "jukebox/jb-input/raw", {"control": "key.B", "state": "down"})
+
+
+def test_a_bouncing_key_counts_once():
+    p = Pipeline(Settings())   # settle 40 ms
+    out = []
+    for i, v in enumerate([1, 0, 1, 0, 1]):          # chatter over 20 ms, then held
+        out += p.feed(RawEvent("KEY_B", v, 1.0 + i * 0.005))
+    out += p.tick(1.1) + p.feed(RawEvent("KEY_B", 0, 1.3)) + p.feed(RawEvent("KEY_B", 1, 1.6))
+    assert of(out, KeyPress) == [KeyPress("B", "letter", 1.0), KeyPress("B", "letter", 1.6)]
+
+
+def test_a_quick_tap_released_while_settling_is_caught_up():
+    p = Pipeline(Settings())
+    p.feed(RawEvent("KEY_ESC", 1, 1.0))
+    assert p.feed(RawEvent("KEY_ESC", 0, 1.02)) == []          # inside the settle time
+    assert of(p.tick(1.05), Gesture) == [Gesture("reset", "click", 1.05)]
+
+
+def test_settle_time_per_key():
+    s = Settings()
+    s.settle_by_code = {"KEY_A": 150}
+    p = Pipeline(s)
+    out = press(p, "KEY_A", 1.0, length=0.2) + press(p, "KEY_A", 1.4)
+    assert len(of(out, KeyPress)) == 2   # 200 ms after letting go: a person
+    out = press(p, "KEY_A", 2.0, length=0.01) + p.tick(2.16) + press(p, "KEY_A", 2.2) + p.tick(2.5)
+    assert len(of(out, KeyPress)) == 1   # 40 ms after: still bouncing, for this key
+
+
+def test_knob_steps_are_not_settled():
+    p = Pipeline(Settings())
+    for i in range(4):
+        press(p, "KEY_RIGHT", 1.0 + i * 0.002, length=0.001)
+    assert of(p.tick(1.05), Gesture) == [Gesture("knob", "turn", 1.05, 4)]
+
+
+def test_keyboard_volume_backspace_and_calibration():
+    s = Settings()
+    s.knob_steps_per_click = 2          # learned for the keypad's knob
+    kb = Pipeline(s, "keyboard")
+    out = press(kb, "KEY_DOWN", 1.0) + press(kb, "KEY_BACKSPACE", 2.0) + press(kb, "KEY_KP5", 3.0)
+    assert of(out, Gesture) == [Gesture("volume", "turn", 1.0, -1), Gesture("reset", "click", 2.05)]
+    assert of(out, KeyPress) == [KeyPress("5", "digit", 3.0)]
+    press(kb, "KEY_RIGHT", 4.0, length=0.001)
+    assert of(kb.tick(4.05), Gesture) == [Gesture("knob", "turn", 4.05, 1)]   # arrows: one a press
+    pad = Pipeline(s)
+    for i in range(4):
+        press(pad, "KEY_RIGHT", 5.0 + i * 0.002, length=0.001)
+    assert of(pad.tick(5.05), Gesture) == [Gesture("knob", "turn", 5.05, 2)]

@@ -2,10 +2,27 @@
   "contract": 1,
   "id": "jb-input",
   "name": "Keypad and knob",
-  "description": "Reads the cabinet's keypad and rotary knob and publishes what was pressed or turned.",
+  "description": "Reads the cabinet's keypad, knob and any keyboard, and publishes what was pressed or turned.",
   "version": "1.0.0",
-  "roles": ["input"],
-  "publishes": ["jukebox/jb-input/gesture", "jukebox/jb-input/key", "jukebox/jb-input/action", "jukebox/jb-input/raw", "jukebox/jb-input/status"],
+  "roles": [
+    "input"
+  ],
+  "publishes": [
+    "jukebox/jb-input/gesture",
+    "jukebox/jb-input/key",
+    "jukebox/jb-input/action",
+    "jukebox/jb-input/raw",
+    "jukebox/jb-input/status",
+    "jukebox/jb-input/learn"
+  ],
   "settings": "jb-input",
-  "essential": true
+  "essential": true,
+  "subscribes": [
+    "jukebox/jb-input/cmd",
+    "jukebox/jb-admin/changed"
+  ],
+  "commands": [
+    "learn",
+    "reload"
+  ]
 }

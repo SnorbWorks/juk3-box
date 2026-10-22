@@ -80,9 +80,14 @@ function nowPlayingFrom(source, np) {
 // navigation works whether or not the kiosk window has keyboard focus.
 // A turn carries signed steps, clockwise positive.
 function knob(g) {
-  if (g.control !== 'knob') return;
+  if (g.control !== 'knob' && g.control !== 'volume') return;
   activity();
   if (asleepSwallow()) return;
+  // Volume keys (a keyboard's up and down): main.js opens the volume popup.
+  if (g.control === 'volume') {
+    if (Number.isInteger(g.steps)) store.set('volumeKey', { steps: g.steps, at: Date.now() });
+    return;
+  }
   if (g.gesture === 'turn' && Number.isInteger(g.steps)) rotate(g.steps);
   else if (g.gesture === 'click') click();
 }

@@ -58,3 +58,15 @@ def test_push_turn_enabled_push_mid_burst_splits_turn_from_push_turn():
     out = knob.step(+1, 0.01)
     assert out == [Gesture("knob", "turn", 0.01, 1)]
     assert knob.tick(0.04) == [Gesture("knob", "push_turn", 0.04, 1)]
+
+
+def test_calibrated_knob_carries_half_clicks_until_it_rests():
+    k = Knob(20, ButtonGestures("knob", "knob_push_stuck", 300, 700, 30000), steps_per_click=2)
+    k.step(+1, 1.0); k.step(+1, 1.001); k.step(+1, 1.002)
+    assert k.tick(1.03) == [Gesture("knob", "turn", 1.03, 1)]   # 3 steps: one click, a half left
+    k.step(+1, 1.2)
+    assert k.tick(1.23) == [Gesture("knob", "turn", 1.23, 1)]   # the half completes
+    k.step(+1, 1.5)
+    assert k.tick(1.53) == []
+    k.step(+1, 3.0)                                            # a second later: the half is gone
+    assert k.tick(3.03) == []

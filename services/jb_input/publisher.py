@@ -1,7 +1,8 @@
 """Stage 5: pipeline events -> bus messages, in the same jukebox/<service>/...
 namespace and style as the other jb-* services.
 
-  jukebox/jb-input/status   retained: {"online", "device": "connected"|"missing", "faults"}
+  jukebox/jb-input/status   retained: {"online", "device": "connected"|"missing" (a keypad),
+                            "keyboards": n, "learning": bool, "faults"}
   jukebox/jb-input/key      {"key": "B", "kind": "letter"|"digit"} on each selection key down
   jukebox/jb-input/gesture  {"control": "knob"|"reset", "gesture": "click"|"turn"|...,
                              "steps": n (turn/push_turn only)}
@@ -10,6 +11,10 @@ namespace and style as the other jb-* services.
   jukebox/jb-input/raw      {"control": "key.B", "state": "down"|"up"} -- only if publish_raw,
                             except Reset's, always sent: the button lights show
                             it pressed (red while held)
+  jukebox/jb-input/learn    while the setup wizard is learning, every key event of every
+                            device, instead of the above: {"device": id, "name", "role":
+                            "keypad"|"keyboard"|"other", "code": "KEY_A", "state":
+                            "down"|"up", "t": ms (monotonic, for spotting a bouncing switch)}
   jukebox/jb-input/heartbeat  (from the shared Bus, like every service)
 """
 
@@ -25,8 +30,14 @@ def topic(name: str) -> str:
     return f"{PREFIX}/{name}"
 
 
-def status_payload(online: bool, device: str, faults) -> dict:
-    return {"online": online, "device": device, "faults": sorted(faults)}
+def status_payload(online: bool, device: str, faults, keyboards: int = 0, learning: bool = False) -> dict:
+    return {"online": online, "device": device, "keyboards": keyboards, "learning": learning,
+            "faults": sorted(faults)}
+
+
+def learn_payload(dev, role: str, raw) -> dict:
+    return {"device": dev.id, "name": dev.name, "role": role, "code": raw.code,
+            "state": "down" if raw.value == 1 else "up", "t": round(raw.t * 1000)}
 
 
 def message_for(event, publish_raw: bool):
@@ -52,9 +63,15 @@ class Publisher:
         self.bus = bus  # shared.bus.Bus
         self.publish_raw = publish_raw
         self.device = "missing"
+        self.keyboards = 0
+        self.learning = False
 
     async def status(self, faults, t: float, online: bool = True):
-        await self.bus.publish(topic("status"), status_payload(online, self.device, faults), retain=True)
+        await self.bus.publish(topic("status"), status_payload(online, self.device, faults, self.keyboards,
+                                                               self.learning), retain=True)
+
+    async def learn(self, dev, role: str, raw):
+        await self.bus.publish(topic("learn"), learn_payload(dev, role, raw))
 
     async def events(self, events, faults, t: float):
         fault_changed = False
