@@ -1,0 +1,41 @@
+# Monthly: is what the jukebox is built from still current? (tools/check_updates.py,
+# THIRD-PARTY.md). Anything behind goes in one open issue, "Dependency updates",
+# updated each month rather than opened again. Run it any time from the Actions tab.
+name: Check for updates
+
+on:
+  schedule:
+    - cron: "0 15 1 * *"     # the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare with the newest releases
+        id: check
+        run: |
+          set +e
+          python3 tools/check_updates.py > report.md
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.md
+
+      - name: Open or update the issue
+        if: steps.check.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Dependency updates"
+          n=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body-file report.md
+            gh issue comment "$n" --body "Checked again $(date -u +%Y-%m-%d): the list above is current."
+          else
+            gh issue create --title "$title" --body-file report.md
+          fi

@@ -118,5 +118,15 @@ The jukebox is a set of small Python services talking over MQTT (`services/`), a
 
 ## License
 
-GPL-3.0 (see LICENSE). The keypad board's CircuitPython and its HID library are MIT
-(`firmware/pico-keypad/vendor`). Fonts carry their own licenses (SIL Open Font License, next to each font). The Neon theme's concert video and picture were made for this project and are covered by the project's license (`themes/neon/assets/CREDITS.md`).
+Juk3box is free software under the GPL-3.0 (`LICENSE`). In plain words: anyone may use
+it, for anything, including in a jukebox they sell; study it; change it; and share it,
+changed or not. Whoever shares it, or sells a jukebox with it, must pass the same
+freedoms on: the source code (with their changes) under the same license, and the
+license notices kept. It comes with no warranty. The license text is what counts; this
+is only a summary.
+
+It's built on other free software, each under its own license: `THIRD-PARTY.md` lists
+them all (bundled fonts and icons, CircuitPython for the keypad board, the Python
+packages, and the Raspberry Pi OS programs it runs on). The Neon theme's concert video
+and pictures were made for this project and are covered by its license
+(`themes/neon/assets/CREDITS.md`).
