@@ -52,9 +52,14 @@ function nameCard(n, refresh) {
   const save = button('Rename', { variant: 'primary', type: 'submit' }, 'pencil');
   const address = h('span');
   const preview = () => {
-    const next = `${networkName(input.value.trim())}.local`;
-    address.textContent = next === n.address ? `Its address is ${n.address}.` : `Its address becomes ${next}.`;
-    save.disabled = !input.value.trim() || input.value.trim() === n.name;
+    const name = input.value.trim();
+    const next = `${networkName(name)}.local`;
+    // A cabinet set up before the address followed the name can be brought into line.
+    if (next === n.address) address.textContent = `Its address is ${n.address}.`;
+    else if (name === n.name) address.textContent = `Its address is still ${n.address}, from before it followed the name. Save to make it ${next}.`;
+    else address.textContent = `Its address becomes ${next}.`;
+    save.lastChild.textContent = name === n.name ? 'Save' : 'Rename';
+    save.disabled = !name || (name === n.name && next === n.address);
   };
   input.addEventListener('input', preview);
   preview();
@@ -65,10 +70,10 @@ function nameCard(n, refresh) {
       const name = input.value.trim();
       const next = `${networkName(name)}.local`;
       const moving = next !== n.address;
-      const ok = await confirmDialog(`Rename it ${name}?`, moving
-        ? `Phones, AirPlay and Bluetooth show the new name, and the admin moves to ${next}: old bookmarks stop working, and you sign in again there. Music playing over AirPlay pauses for a moment.`
+      const ok = await confirmDialog(name === n.name ? `Move the admin to ${next}?` : `Rename it ${name}?`, moving
+        ? `Phones, AirPlay and Bluetooth show the name, and the admin moves to ${next}: old bookmarks stop working, and you sign in again there. Music playing over AirPlay pauses for a moment.`
         : 'Phones, AirPlay and Bluetooth show the new name. Music playing over AirPlay pauses for a moment.',
-      { confirm: 'Rename' });
+      { confirm: name === n.name ? 'Move it' : 'Rename' });
       if (!ok) return;
       save.disabled = true;
       try {
