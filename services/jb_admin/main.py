@@ -242,8 +242,7 @@ class Admin:
                         for topic in ("jukebox/+/heartbeat", "jukebox/+/status", "jukebox/analysis/+/status",
                                       self.DRIVES_TOPIC, "jukebox/jb-library/drives", self.CMD_TOPIC,
                                       *self.LIVE_TOPICS, *self.LIBRARY_TOPICS, *self.WIZARD_TOPICS):
-                            await bus._client.subscribe(topic)
-                        messages = bus._iter_messages()
+                            messages = await bus.subscribe(topic)   # one stream for them all
                         async for topic, payload in messages:
                             if topic in self.LIVE_TOPICS:
                                 self.live[self.LIVE_TOPICS[topic]] = payload

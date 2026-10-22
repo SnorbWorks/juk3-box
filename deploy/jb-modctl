@@ -254,11 +254,18 @@ def cmd_setup():
     come back with it, the old setup is restored."""
     write(Path("/etc/tmpfiles.d/juk3-box-bus.conf"), f"d {SOCKET_DIR} 0755 mosquitto mosquitto -\n", 0o644)
     run("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/juk3-box-bus.conf")
+    # mosquitto won't bind over the socket a stopped broker left behind, and
+    # can't remove it itself unless the folder is its own (it wasn't, once:
+    # every restart of the bus then failed until the next boot). Both are
+    # put right before each start, as root.
     # mosquitto makes the socket owner-only; anyone may connect (a login is
     # still required), so open it up once it exists.
     write(Path("/etc/systemd/system/mosquitto.service.d/juk3-box.conf"),
-          "[Service]\nExecStartPost=/bin/sh -c 'for i in $(seq 50); do [ -S %s ] && chmod 666 %s && exit 0; sleep 0.1; done'\n"
-          % (SOCKET, SOCKET), 0o644)
+          "[Service]\n"
+          "ExecStartPre=/usr/bin/install -d -o mosquitto -g mosquitto -m 0755 %s\n"
+          "ExecStartPre=/bin/rm -f %s\n"
+          "ExecStartPost=/bin/sh -c 'for i in $(seq 50); do [ -S %s ] && chmod 666 %s && exit 0; sleep 0.1; done'\n"
+          % (SOCKET_DIR, SOCKET, SOCKET, SOCKET), 0o644)
     if not PASSWD.exists():
         write(PASSWD, "", 0o640, "root:mosquitto")
     write(ACL, acl_text(), 0o640, "root:mosquitto")
