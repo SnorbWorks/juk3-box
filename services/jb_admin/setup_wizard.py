@@ -606,6 +606,7 @@ KEYPAD_CONFIG = Path(__file__).resolve().parents[2] / "firmware" / "pico-keypad"
 KEYPAD_NAME = "Jukebox JB Keypad"
 KEYPAD_SIGNAL_FROM = (2,)      # versions that restart into maintenance mode when asked
 KEYPAD_WAIT_S = 20
+KEYPAD_RESTART_S = 20      # a Pico restarting into the new version takes a few seconds
 
 
 def version_tuple(v) -> tuple:
@@ -1207,6 +1208,14 @@ class Wizard:
                                   "and keep holding for two seconds.")
             out = await self.admin.setup_ctl("keypad", "update", *(["replace"] if how == "replace" else []), timeout=60)
         self.log.info("setup: keypad program %s: %s", how, out)
+        # It restarts as the new version: wait for it (jb-input names it), so the
+        # page's answer shows it up to date rather than the board mid-restart.
+        latest, end = keypad_latest(), time.monotonic() + KEYPAD_RESTART_S
+        while time.monotonic() < end:
+            if keypad_running((self.admin.live.get("input") or {}).get("keypad")) == latest:
+                return
+            await asyncio.sleep(1)
+        self.log.warning("setup: the keypad board didn't come back as %s within %ss", latest, KEYPAD_RESTART_S)
 
     async def stop_teaching(self) -> None:
         if self.teacher is not None:
