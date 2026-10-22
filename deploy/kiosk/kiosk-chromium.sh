@@ -13,6 +13,17 @@ if [ -f "$PREFS" ]; then
     -e 's/"exited_cleanly":false/"exited_cleanly":true/' \
     "$PREFS"
 fi
+# Chromium's profile lock names the computer that took it (SingletonLock
+# -> "<hostname>-<pid>"). The killed session leaves it behind, and after a
+# rename (Admin > Setup > Name) it names a computer that's gone, so
+# Chromium decides another machine has the profile and stops at an
+# "Unlock Profile and Relaunch" dialog instead of the board (2026-10-22,
+# juk3-box -> juk3box). This script is the profile's only user, so with no
+# Chromium running the lock is always stale.
+if ! pgrep -u "$(id -u)" -x chromium >/dev/null; then
+  rm -f "$HOME/.config/chromium/SingletonLock" "$HOME/.config/chromium/SingletonSocket" \
+    "$HOME/.config/chromium/SingletonCookie"
+fi
 
 # The page comes from jb-ui, which may still be starting at boot. Wait for
 # it (up to ~30s) rather than open a "can't connect" page. If it never
