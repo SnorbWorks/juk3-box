@@ -527,6 +527,31 @@ def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: li
     return removed
 
 
+def helper_tags(conn: sqlite3.Connection) -> dict:
+    """The Juk3box Helper app's exact artist, album, genre and track number
+    for each title, from every phone's app (several copies of a title stay
+    apart)."""
+    out: dict[str, list[dict]] = {}
+    for title, artist, album, genre, track in conn.execute(
+            "SELECT title, phone_artist, phone_album, phone_genre, album_track FROM tracks"
+            " WHERE phone_mac LIKE 'helper:%' AND phone_artist IS NOT NULL"):
+        out.setdefault(title, []).append({"artist": artist, "album": album, "genre": genre, "album_track": track})
+    return out
+
+
+def borrowed_tags(exact: dict, title: str, guess: str | None) -> dict | None:
+    """A Bluetooth song's real tags, borrowed from the app's copy of it: the
+    only copy of that title, or the one whose artist matches the iTunes
+    guess. Bluetooth alone gives titles, so without the app these stay
+    guesses. Fields the app left empty keep the guess."""
+    copies = exact.get(title) or []
+    if len(copies) > 1:
+        copies = [c for c in copies if guess and c["artist"].casefold() == guess.casefold()]
+    if not copies:
+        return None
+    return {k: v for k, v in copies[0].items() if v is not None}
+
+
 EDIT_FIELDS = ("title", "artist", "album", "genre", "album_track")
 
 
@@ -691,7 +716,9 @@ class Snapshots:
             SELECT t.title, COALESCE(t.phone_artist, t.artist), COALESCE(t.phone_album, t.album),
                    COALESCE(t.phone_genre, t.genre), t.artwork_url, t.item_path,
                    t.lastfm_listeners, t.play_count, t.last_played_at, t.added_at, t.favorite,
-                   t.album_track, r.rank
+                   t.album_track, r.rank,
+                   t.phone_artist IS NULL AND t.phone_mac NOT LIKE 'helper:%' AND t.phone_mac NOT LIKE 'drive:%',
+                   t.artist
             FROM tracks t
             -- By the phone's album name where the deep crawl gave one, else the
             -- lookup's (they're the same for most albums): the phone's Recently
@@ -712,6 +739,11 @@ class Snapshots:
             }
             for r in rows
         ]
+        if any(r[13] for r in rows):
+            exact = helper_tags(self.conn)
+            for t, r in zip(tracks, rows):
+                if r[13]:
+                    t.update(borrowed_tags(exact, r[0], r[14]) or {})
         payload = {"tracks": tracks}
         serialized = json.dumps(payload)
         if serialized != self._last_payload:

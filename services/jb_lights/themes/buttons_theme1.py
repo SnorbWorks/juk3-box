@@ -3,7 +3,8 @@
 The user's design, tested 2026-10-10:
   - idle: every button white at 70%
   - letter waiting: that letter green, and RESET red (the selection can be
-    cancelled); another letter moves the green
+    cancelled); another letter moves the green. On a numbers-only jukebox
+    the digits typed so far are green the same way (added 2026-10-22)
   - selection made: letter and digit blink green together, then a rainbow
     comet runs A..K, 1..0 twice, then back to all white
   - digit with no letter first: that digit blinks red, lingering (not a
@@ -18,8 +19,8 @@ SINGLE/ALBUM stay white and sit out the chase.
 
 The lights show jb-core's selection state rather than reading keys
 themselves, so they always agree with what jb-core will actually play:
-jukebox/jb-core/entry (retained: idle / partial + letter, and why it went
-idle), /selection (the slot picked) and /rejected (a digit with no letter).
+jukebox/jb-core/entry (retained: idle / partial + what's typed, and why it
+went idle), /selection (the slot picked) and /rejected (a digit with no letter).
 After an animation, anything that arrived meanwhile is folded into jb-core's
 latest entry state, not replayed.
 
@@ -77,18 +78,26 @@ class Theme1:
         if show:
             self.strip.show()
 
-    def show_entry(self, letter):
-        """Resting look for jb-core's entry state: a waiting letter, or idle;
-        RESET red while it's held down."""
-        colors = {buttons.index(letter): GREEN, buttons.RESET: RED} if buttons.has(letter) else {}
+    @staticmethod
+    def typed_keys(typed):
+        """Green for each key typed so far (a letter, or a numbers-only
+        jukebox's digits)."""
+        return {buttons.index(k): GREEN for k in typed or "" if buttons.has(k)}
+
+    def show_entry(self, typed):
+        """Resting look for jb-core's entry state: what's typed so far, or
+        idle; RESET red while something can be cancelled or it's held down."""
+        colors = self.typed_keys(typed)
+        if typed:
+            colors[buttons.RESET] = RED
         if self.reset_held:
             colors[buttons.RESET] = RED
         self.paint(colors)
 
-    def reset_blink(self, letter):
+    def reset_blink(self, typed):
         """RESET blinks red twice: the song was cancelled, or the power menu
         opened (holding Reset)."""
-        base = {buttons.index(letter): GREEN} if buttons.has(letter) else {}
+        base = self.typed_keys(typed)
         self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF}, RESET_BLINKS, RESET_ON_S, RESET_OFF_S)
 
     def blink(self, base, on, off, times, on_s, off_s):
@@ -105,8 +114,8 @@ class Theme1:
         i = buttons.index(key)
         self.blink({}, {i: RED}, {i: OFF}, REJECT_BLINKS, REJECT_ON_S, REJECT_OFF_S)
 
-    def cancelled(self, letter):
-        base = {buttons.index(letter): GREEN} if buttons.has(letter) else {}
+    def cancelled(self, typed):
+        base = self.typed_keys(typed)
         self.blink(base, {buttons.RESET: RED}, {buttons.RESET: OFF},
                    CANCEL_BLINKS, CANCEL_ON_S, CANCEL_OFF_S)
 
@@ -156,7 +165,7 @@ def main(feed=None):
     strip = buttons.open_strip()
     theme = Theme1(strip)
     theme.paint()
-    letter = None   # jb-core's waiting letter, from the retained entry topic
+    typed = None    # what's entered so far (jb-core's retained entry topic)
     menu = False    # the power menu is open (jukebox/jb-core/power)
     music = ButtonsMusic() if feed else None
     showing_music = False
@@ -169,7 +178,7 @@ def main(feed=None):
         nonlocal showing_music, last
         now = time.monotonic()
         dt, last = min(0.1, now - last), now
-        if not music or letter or theme.reset_held or menu:
+        if not music or typed or theme.reset_held or menu:
             return
         colours = music.frame(dt, feed.snapshot(now))
         if colours is None:
@@ -188,13 +197,14 @@ def main(feed=None):
 
     def follow_state(topic, p):
         """State-only updates (no animation): returns True if handled."""
-        nonlocal letter
+        nonlocal typed
         if topic.endswith("/raw"):
             if p.get("control") == "reset":
                 theme.reset_held = p.get("state") == "down"
             return True
         if topic.endswith("/entry"):
-            letter = p.get("letter") if p.get("state") == "partial" else None
+            # "typed" since the selection formats (Oct 21); "letter" before.
+            typed = (p.get("typed") or p.get("letter")) if p.get("state") == "partial" else None
             return True
         return False
 
@@ -209,24 +219,24 @@ def main(feed=None):
                 continue                                # only Reset's raw state matters here
             interacted()
             if topic.endswith("/entry"):
-                was = letter
+                was = typed
                 follow_state(topic, p)
-                if not (letter is None and was and p.get("reason") == "cancelled"):
-                    theme.show_entry(letter)
+                if not (typed is None and was and p.get("reason") == "cancelled"):
+                    theme.show_entry(typed)
                     continue
                 theme.cancelled(was)
             elif topic.endswith("/raw"):
                 follow_state(topic, p)
-                theme.show_entry(letter)
+                theme.show_entry(typed)
                 continue
             elif topic.endswith("/power"):
                 opened = p.get("state") == "menu" and not menu
                 menu = p.get("state") == "menu"
                 if not opened:
                     continue
-                theme.reset_blink(letter)
+                theme.reset_blink(typed)
             elif topic.endswith("/skipped"):
-                theme.reset_blink(letter)
+                theme.reset_blink(typed)
             elif topic.endswith("/selection"):
                 theme.selected(p["slot"])
             elif topic.endswith("/rejected"):
@@ -241,7 +251,7 @@ def main(feed=None):
                 t, q = events.get_nowait()
                 if not follow_state(t, q) and t.endswith("/power"):
                     menu = q.get("state") == "menu"
-            theme.show_entry(letter)
+            theme.show_entry(typed)
     except KeyboardInterrupt:
         pass
     finally:

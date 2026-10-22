@@ -381,3 +381,29 @@ def test_the_helper_apps_library_is_shown_with_its_own_tags_covers_albums_and_pl
     albums = snaps.bus.sent["jukebox/jb-library/albums"]
     assert [s["title"] for s in albums["contents"]["Moon River"]] == ["Moon River", "Days of Wine"]
     assert snaps.bus.sent["jukebox/jb-library/playlists"]["playlists"] == [{"name": "Moons", "titles": ["Moon River"]}]
+
+
+def test_bluetooth_songs_borrow_the_helper_apps_exact_tags(db):
+    import asyncio
+    lib.upsert_tracks(db, MAC, crawl("Moon River", "Reaper", "Reaper", "Nowhere"))
+    db.execute("UPDATE tracks SET artist = 'andy williams', album = 'Guess' WHERE title = 'Moon River'")
+    db.execute("UPDATE tracks SET artist = 'Blue Oyster Cult', album = 'Guess' WHERE title = 'Reaper' AND dup = 0")
+    db.execute("UPDATE tracks SET artist = 'Someone', album = 'Guess' WHERE title = 'Reaper' AND dup = 1")
+    db.execute("UPDATE tracks SET artist = 'Nobody', album = 'Guess' WHERE title = 'Nowhere'")
+    mac = "helper:dev-1"
+    lib.store_helper(db, mac, [
+        {"title": "Moon River", "artist": "Andy Williams", "album": "Moon River", "genre": "Pop", "album_track": 1,
+         "item_path": f"{mac}/i.1"},
+        {"title": "Reaper", "artist": "Blue Oyster Cult", "album": "Agents of Fortune", "album_track": 2,
+         "item_path": f"{mac}/i.2"},
+        {"title": "Reaper", "artist": "Cover Band", "album": "Covers", "item_path": f"{mac}/i.3"},
+    ], [])
+    snaps = lib.Snapshots(FakeBus(), db, Log())
+    snaps.mac = MAC
+    asyncio.run(snaps.publish())
+    shown = [(t["title"], t["artist"], t["album"], t["album_track"])
+             for t in snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]]
+    assert ("Moon River", "Andy Williams", "Moon River", 1) in shown          # the only copy: borrowed
+    assert ("Reaper", "Blue Oyster Cult", "Agents of Fortune", 2) in shown    # the copy whose artist matches
+    assert ("Reaper", "Someone", "Guess", None) in shown                      # no match: the guess stays
+    assert ("Nowhere", "Nobody", "Guess", None) in shown                      # not in the app
