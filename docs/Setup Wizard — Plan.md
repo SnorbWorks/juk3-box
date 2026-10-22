@@ -154,7 +154,7 @@ The cabinet's part is a jb-ui screen (`setup`, an engine screen like `sources-*`
 ## Answered (Oct 20, the owner's call: the recommendations)
 
 1. **Setup mode on purpose:** "Set up Wi-Fi" joins Reboot / Shut down in the Reset-hold menu; no new gesture.
-2. **The hostname:** one fixed hostname, never the owner's name for it (a rename would break bookmarks, SSH and the app's saved address). With the product name settled as Juk3box, a new image's hostname is `juk3box` (`juk3box.local`); this cabinet keeps answering at `juk3-box.local` too (an Avahi alias) when it moves.
+2. **The hostname:** follows the cabinet's one name (decided Oct 21, 2026): "Garage Jukebox" is `garage-jukebox.local`. Setup's Name step checks it's free and Finish moves it (so the setup page isn't lost partway); after setup, Admin › Setup › Name renames it, warning that bookmarks change and the admin moves. The app finds the jukebox over Bonjour each time, so it isn't affected. A new image starts as `juk3box`; the first cabinet moved from `juk3-box` to `juk3box.local`.
 3. **Other cabinets' lights:** fixed to Juk3box's own board for now (lengths 23, 349, 180, the GPIOs, the buttons' inversion), kept in one config file (`lights.json`) so making them configurable later is a small change. The step only asks which chains exist.
 4. **No lights:** jb-analyzer is suggested off (its main use is the light show), on the suggestions screen like any other.
 5. **The hotspot:** a password, shown on the cabinet screen and in its QR code, so only someone at the cabinet can join.

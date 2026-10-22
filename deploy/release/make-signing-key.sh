@@ -9,7 +9,7 @@
 set -eu
 cd "$(dirname "$0")/../.."
 PUB=deploy/update/juk3box-update.pub
-PI=${PI_HOST:-juk3-box.local}
+PI=${PI_HOST:-juk3box.local}
 GH=$(command -v gh || echo "$HOME/bin/gh")
 [ ! -f "$PUB" ] || { echo "There's already a key ($PUB). Replacing it means every jukebox needs the new one first." >&2; exit 1; }
 KEY=$(ssh -i "$HOME/.ssh/sidecar_ed25519" "admin@$PI" 'openssl genpkey -algorithm ed25519')
