@@ -67,7 +67,7 @@ function render(body, s) {
         button('Edit the frame', { onclick: () => { location.hash = '#/builder/frame'; } }, 'panel-left'),
         button('Change theme', { onclick: () => { location.hash = '#/themes'; } }, 'palette'),
         button('Upload pictures', { onclick: () => { location.hash = '#/media'; } }, 'image'),
-        button('Settings', { onclick: () => { location.hash = '#/settings'; } }, 'settings'))),
+        button('Menus', { onclick: () => { location.hash = '#/menus'; } }, 'menu'))),
     problems(s.live.pick_log),
     down.length ? h('div.card',
       h('div.card-head', h('h2', 'Needs attention')),

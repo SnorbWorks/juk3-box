@@ -144,7 +144,7 @@ async function submit(data = {}) {
   const r = await api('POST', `/api/wizard/${view.step.id}`, data);
   busy = false;
   if (r.ok && r.data.restarting) return renderRestarting();
-  if (r.ok && r.data.done) return renderFinished(true);
+  if (r.ok && r.data.done) return renderFinished(true, r.data.address);
   if (r.ok && ONLY_STEP) return renderSaved();
   if (!r.ok) {
     local.error = r.data.error || 'That didn\'t work. Try again.';
@@ -269,16 +269,26 @@ function renderWelcome() {
     } }, 'Let\'s go')));
 }
 
-function renderFinished(justNow) {
+// Matches network_name in setup_wizard.py.
+function networkName(name) {
+  return name.normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/, '') || 'juk3box';
+}
+
+function renderFinished(justNow, address) {
   stopPolling();
   const name = (view?.step?.summary || []).find(r => r.k === 'Name')?.v || 'Your jukebox';
+  // Finish moved the address to the name's: the admin is there now.
+  const moved = address && location.hostname.endsWith('.local') && location.hostname !== address;
+  const admin = moved ? `${location.protocol}//${address}${location.port ? `:${location.port}` : ''}/` : '/';
   root.replaceChildren(h('section.wz-hero', {},
     h('img.wz-hero-logo', { src: '/static/setup/logo.png', alt: 'Juk3box' }),
     eq(44),
     h('h1', {}, justNow ? `${name} is ready` : 'Setup is finished'),
     h('p', {}, justNow ? 'Pick a song on the cabinet and enjoy. You can change anything later in the admin.'
       : 'This jukebox is set up. Change anything in the admin, or run setup again.'),
-    h('a.wz-next', { href: '/', style: 'text-decoration:none' }, 'Open the admin'),
+    moved ? h('p', {}, `Its admin is now at ${address}. Sign in there with your password.`) : null,
+    h('a.wz-next', { href: admin, style: 'text-decoration:none' }, 'Open the admin'),
     justNow ? null : h('button.wz-ghost', { type: 'button', style: 'background:transparent;color:#fff;border-color:rgba(255,255,255,.5);width:100%;max-width:360px', onClick: async () => {
       const r = await api('POST', '/api/wizard-again', {});
       if (r.ok) { local = { again: true }; load(); }
@@ -405,8 +415,13 @@ const STEPS = {
       body: [
         h('p', {}, 'This is how it shows up on your phone, in the AirPlay speaker list and over Bluetooth.'),
         h('div.wz-field', {}, h('label.wz-label', { for: 'jbname' }, 'Name'),
-          h('input.wz-input', { id: 'jbname', type: 'text', maxlength: '40', value: local.name, onInput: e => { local.name = e.target.value; } })),
+          h('input.wz-input', { id: 'jbname', type: 'text', maxlength: '40', value: local.name, onInput: e => {
+            local.name = e.target.value;
+            document.getElementById('jbaddr').textContent = `${networkName(local.name)}.local`;
+          } })),
         h('p', {}, 'Ideas: Den Jukebox, The Rec Room, Garage Jukebox.'),
+        h('p', {}, 'At the end of setup, its address on your network becomes ',
+          h('strong', { id: 'jbaddr' }, `${networkName(local.name || '')}.local`), '.'),
       ],
       next: { onClick: () => submit({ name: local.name }), disabled: !local.name?.trim() },
     };

@@ -112,7 +112,7 @@ def module_blocks(folders: list[Path]) -> tuple[dict[str, dict], list[str]]:
                 "icons": {n: {"svg": s} for n in b.get("icons", []) if (s := icons.svg(f"lucide:{n}"))},
                 "shapes": b.get("shapes", []),
                 "settings": b.get("settings") or {},
-                # It can go in the navigation bar (Settings > Navigation).
+                # It can go in the navigation bar (Menus > Navigation).
                 "nav": b.get("nav") is True,
             }
     return out, problems

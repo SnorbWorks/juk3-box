@@ -93,7 +93,7 @@ def run(tmp_path, check, family="pi5", password=True, lights=None):
         w.system, w.board = pi, admin.board
         calls = []
 
-        async def ctl(verb, *args):
+        async def ctl(verb, *args, **_k):
             calls.append((verb, *args))
             if verb == "psu":
                 pi.psu = None if args[0] == "unset" else args[0]
@@ -244,7 +244,7 @@ def test_optional_steps_can_be_skipped_and_finishing_marks_it_done(tmp_path):
     async def check(client, admin, pi, calls):
         await submit(client, "screen", {"skip": True})
         out = await submit(client, "finish")
-        assert out == {"done": True}
+        assert out["done"] is True and out["address"].endswith(".local")
         assert json.loads((tmp_path / "setup.json").read_text())["done"] is True
         assert admin.wizard.cabinet() == {"active": False}
     run(tmp_path, check)
@@ -425,4 +425,39 @@ def test_no_buttons_saves_only_the_format(tmp_path):
         await submit(client, "controls", {"no_buttons": True, "spec": selection.PRESETS["rockola"]})
         assert json.loads((tmp_path / "settings.json").read_text())["selection"]["kind"] == "numbers"
         assert not (tmp_path / "controls.json").exists()
+    run(tmp_path, check)
+
+
+def test_the_one_name_gives_the_address():
+    from services.jb_admin.setup_wizard import network_name
+    assert network_name("Garage Jukebox") == "garage-jukebox"
+    assert network_name("  Shawn's Café — Jukebox! ") == "shawn-s-cafe-jukebox"
+    assert network_name("🎵") == "juk3box"
+    assert len(network_name("x" * 80)) == 63
+
+
+def test_the_address_follows_the_name_at_the_end_of_setup(tmp_path):
+    async def check(client, admin, pi, calls):
+        await submit(client, "name", {"name": "Den Jukebox"})
+        assert ("hostname", "check", "den-jukebox") in calls                 # checked, not moved yet
+        assert not any(c[:2] == ("hostname", "set") for c in calls)
+        assert {"k": "Address", "v": "den-jukebox.local"} in admin.wizard.summary()
+        out = await submit(client, "finish")
+        assert ("hostname", "set", "den-jukebox") in calls
+        assert out == {"done": True, "address": "den-jukebox.local"}
+    run(tmp_path, check)
+
+
+def test_renaming_from_the_admin_moves_everything(tmp_path):
+    async def check(client, admin, pi, calls):
+        async def rename(name, address=True):
+            calls.append(("rename", name, address))
+            return "garage-jukebox.local"
+        admin.rename_jukebox = rename
+        r = await client.put("/api/jukebox-name", json={"name": " Garage Jukebox "}, headers=H)
+        assert r.status == 200 and await r.json() == {"name": "Garage Jukebox", "address": "garage-jukebox.local"}
+        assert ("rename", "Garage Jukebox", True) in calls
+        assert admin.wizard.answer("name")["name"] == "Garage Jukebox"
+        assert (await client.put("/api/jukebox-name", json={"name": ""}, headers=H)).status == 400
+        assert set(await (await client.get("/api/jukebox-name")).json()) == {"name", "address"}
     run(tmp_path, check)

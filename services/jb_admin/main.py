@@ -22,6 +22,7 @@ import asyncio
 import json
 import re
 import secrets
+import socket
 import time
 from urllib.parse import unquote
 from pathlib import Path
@@ -37,7 +38,7 @@ from services.jb_admin.media_lib import MediaLibrary
 from services.jb_admin.drive_import import DriveImport
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
 from services.jb_admin.registry import Registry, read_manifests
-from services.jb_admin.setup_wizard import ANSWER_TOPIC, Wizard, WizardError
+from services.jb_admin.setup_wizard import ANSWER_TOPIC, Wizard, WizardError, network_name
 from services.jb_ui import main as ui
 from services.jb_ui import customize, icons, media, module_blocks, themes
 
@@ -374,15 +375,32 @@ class Admin:
         except (OSError, asyncio.TimeoutError) as e:
             self.log.warning("couldn't set the Bluetooth name: %s", e)
 
-    async def rename_jukebox(self, name: str) -> None:
-        """One name for the app, the AirPlay speaker and the cabinet: jb-source-helper's."""
+    async def check_address(self, name: str) -> None:
+        """Is the address this name gives free on the network? (WizardError if not.)"""
+        host = network_name(name)
+        if host != socket.gethostname():
+            await self.setup_ctl("hostname", "check", host, timeout=30)
+
+    async def set_address(self, name: str) -> str:
+        """The cabinet's address follows its name (jb-setupctl): garage-jukebox.local."""
+        host = network_name(name)
+        if host != socket.gethostname():
+            await self.setup_ctl("hostname", "set", host, timeout=30)
+            self.log.info("the jukebox's address is now %s.local", host)
+        return f"{host}.local"
+
+    async def rename_jukebox(self, name: str, address: bool = True) -> str:
+        """The cabinet's one name: the app, the AirPlay speaker, Bluetooth and
+        (unless address=False) its address on the network. Returns the address."""
         if self.bus is None:
             raise WizardError("The admin can't reach the jukebox right now. Try again in a moment.")
+        # The address first: a name another device has stops here, before anything changes.
+        host = await self.set_address(name) if address else f"{socket.gethostname()}.local"
         old_name = (self.live.get("helper_settings") or {}).get("name")
         await self.bus.publish("jukebox/jb-source-helper/cmd", {"action": "settings", "name": name})
         await self.bluetooth_alias(name)
         if name == old_name:
-            return
+            return host
         # The AirPlay speaker takes the new name on a restart, once
         # jb-source-helper has written it (airplay.env).
         for _ in range(30):
@@ -394,6 +412,25 @@ class Admin:
         except ModuleError as e:
             self.log.warning("couldn't restart jb-airplay: %s", e)
             raise WizardError(f"Renamed, but the AirPlay speaker keeps its old name until the jukebox restarts ({e}).")
+        return host
+
+    # The cabinet's name, after setup (the admin's Setup page).
+    async def get_jukebox_name(self, request):
+        return web.json_response({"name": (self.live.get("helper_settings") or {}).get("name") or "Juk3box",
+                                  "address": f"{socket.gethostname()}.local"})
+
+    async def put_jukebox_name(self, request):
+        body = await json_body(request)
+        name = body.get("name")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40:
+            raise error(400, "A name of 1 to 40 characters, please.")
+        name = name.strip()
+        try:
+            address = await self.rename_jukebox(name)
+        except WizardError as e:
+            raise error(400, str(e))
+        self.wizard.renamed(name)
+        return web.json_response({"name": name, "address": address})
 
     # The setup wizard's page --------------------------------------------------
 
@@ -662,8 +699,7 @@ class Admin:
             if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", device_id):
                 raise error(400, "Which phone?")
             cmd["device_id"] = device_id
-        name = None
-        if action == "rename" or (action == "settings" and "name" in body):
+        if action == "rename":
             name = body.get("name")
             if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40:
                 raise error(400, "A name of 1 to 40 characters, please.")
@@ -674,16 +710,8 @@ class Admin:
                     cmd[k] = bool(body[k])
         if self.bus is None:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
-        if action == "settings" and name:
-            rest = {k: v for k, v in cmd.items() if k != "name"}
-            if len(rest) > 1:
-                await self.bus.publish("jukebox/jb-source-helper/cmd", rest)
-            try:
-                await self.rename_jukebox(cmd["name"])
-            except WizardError as e:
-                raise error(500, str(e))
-        else:
-            await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
+        # The jukebox's own name is the Setup page's (put_jukebox_name).
+        await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
         self.log.info("helper app: %s %s", action, cmd.get("device_id", ""))
         return web.json_response({"ok": True})
 
@@ -1422,6 +1450,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/wizard/{step}", admin.wizard_submit)
     r.add_post("/api/wizard/{step}/{action}", admin.wizard_action)
     r.add_put("/api/lastfm", admin.put_lastfm)
+    r.add_get("/api/jukebox-name", admin.get_jukebox_name)
+    r.add_put("/api/jukebox-name", admin.put_jukebox_name)
     r.add_delete("/api/lastfm", admin.delete_lastfm)
     r.add_get("/api/update", admin.get_update)
     r.add_put("/api/update/auto", admin.put_update_auto)

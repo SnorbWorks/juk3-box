@@ -372,7 +372,7 @@ const NAV_ENGINE_BLOCKS = {
   'up-next': { block: 'up-next', limit: 5 },
 };
 
-// The navigation bar, as the owner set it (Settings > Navigation): the
+// The navigation bar, as the owner set it (Menus > Navigation): the
 // buttons in a .jb-nav-buttons, each in a .jb-nav-item, which carries its
 // states; then, always after them, a .jb-nav-modules with the blocks the
 // owner put below them ("block:<id>" entries): the Now Playing card, Up

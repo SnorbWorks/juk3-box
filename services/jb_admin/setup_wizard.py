@@ -22,6 +22,7 @@ import socket
 import struct
 import tempfile
 import time
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -247,6 +248,13 @@ class Step:
         return "Answer on your phone or computer."
 
 
+def network_name(name: str) -> str:
+    """The cabinet's address on the network, from its one name:
+    "Garage Jukebox" is garage-jukebox.local (setup.js's networkName matches)."""
+    plain = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")[:63].rstrip("-") or "juk3box"
+
+
 class Password(Step):
     id, title, short = "password", "Choose a password", "Password"
 
@@ -271,9 +279,10 @@ class Name(Step):
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40:
             raise WizardError("A name of 1 to 40 characters, please.")
         name = name.strip()
-        await w.admin.rename_jukebox(name)
-        # The name a phone sees over Bluetooth (BlueZ keeps it).
-        await w.system.run("bluetoothctl", "system-alias", name)
+        # The address follows at the end (Finish): moving it now would lose
+        # this page partway through.
+        await w.admin.check_address(name)
+        await w.admin.rename_jukebox(name, address=False)
         return {"name": name}
 
 
@@ -829,9 +838,16 @@ class Finish(Step):
         return {"summary": w.summary()}
 
     async def submit(self, w, data):
+        name = w.answer("name").get("name")
+        address = f"{socket.gethostname()}.local"
+        if name:
+            try:
+                address = await w.admin.set_address(name)
+            except WizardError as e:     # taken since the Name step: keep the old address
+                w.log.warning("setup: kept %s: %s", address, e)
         w.state["done"] = True
         w.state["finished_at"] = time.time()
-        return {}
+        return {"address": address}
 
     def cabinet(self, w):
         return "Setup is finished. Enjoy your jukebox!"
@@ -965,7 +981,7 @@ class Wizard:
         self.log.info("setup: %s done", step.id)
         if step.id == "finish":
             self.publish()
-            return {"done": True}
+            return {"done": True, "address": kept["address"]}
         return await self.view(self.after(step.id).id)
 
     async def action(self, step_id: str, name: str, data: dict) -> dict:
@@ -1099,6 +1115,11 @@ class Wizard:
         await self.admin.set_module_secret("jb-weathermix", "lastfm-key", None)
         self.log.info("setup: Last.fm key removed")
 
+    def renamed(self, name: str) -> None:
+        """Renamed from the admin: setup's answer follows, so a rerun starts from it."""
+        self.state["answers"].setdefault("name", {})["name"] = name
+        self.save()
+
     def lastfm(self) -> dict:
         key = self.system.lastfm_key()
         return {"set": bool(key), "ends": key[-4:] if key else None, "get_key": LASTFM_GET_KEY}
@@ -1112,7 +1133,10 @@ class Wizard:
 
     def summary(self) -> list[dict]:
         a = self.state["answers"]
-        rows = [{"k": "Name", "v": (a.get("name") or {}).get("name") or "Juk3box"}]
+        name = (a.get("name") or {}).get("name") or "Juk3box"
+        # Finish moves the address to the name's.
+        host = socket.gethostname() if self.done or "name" not in a else network_name(name)
+        rows = [{"k": "Name", "v": name}, {"k": "Address", "v": f"{host}.local"}]
         net = a.get("wifi") or {}
         if net.get("name"):
             rows.append({"k": "Network", "v": net["name"]})

@@ -22,6 +22,8 @@ it only ever does these:
                                           plugged in; CircuitPython and our program on a blank
                                           one (its RPI-RP2 drive); our program onto one showing
                                           its CIRCUITPY drive ("replace" if it has other software)
+    jb-setupctl hostname check|set NAME   the cabinet's address on the network (NAME.local, from
+                                          its name): is another device already using it; use it
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -67,6 +69,9 @@ PROGRAM = ("jbsignal.py", "config.py", "code.py", "boot.py")   # boot.py last: i
 KEYPAD_MOUNTS = Path("/run/juk3-box-keypad")
 PICO_VERSION_RE = re.compile(r'^VERSION = "([0-9][0-9.]*)"', re.M)
 CIRCUITPY_WAIT_S = 45
+HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+HOSTS = Path("/etc/hosts")
+AVAHI = ("busctl", "call", "org.freedesktop.Avahi", "/", "org.freedesktop.Avahi.Server")
 
 BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
 END = "# --- end juk3box setup ---"
@@ -452,6 +457,35 @@ def cmd_keypad(args: list[str]) -> str:
     die("unknown keypad command")
 
 
+def name_taken(name: str) -> bool:
+    """Does another device on the network answer to NAME.local? (Avahi gives up after about 5 s.)"""
+    try:
+        return run(*AVAHI, "ResolveHostName", "iisiu", "--", "-1", "-1", f"{name}.local", "-1", "0",
+                   check=False, timeout=10).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def cmd_hostname(what: str, name: str) -> str:
+    if not HOSTNAME_RE.match(name):
+        die("not a network name")
+    if name == run("hostname").stdout.strip():
+        return name
+    if name_taken(name):
+        die(f"Another device on this network is already called {name}.local. Pick another name.")
+    if what == "check":
+        return name
+    run("hostnamectl", "set-hostname", name)
+    hosts = HOSTS.read_text()
+    line = f"127.0.1.1\t{name}"
+    hosts = re.sub(r"^127\.0\.1\.1\s.*$", line, hosts, flags=re.M) if re.search(r"^127\.0\.1\.1\s", hosts, re.M) \
+        else hosts.rstrip("\n") + f"\n{line}\n"
+    write(HOSTS, hosts)
+    # Avahi takes the new name at once, keeping what's announced (AirPlay, the app).
+    run(*AVAHI, "SetHostName", "s", name)
+    return name
+
+
 def dispatch(a: list[str]) -> str:
     if len(a) == 2 and a[0] == "psu":
         return cmd_psu(a[1])
@@ -473,6 +507,8 @@ def dispatch(a: list[str]) -> str:
         return cmd_update(a[1])
     if a and a[0] == "keypad":
         return cmd_keypad(a[1:])
+    if len(a) == 3 and a[0] == "hostname" and a[1] in ("check", "set"):
+        return cmd_hostname(a[1], a[2])
     die("unknown command")
 
 

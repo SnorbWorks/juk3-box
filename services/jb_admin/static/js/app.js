@@ -13,7 +13,7 @@ const PAGES = [
   { id: 'themes', label: 'Themes', icon: 'palette', load: () => import('./pages/themes.js') },
   { id: 'appearance', label: 'Appearance', icon: 'swatch-book', load: () => import('./pages/appearance.js') },
   { id: 'media', label: 'Media', icon: 'image', load: () => import('./pages/media.js') },
-  { id: 'settings', label: 'Settings', icon: 'settings', load: () => import('./pages/settings.js') },
+  { id: 'menus', label: 'Menus', icon: 'menu', load: () => import('./pages/menus.js') },
   { id: 'setup', label: 'Setup', icon: 'wand-sparkles', load: () => import('./pages/setup.js') },
   { id: 'modules', label: 'Modules', icon: 'boxes', load: () => import('./pages/modules.js') },
   { id: 'extensions', label: 'Extensions', icon: 'scroll-text', load: () => import('./pages/extensions.js') },
@@ -108,6 +108,11 @@ function showShell() {
 async function route() {
   if (!app.classList.contains('shell')) return;
   const [, id = 'dashboard', ...rest] = location.hash.split('/');
+  // Settings became Menus (old bookmarks).
+  if (id === 'settings') {
+    location.replace(`#/${['menus', ...rest].join('/')}`);
+    return;
+  }
   // Bluetooth and Drives moved under Sources (old bookmarks).
   const moved = { phones: 'bluetooth', drives: 'drives', app: 'app' }[id];
   if (moved) {

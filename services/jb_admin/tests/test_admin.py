@@ -718,7 +718,7 @@ def test_page_builder_leaves_the_navigation_bar_to_settings(tmp_path):
         # In the navigation bar, even inside a container there: refused.
         for sidebar in ([{"block": "now-playing"}], [{"class": "jb-u-column", "children": [{"block": "up-next"}]}]):
             r = await c.put("/api/layouts/bare/frame/draft", json=frame(sidebar), headers=H)
-            assert r.status == 400 and "Settings > Navigation" in json.dumps(await r.json())
+            assert r.status == 400 and "Menus > Navigation" in json.dumps(await r.json())
         # Anywhere else: fine.
         assert (await c.put("/api/layouts/bare/frame/draft", json=frame([], [{"block": "now-playing"}]), headers=H)).status == 200
         blocks = await (await c.get("/api/blocks")).json()

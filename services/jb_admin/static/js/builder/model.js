@@ -97,7 +97,7 @@ export function inNavBar(tree, parentPath) {
   return false;
 }
 
-// Does `node` hold a block Settings > Navigation manages (the Now Playing
+// Does `node` hold a block Menus > Navigation manages (the Now Playing
 // card, Up Next, modules that can go in the navigation bar)? Those go in
 // the navigation bar from Settings only, never from here.
 export function navManaged(schema, node) {

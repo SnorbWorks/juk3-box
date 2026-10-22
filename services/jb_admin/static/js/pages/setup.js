@@ -9,7 +9,7 @@ let updatePoll = null;
 
 export async function show(main) {
   clearTimeout(updatePoll);
-  const [s, upd] = await Promise.all([get('/api/wizard-status'), get('/api/update')]);
+  const [s, upd, named] = await Promise.all([get('/api/wizard-status'), get('/api/update'), get('/api/jukebox-name')]);
   const open = h('a.btn.primary', { href: '/setup', target: '_blank', rel: 'noopener' },
     icon('wand-sparkles'), h('span', s.done ? 'Open setup' : 'Continue setup'));
   const again = button('Run setup again', {
@@ -36,7 +36,56 @@ export async function show(main) {
   clear(main,
     pageHeader('Setup', 'The step-by-step setup: name, network, power, lights, sound and more.'),
     h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null, controls), summary,
-      updatesCard(upd, () => show(main)), lastfmCard(s.lastfm, () => show(main))));
+      nameCard(named, () => show(main)), updatesCard(upd, () => show(main)), lastfmCard(s.lastfm, () => show(main))));
+}
+
+// The cabinet's one name: the app, AirPlay, Bluetooth and its address
+// on the network (garage-jukebox.local), which moves the admin too.
+// Matches network_name in setup_wizard.py (and the setup page's).
+function networkName(name) {
+  return name.normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/, '') || 'juk3box';
+}
+
+function nameCard(n, refresh) {
+  const input = h('input', { type: 'text', value: n.name, maxLength: 40, required: true, autocomplete: 'off' });
+  const save = button('Rename', { variant: 'primary', type: 'submit' }, 'pencil');
+  const address = h('span');
+  const preview = () => {
+    const next = `${networkName(input.value.trim())}.local`;
+    address.textContent = next === n.address ? `Its address is ${n.address}.` : `Its address becomes ${next}.`;
+    save.disabled = !input.value.trim() || input.value.trim() === n.name;
+  };
+  input.addEventListener('input', preview);
+  preview();
+  return h('form.card.card-pad', {
+    style: { maxWidth: '560px' },
+    onsubmit: async e => {
+      e.preventDefault();
+      const name = input.value.trim();
+      const next = `${networkName(name)}.local`;
+      const moving = next !== n.address;
+      const ok = await confirmDialog(`Rename it ${name}?`, moving
+        ? `Phones, AirPlay and Bluetooth show the new name, and the admin moves to ${next}: old bookmarks stop working, and you sign in again there. Music playing over AirPlay pauses for a moment.`
+        : 'Phones, AirPlay and Bluetooth show the new name. Music playing over AirPlay pauses for a moment.',
+      { confirm: 'Rename' });
+      if (!ok) return;
+      save.disabled = true;
+      try {
+        const r = await put('/api/jukebox-name', { name });
+        toast(`The jukebox is now ${r.name}.`, 'success');
+        const here = location.hostname;
+        if (here.endsWith('.local') && here !== r.address) {
+          // Give the network a moment to learn the new address.
+          setTimeout(() => { location.href = `${location.protocol}//${r.address}${location.port ? `:${location.port}` : ''}/#/setup`; }, 2500);
+        } else refresh();
+      } catch (err) { showError(err); preview(); }
+    },
+  },
+  h('h2', { style: { marginBottom: '8px' } }, 'Name'),
+  h('p', { style: { marginBottom: '14px' } }, 'The jukebox\'s one name: in the app on every phone, the AirPlay speaker list, Bluetooth, and its address on your network.'),
+  field('Name', input, address),
+  h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' } }, save));
 }
 
 // Updates from the project's releases (deploy/jb-update).

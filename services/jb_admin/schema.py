@@ -95,7 +95,7 @@ def current(raw: dict) -> dict:
 
 def nav_placement_problems(tree, nav_blocks: dict | None = None) -> list[str]:
     """What a layout puts in the navigation bar (the container holding the
-    `nav` block, or anywhere inside it) that Settings > Navigation manages
+    `nav` block, or anywhere inside it) that Menus > Navigation manages
     instead: the Now Playing card, Up Next, and module blocks that can go
     there (`nav_blocks`). Settings is the only place those go in it."""
     managed = {*NAV_ENGINE_BLOCKS, *(nav_blocks or {})}
@@ -113,5 +113,5 @@ def nav_placement_problems(tree, nav_blocks: dict | None = None) -> list[str]:
             found.append(node["block"])
 
     walk(tree, False)
-    return [f"{name} goes in the navigation bar from Settings > Navigation, not the page builder"
+    return [f"{name} goes in the navigation bar from Menus > Navigation, not the page builder"
             for name in dict.fromkeys(found)]

@@ -1,4 +1,5 @@
-// Settings: the owner settings, drawn from the server's schema.
+// Menus: the cabinet's menus and how they behave (the owner settings),
+// drawn from the server's schema.
 
 import { get, put } from '../api.js';
 import { button, clear, field, h, icon, iconButton, pageHeader, showError, toast } from '../ui.js';
@@ -13,7 +14,7 @@ export async function show(main) {
 }
 
 export function leave() {
-  // Settings save with a button; leaving with changes just drops them.
+  // Menus save with a button; leaving with changes just drops them.
   state = null;
 }
 
@@ -34,7 +35,7 @@ function render(main) {
     Object.entries(groups).map(([name, items]) => h('section.settings-group',
       h('h2', name), items.map(([key, spec]) => control(key, spec, update)))),
     h('div.save-bar', status, saveBtn));
-  clear(main, pageHeader('Settings', 'How the cabinet behaves. Changes reach the cabinet when you save.'), card);
+  clear(main, pageHeader('Menus', 'The cabinet\'s menus: what\'s on them, in what order, and how they behave. Changes reach the cabinet when you save.'), card);
   update();
 
   async function save() {

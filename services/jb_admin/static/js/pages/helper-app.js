@@ -1,7 +1,7 @@
 // Sources > App: the Juk3box Helper iPhone app (jb-source-helper). Phones
 // pair from the app itself, with a code on the cabinet; here: which may
-// pair, each phone (rename, sync, forget), waking the app over Bluetooth,
-// and the jukebox's name in the app and the AirPlay speaker list.
+// pair, each phone (rename, sync, forget) and waking the app over Bluetooth.
+// The jukebox's own name is the Setup page's.
 
 import { get, post } from '../api.js';
 import { button, clear, confirmDialog, emptyState, field, h, icon, modal, pageHeader, showError, switchControl, toast } from '../ui.js';
@@ -107,7 +107,6 @@ function switchRow(iconName, title, sub, on, onChange) {
 function render(data) {
   const s = data.helper_settings || {};
   const phones = data.helper?.phones || [];
-  const name = s.name || 'Juk3box';
   clear(body,
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
@@ -123,10 +122,5 @@ function render(data) {
       s.ble !== false ? 'On: a pick wakes the app when iOS has put it to sleep, so the phone can stay in a pocket.'
         : 'Off: picks play only while the app is open on the phone.',
       s.ble !== false, v => act('settings', { ble: v }, v ? 'Bluetooth wake-up is on.' : 'Bluetooth wake-up is off.')),
-    h('div.card.card-pad.phone-row',
-      h('div.stat-icon', icon('radio')),
-      h('div.phone-text', h('div.stat-value', name), h('div.stat-sub', 'The jukebox\'s name in the app and in the phone\'s AirPlay speaker list.')),
-      h('div.phone-actions', button('Rename', {
-        onclick: () => rename('Rename the jukebox', name, n => act('settings', { name: n }, `The jukebox is now ${n}.`)),
-      }, 'pencil'))));
+    h('p.muted', 'The jukebox\'s own name, which phones see, is on the ', h('a', { href: '#/setup' }, 'Setup'), ' page.'));
 }
