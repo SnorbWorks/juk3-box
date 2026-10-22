@@ -60,7 +60,7 @@ const ICON_NAMES = [
   'arrow-up-down', 'frame', 'file-plus', 'circle-check', 'circle-x', 'circle-dot', 'shuffle',
   'square-mouse-pointer', 'hand', 'maximize-2', 'monitor-smartphone', 'link', 'gauge', 'archive',
   'arrow-up-left', 'swatch-book', 'puzzle', 'square', 'power', 'scroll-text', 'shield-check', 'cpu', 'map-pin', 'search', 'usb', 'eject', 'hard-drive', 'cable',
-  'wand-sparkles',
+  'wand-sparkles', 'download', 'package', 'triangle-alert',
 ];
 const icons = {};
 

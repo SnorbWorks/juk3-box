@@ -15,6 +15,7 @@ const PAGES = [
   { id: 'media', label: 'Media', icon: 'image', load: () => import('./pages/media.js') },
   { id: 'menus', label: 'Menus', icon: 'menu', load: () => import('./pages/menus.js') },
   { id: 'setup', label: 'Setup', icon: 'wand-sparkles', load: () => import('./pages/setup.js') },
+  { id: 'updates', label: 'Updates', icon: 'download', load: () => import('./pages/updates.js') },
   { id: 'modules', label: 'Modules', icon: 'boxes', load: () => import('./pages/modules.js') },
   { id: 'extensions', label: 'Extensions', icon: 'scroll-text', load: () => import('./pages/extensions.js') },
   { id: 'account', label: 'Account', icon: 'user', load: () => import('./pages/account.js') },

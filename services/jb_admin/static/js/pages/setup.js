@@ -3,13 +3,10 @@
 // /setup, made for a phone.
 
 import { del, get, post, put } from '../api.js';
-import { button, clear, confirmDialog, field, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
-
-let updatePoll = null;
+import { button, clear, confirmDialog, field, h, icon, pageHeader, showError, toast } from '../ui.js';
 
 export async function show(main) {
-  clearTimeout(updatePoll);
-  const [s, upd, named] = await Promise.all([get('/api/wizard-status'), get('/api/update'), get('/api/jukebox-name')]);
+  const [s, named] = await Promise.all([get('/api/wizard-status'), get('/api/jukebox-name')]);
   const open = h('a.btn.primary', { href: '/setup', target: '_blank', rel: 'noopener' },
     icon('wand-sparkles'), h('span', s.done ? 'Open setup' : 'Continue setup'));
   const again = button('Run setup again', {
@@ -36,7 +33,7 @@ export async function show(main) {
   clear(main,
     pageHeader('Setup', 'The step-by-step setup: name, network, power, lights, sound and more.'),
     h('div.stack', state, h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, open, s.done ? again : null, controls), summary,
-      nameCard(named, () => show(main)), updatesCard(upd, () => show(main)), lastfmCard(s.lastfm, () => show(main))));
+      nameCard(named, () => show(main)), lastfmCard(s.lastfm, () => show(main))));
 }
 
 // The cabinet's one name: the app, AirPlay, Bluetooth and its address
@@ -91,43 +88,6 @@ function nameCard(n, refresh) {
   h('p', { style: { marginBottom: '14px' } }, 'The jukebox\'s one name: in the app on every phone, the AirPlay speaker list, Bluetooth, and its address on your network.'),
   field('Name', input, address),
   h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' } }, save));
-}
-
-// Updates from the project's releases (deploy/jb-update).
-const PHASES = { downloading: 'Downloading the update…', checking: 'Checking it\'s genuine…', installing: 'Installing…',
-  restarting: 'Restarting the jukebox…', 'rolling back': 'That didn\'t work; putting the last version back…' };
-
-function when(t) {
-  return t ? new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
-}
-
-function updatesCard(u, refresh) {
-  const busy = u.phase || u.starting;
-  if (busy) updatePoll = setTimeout(refresh, 5000);       // jb-admin itself restarts partway: the next try catches up
-  let line;
-  if (!u.current) line = u.note || 'A development copy: updated by deploying.';
-  else if (busy) line = PHASES[u.phase] || 'Starting the update…';
-  else if (u.available) line = `${u.latest} is ready (this jukebox has ${u.current}).`;
-  else line = `Up to date: ${u.current}. Last checked ${when(u.checked_at)}.`;
-  const act = async (what, msg) => {
-    try { const r = await post(`/api/update/${what}`, {}); if (msg) toast(msg, 'success'); refresh(r); } catch (e) { showError(e); }
-  };
-  const updateNow = button('Update now', { variant: 'primary', onclick: async () => {
-    const ok = await confirmDialog(`Update to ${u.latest}?`,
-      'The jukebox stops for a few minutes while it installs, then restarts. If the new version has trouble, the old one comes back by itself.',
-      { confirm: 'Update now' });
-    if (ok) act('apply', 'Updating. This page catches up when it\'s done.');
-  } }, 'download');
-  return h('div.card.card-pad', { style: { maxWidth: '560px' } },
-    h('h2', { style: { marginBottom: '8px' } }, 'Updates'),
-    h('p', { style: { marginBottom: '12px' } }, line),
-    u.error ? h('div.notice', icon('triangle-alert'), h('span', u.error)) : null,
-    u.current ? h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', margin: '12px 0' } },
-      u.available && !busy ? updateNow : null,
-      busy ? null : button('Check now', { onclick: () => act('check') }, 'refresh-cw')) : null,
-    u.current ? switchControl(u.auto, async on => {
-      try { await put('/api/update/auto', { on }); } catch (e) { showError(e); }
-    }, 'Update automatically overnight') : null);
 }
 
 // The owner's Last.fm key: added here when setup skipped it, or changed.

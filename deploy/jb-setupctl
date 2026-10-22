@@ -14,9 +14,10 @@ it only ever does these:
                                           the light checks, with jb-lights paused
     jb-setupctl lastfm KEY|clear          the owner's Last.fm API key, in jb-library's and
                                           jb-analyzer's config (restarts them)
-    jb-setupctl update check|apply|auto-on|auto-off
-                                          the admin's Updates card (deploy/jb-update); apply
-                                          runs on its own (it restarts the jukebox, jb-admin too)
+    jb-setupctl update check|apply|auto-on|auto-off|os-check|os-security|os-all
+                                          the admin's Updates tab (deploy/jb-update); apply and
+                                          the Raspberry Pi OS ones run on their own (apply
+                                          restarts the jukebox, jb-admin too)
     jb-setupctl keypad status|install|update [replace]
                                           the Pico keypad board (firmware/pico-keypad): what's
                                           plugged in; CircuitPython and our program on a blank
@@ -56,6 +57,7 @@ TZ_RE = re.compile(r"^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$")
 CHAINS = ("buttons", "accent", "levelbar")
 UPDATE = "/usr/local/sbin/jb-update"
 UPDATE_UNIT = "jb-update-now"
+OS_UNIT = "jb-update-os"
 ETC = Path("/etc/juk3-box")
 # Each service's name for the Last.fm key in its config file.
 LASTFM_FIELDS = {"jb-library": "lastfm_api_key", "jb-analyzer": "lastfm_key"}
@@ -293,7 +295,16 @@ def cmd_update(what: str) -> str:
         run("systemctl", "reset-failed", UPDATE_UNIT, check=False)
         run("systemd-run", f"--unit={UPDATE_UNIT}", "--collect", "--no-block", "--quiet", UPDATE, "apply")
         return "started"
-    die("update check|apply|auto-on|auto-off")
+    if what in ("os-check", "os-security", "os-all"):
+        # apt takes minutes: on its own, like apply; the admin follows the state.
+        if any(run("systemctl", "is-active", "--quiet", u, check=False).returncode == 0
+               for u in (OS_UNIT, UPDATE_UNIT, "jb-update")):
+            return "already updating"
+        verb = ("os-check",) if what == "os-check" else ("os-apply", what[3:])
+        run("systemctl", "reset-failed", OS_UNIT, check=False)
+        run("systemd-run", f"--unit={OS_UNIT}", "--collect", "--no-block", "--quiet", UPDATE, *verb)
+        return "started"
+    die("update check|apply|auto-on|auto-off|os-check|os-security|os-all")
 
 
 def drive_with_label(label: str) -> str | None:

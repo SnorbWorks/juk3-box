@@ -6,6 +6,9 @@
     jb-update auto           what the nightly timer runs: check, and apply if
                              the owner left "update automatically" on
     jb-update set-auto on|off
+    jb-update os-check       which Raspberry Pi OS packages have updates (security ones apart)
+    jb-update os-apply security|all
+                             install them: the security fixes, or everything
 
 latest.json on the newest release names the code bundle and its signature.
 The bundle is installed only if it's signed with the key this jukebox
@@ -14,6 +17,13 @@ and only if it's newer. The new code goes to /opt/juk3-box and the old one
 stays beside it (/opt/juk3-box.prev) with the Python packages moved over;
 then the installer runs (packages, services) and the jukebox restarts. If
 its services don't all come back, the old version goes back in.
+
+Raspberry Pi OS is updated here too (the admin's Updates tab), in the
+state's "os": security fixes (Debian's -security suite) automatically
+each night when updates are automatic, everything else only when the owner
+asks (Chromium, the kernel and firmware are where a jukebox could break).
+Some packages only take effect on a restart: "restart_needed", which the
+admin acts on overnight when nothing is playing.
 
 A copy without /opt/juk3-box/VERSION is a developer's (deploy.sh): it's
 never updated from here. Runs as root: from the timer (jb-update.timer),
@@ -47,6 +57,12 @@ UNITS = ["jb-admin", "jb-analyzer", "jb-core", "jb-display", "jb-input", "jb-lib
 SETTLE_S = 45                 # how long the services get to come back before it's judged
 TIMEOUT_S = 60
 VERSION_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+# "name/suite[,suite] version arch [upgradable from: old]" (apt list --upgradable)
+UPGRADABLE_RE = re.compile(r"^([^/\s]+)/(\S+) (\S+) \S+ \[upgradable from: ([^\]]+)\]")
+# Packages that only take effect on a restart.
+RESTART_RE = re.compile(r"^(linux-image|linux-headers|raspi-firmware|rpi-eeprom|raspberrypi-sys-mods|libc6|systemd|dbus)")
+APT_OPTS = ("-y", "-q", "-o", "DPkg::Lock::Timeout=300",
+            "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold")
 
 
 class Failed(Exception):
@@ -240,6 +256,66 @@ def apply() -> dict:
                  updated_from=current, error=None)
 
 
+# Raspberry Pi OS ---------------------------------------------------------------
+
+def os_state(**changes) -> dict:
+    s = read_json(STATE, {})
+    s["os"] = {**(s.get("os") or {}), **changes}
+    write_json(STATE, s)
+    return s["os"]
+
+
+def parse_upgradable(text: str) -> tuple[list, list]:
+    """(security, other): each {"name", "from", "to"}."""
+    security, other = [], []
+    for line in text.splitlines():
+        m = UPGRADABLE_RE.match(line.strip())
+        if not m:
+            continue
+        name, suites, new, old = m.groups()
+        pkg = {"name": name, "from": old, "to": new}
+        (security if any(x.endswith("-security") for x in suites.split(",")) else other).append(pkg)
+    return security, other
+
+
+def upgradable() -> tuple[list, list]:
+    return parse_upgradable(run("apt", "list", "--upgradable", check=False).stdout)
+
+
+def os_check() -> dict:
+    r = run("apt-get", "update", "-q", "-o", "DPkg::Lock::Timeout=300", check=False, timeout=900)
+    security, other = upgradable()
+    error = None if r.returncode == 0 else \
+        "Couldn't reach Raspberry Pi OS's servers: " + (r.stderr or r.stdout).strip()[-300:]
+    return os_state(checked_at=time.time(), security=security, other=other, error=error)
+
+
+def os_apply(which: str) -> dict:
+    security, other = upgradable()
+    chosen = security if which == "security" else security + other
+    if not chosen:
+        return os_state(security=security, other=other, phase=None)
+    os_state(phase="installing", what=which, error=None)
+    env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive", "APT_LISTCHANGES_FRONTEND": "none"}
+    if which == "security":
+        cmd = ("apt-get", *APT_OPTS, "install", "--only-upgrade", *[p["name"] for p in chosen])
+    else:
+        cmd = ("apt-get", *APT_OPTS, "upgrade", "--with-new-pkgs")
+    r = run(*cmd, check=False, env=env, timeout=3600)
+    security, other = upgradable()
+    if r.returncode != 0:
+        return os_state(phase=None, security=security, other=other,
+                        error="The update stopped: " + (r.stderr or r.stdout).strip()[-300:])
+    # Everything (Chromium, PipeWire...) takes effect on a restart too.
+    restart = which == "all" or Path("/run/reboot-required").exists() or \
+        any(RESTART_RE.match(p["name"]) for p in chosen)
+    changes = {"phase": None, "security": security, "other": other, "updated_at": time.time(),
+               "updated": [p["name"] for p in chosen], "error": None}
+    if restart:
+        changes["restart_needed_at"] = time.time()
+    return os_state(**changes)
+
+
 def main():
     if os.geteuid() != 0:
         print("jb-update: must run as root", file=sys.stderr)
@@ -253,6 +329,13 @@ def main():
         s = apply()
     elif a == ["auto"]:
         s = apply() if auto_on() else check()
+        os_check()
+        if auto_on():
+            os_apply("security")
+    elif a == ["os-check"]:
+        s = os_check()
+    elif len(a) == 2 and a[0] == "os-apply" and a[1] in ("security", "all"):
+        s = os_apply(a[1])
     elif len(a) == 2 and a[0] == "set-auto" and a[1] in ("on", "off"):
         write_json(SETTINGS, {"auto": a[1] == "on"})
         s = {"auto": a[1] == "on"}

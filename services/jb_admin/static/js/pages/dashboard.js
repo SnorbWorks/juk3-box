@@ -8,11 +8,17 @@ let timer = null;
 export async function show(main) {
   const body = h('div.stack');
   const setup = h('div');
-  clear(main, pageHeader('Dashboard', 'Your jukebox at a glance.'), setup, body);
+  const news = h('div');
+  clear(main, pageHeader('Dashboard', 'Your jukebox at a glance.'), setup, news, body);
   // Setup not finished: a way back into it.
   get('/api/wizard-status').then(w => {
     if (!w.done) clear(setup, h('a.notice', { href: '#/setup', style: { marginBottom: '16px', color: 'inherit', textDecoration: 'none' } },
       icon('wand-sparkles'), h('span', `Finish setting up your jukebox: ${w.finished} of ${w.of} steps done.`)));
+  }).catch(() => {});
+  // Updates: ready to install, installed, or waiting on a restart (the Updates tab).
+  get('/api/updates').then(u => {
+    if (u.announce) clear(news, h('a.notice', { href: '#/updates', style: { marginBottom: '16px', color: 'inherit', textDecoration: 'none' } },
+      icon(u.announce.kind === 'updated' ? 'circle-check' : 'download'), h('span', `${u.announce.text} `, h('u', 'Updates')))); 
   }).catch(() => {});
   const refresh = async () => {
     let s;

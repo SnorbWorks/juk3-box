@@ -30,7 +30,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, hardware, logging as jb_logging
-from services.jb_admin import bus_relay, schema, theme_store
+from services.jb_admin import bus_relay, schema, theme_store, updates
 from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
@@ -156,11 +156,15 @@ class Admin:
         self._pending = set()
         self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]),
                              setupnet_dir=Path(cfg["setupnet_dir"]))
+        self.updates = updates.Updates(self)
+        self._updates_task = None
 
     # The bus ------------------------------------------------------------
 
     LIVE_TOPICS = {
         "jukebox/jb-source-phone/now-playing": "now_playing",
+        "jukebox/jb-source-local/now-playing": "now_playing_local",
+        "jukebox/jb-source-helper/now-playing": "now_playing_helper",
         "jukebox/jb-source-phone/connected": "phone",
         "jukebox/jb-audio/state": "volume",
         "jukebox/jb-core/pick-log": "pick_log",
@@ -487,6 +491,25 @@ class Admin:
                 "checked_at": s.get("checked_at"), "updated_at": s.get("updated_at"), "phase": s.get("phase"),
                 "error": s.get("error"), "note": s.get("note"),
                 "auto": not (isinstance(auto, dict) and auto.get("auto") is False)}
+
+    # The Updates tab (updates.py): everything that updates, in one place.
+    async def get_updates(self, request):
+        return web.json_response(self.updates.view())
+
+    async def post_updates_os(self, request):
+        what = request.match_info["what"]
+        if what not in ("check", "security", "all"):
+            raise error(404, "Not found.")
+        try:
+            await self.setup_ctl("update", f"os-{what}", timeout=30)
+        except WizardError as e:
+            raise error(400, str(e))
+        return web.json_response(self.updates.view())
+
+    async def post_updates_restart(self, request):
+        self.log.info("updates: restarting to finish installing (asked in the admin)")
+        asyncio.get_running_loop().call_later(1, lambda: asyncio.ensure_future(self.reboot()))
+        return web.json_response({"ok": True})
 
     async def get_update(self, request):
         return web.json_response(self.update_view())
@@ -1457,6 +1480,9 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/jukebox-name", admin.get_jukebox_name)
     r.add_put("/api/jukebox-name", admin.put_jukebox_name)
     r.add_delete("/api/lastfm", admin.delete_lastfm)
+    r.add_get("/api/updates", admin.get_updates)
+    r.add_post("/api/updates/os/{what}", admin.post_updates_os)
+    r.add_post("/api/updates/restart", admin.post_updates_restart)
     r.add_get("/api/update", admin.get_update)
     r.add_put("/api/update/auto", admin.put_update_auto)
     r.add_post("/api/update/{what}", admin.post_update)
@@ -1527,8 +1553,11 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
             admin._bus_task = asyncio.create_task(admin.run_bus())
             admin._wizard_task = asyncio.create_task(admin.wizard.run())
             admin._import_task = asyncio.create_task(admin.drive_import.run())
+            admin._updates_task = asyncio.create_task(admin.updates.run())
 
     async def stop_bus(app):
+        if admin._updates_task:
+            admin._updates_task.cancel()
         if admin._bus_task:
             admin._bus_task.cancel()
         if admin._import_task:
