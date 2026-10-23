@@ -1,4 +1,4 @@
-import asyncio, sys, time, importlib.util
+import asyncio, os, sys, time, importlib.util
 spec = importlib.util.spec_from_file_location("W", "/opt/juk3-box/services/jb_crawl/worker.py"); W = importlib.util.module_from_spec(spec); spec.loader.exec_module(W)
 from dbus_next import BusType
 from dbus_next.aio import MessageBus
@@ -6,7 +6,7 @@ W.emit = lambda o: print("  emit", o, flush=True) if "slow" in str(o) else None
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 async def main():
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-    w = W.Walker(bus, "88:51:F2:56:4B:2B")
+    w = W.Walker(bus, os.environ["JB_PHONE_MAC"])
     try:
         await w.new_session()
         await w.enter("My Music"); await w.enter("Artists")

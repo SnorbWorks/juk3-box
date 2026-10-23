@@ -64,7 +64,7 @@ class FakePi(setup_wizard.System):
         return self.charging
 
     async def network(self):
-        return {"via": "wifi", "name": "Ducks Home"}
+        return {"via": "wifi", "name": "Home Wi-Fi"}
 
     async def timezone(self):
         return {"timezone": "America/Los_Angeles", "synced": True, "country": "US"}
@@ -148,7 +148,7 @@ def test_before_a_password_only_the_first_step_is_open(tmp_path):
 def test_a_gpio_fed_pi5_sets_the_power_and_battery_with_one_restart(tmp_path):
     async def check(client, admin, pi, calls):
         v = await submit(client, "name", {"name": "Den Jukebox"})
-        assert v["step"]["id"] == "wifi" and v["step"]["name"] == "Ducks Home"
+        assert v["step"]["id"] == "wifi" and v["step"]["name"] == "Home Wi-Fi"
         v = await submit(client, "wifi")
         v = await submit(client, "time", {"timezone": "America/Los_Angeles", "country": "US"})
         assert v["step"]["id"] == "board" and v["step"]["memory_gb"] == 4
@@ -314,14 +314,14 @@ def test_in_setup_mode_the_wifi_step_lists_networks_and_asks_to_join(tmp_path):
         folder = tmp_path / "setupnet"
         write_atomic(setup_net.state_path(folder), json.dumps({
             "active": True, "ssid": "Juk3box Setup 1234", "password": "abcd2345", "url": "http://10.42.0.1:8080/setup",
-            "networks": [{"ssid": "Ducks Home", "signal": 80, "secure": True}]}))
+            "networks": [{"ssid": "Home Wi-Fi", "signal": 80, "secure": True}]}))
         v = await view(client, "wifi")
-        assert v["step"]["hotspot"] is True and v["step"]["networks"][0]["ssid"] == "Ducks Home"
-        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Ducks Home", "password": "short"}, headers=H)
+        assert v["step"]["hotspot"] is True and v["step"]["networks"][0]["ssid"] == "Home Wi-Fi"
+        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Home Wi-Fi", "password": "short"}, headers=H)
         assert r.status == 400
-        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Ducks Home", "password": "correct horse"}, headers=H)
+        r = await client.post("/api/wizard/wifi/join", json={"ssid": "Home Wi-Fi", "password": "correct horse"}, headers=H)
         assert r.status == 200
-        assert setup_net.take_requests(folder) == [{"action": "join", "ssid": "Ducks Home", "password": "correct horse", "hidden": False, "id": ""}]
+        assert setup_net.take_requests(folder) == [{"action": "join", "ssid": "Home Wi-Fi", "password": "correct horse", "hidden": False, "id": ""}]
         cab = admin.wizard.cabinet()
         assert cab["active"] and cab["hotspot"]["ssid"] == "Juk3box Setup 1234" and cab["hotspot"]["qr"]
         assert cab["say"].startswith("Pick your Wi-Fi")
@@ -396,12 +396,12 @@ def test_the_cabinet_follows_a_wifi_join_and_the_step_completes_by_itself(tmp_pa
         w = admin.wizard
         state = setup_net.state_path(w.setupnet_dir)
         base = {"active": True, "ssid": "Juk3box Setup 1234", "password": "abcd2345", "url": "http://juk3box.local:8080/setup"}
-        write_atomic(state, json.dumps({**base, "join": {"state": "joining", "ssid": "Ducks Home"}}))
-        assert w.cabinet()["title"] == "Connecting to Ducks Home" and w.cabinet()["waiting"]
-        write_atomic(state, json.dumps({**base, "join": {"state": "failed", "ssid": "Ducks Home",
+        write_atomic(state, json.dumps({**base, "join": {"state": "joining", "ssid": "Home Wi-Fi"}}))
+        assert w.cabinet()["title"] == "Connecting to Home Wi-Fi" and w.cabinet()["waiting"]
+        write_atomic(state, json.dumps({**base, "join": {"state": "failed", "ssid": "Home Wi-Fi",
                                                           "reason": "The password didn't work."}}))
-        assert w.cabinet()["problem"] == "Couldn't join Ducks Home. The password didn't work."
-        write_atomic(state, json.dumps({"active": False, "join": {"state": "joined", "ssid": "Ducks Home"}}))
+        assert w.cabinet()["problem"] == "Couldn't join Home Wi-Fi. The password didn't work."
+        write_atomic(state, json.dumps({"active": False, "join": {"state": "joined", "ssid": "Home Wi-Fi"}}))
         await w.joined_wifi()
         assert "wifi" in w.state["completed"]
         out = w.cabinet()           # no phone on the page: the cabinet still says where to carry on
@@ -450,7 +450,7 @@ def test_no_buttons_saves_only_the_format(tmp_path):
 def test_the_one_name_gives_the_address():
     from services.jb_admin.setup_wizard import network_name
     assert network_name("Garage Jukebox") == "garage-jukebox"
-    assert network_name("  Shawn's Café — Jukebox! ") == "shawn-s-cafe-jukebox"
+    assert network_name("  Alex's Café — Jukebox! ") == "alex-s-cafe-jukebox"
     assert network_name("🎵") == "juk3box"
     assert len(network_name("x" * 80)) == 63
 

@@ -1,6 +1,6 @@
 # Platform — Development Plan
 
-Oct 12, 2026 · @shawn
+Oct 12, 2026 · the owner
 
 A standalone plan for the platform layer. Its job is to get the contracts right so the platform stays robust and is never chained to early decisions — the trap that WordPress carries from 2004.
 
@@ -77,7 +77,7 @@ Oct 13, 2026
 
 ## Direction: a platform of many modules
 
-Oct 13, 2026 · agreed with @shawn
+Oct 13, 2026 · agreed with the owner
 
 The jukebox's modules are the first of many. Expected kinds, beyond the four roles' audio cases: **video** (music videos, visualizers, a camera), **data providers** (weather, scores, calendar, "on this day in music"), **connectors** to a phone or the internet (a phone companion for requests and votes, Spotify, internet radio, Home Assistant, a scrobbler), and more outputs (Bluetooth speakers, multi-room, stage lights). Many will come from other people.
 

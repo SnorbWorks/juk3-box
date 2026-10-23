@@ -1,6 +1,6 @@
 # Virtual Jukebox — Development Plan
 
-Sep 24, 2026 · @shawn · updated Oct 19, 2026
+Sep 24, 2026 · the owner · updated Oct 19, 2026
 
 ## Status (Oct 22, 2026)
 

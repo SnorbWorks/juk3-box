@@ -4,7 +4,7 @@ import pytest
 
 from services.jb_library import main as lib
 
-MAC = "88:51:F2:56:4B:2B"
+MAC = "AA:BB:CC:12:34:56"
 
 
 @pytest.fixture

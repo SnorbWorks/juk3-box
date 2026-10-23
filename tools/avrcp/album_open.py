@@ -3,9 +3,10 @@ library sync leaves the phone (Songs) -- no reconnect, nothing played:
 Songs -> up to My Music -> Albums (wait for all of it) -> one album (list
 its songs) -> back up -> Songs. Run through with_lease.sh:
 
-    tools/avrcp/with_lease.sh tools/avrcp/album_open.py "Dawn FM"
+    JB_PHONE_MAC=XX:XX:XX:XX:XX:XX tools/avrcp/with_lease.sh tools/avrcp/album_open.py "Dawn FM"
 """
 import asyncio
+import os
 import sys
 import time
 
@@ -16,7 +17,7 @@ sys.path.insert(0, "/opt/juk3-box")
 from services.jb_crawl import worker as W  # noqa: E402
 
 W.emit = lambda o: print("  ", o, flush=True)
-MAC = "88:51:F2:56:4B:2B"
+MAC = os.environ["JB_PHONE_MAC"]   # the phone's Bluetooth address
 ALBUM = sys.argv[1] if len(sys.argv) > 1 else "Dawn FM"
 
 

@@ -6,7 +6,7 @@ USB drives aren't in this: their songs are always on the board.
 
 - Nobody has it: the first phone to arrive gets it.
 - Someone has it: a phone arriving doesn't take over. The cabinet offers it
-  ("Shawn's iPhone is here. Switch to it?"), and Sources switches any time.
+  ("Alex's iPhone is here. Switch to it?"), and Sources switches any time.
 - The one that has it leaves: after GRACE_S (a Bluetooth phone drops out of
   range for a moment and comes back), the latest other phone still here
   takes over.

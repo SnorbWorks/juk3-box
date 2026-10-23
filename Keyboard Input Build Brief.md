@@ -1,6 +1,6 @@
 # Keyboard Input: Build Brief
 
-Oct 6, 2026 · @shawn
+Oct 6, 2026 · the owner
 
 ## Purpose and scope
 

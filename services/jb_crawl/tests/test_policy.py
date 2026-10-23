@@ -2,7 +2,7 @@ from datetime import datetime
 
 from services.jb_crawl import policy
 
-MAC = "88:51:F2:56:4B:2B"
+MAC = "AA:BB:CC:12:34:56"
 
 
 def ts(s):

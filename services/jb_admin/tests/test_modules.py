@@ -112,11 +112,11 @@ def test_upload_review_install_settings_remove(tmp_path):
         info = await (await c.get("/api/modules/jb-weather")).json()
         assert info["installed"] and info["unit"] == "jbmod-jb-weather"
         assert info["settings"]["values"]["location"] is None
-        oswego = {"name": "Lake Oswego", "admin1": "Oregon", "country": "United States", "latitude": 45.42,
-                  "longitude": -122.67, "timezone": "America/Los_Angeles", "label": "Lake Oswego, Oregon, US", "junk": 1}
-        r = await c.put("/api/modules/jb-weather/settings", json={"values": {"location": oswego, "units": "celsius"}}, headers=H)
+        springfield_il = {"name": "Springfield", "admin1": "Illinois", "country": "United States", "latitude": 39.80,
+                  "longitude": -89.65, "timezone": "America/Chicago", "label": "Springfield, Illinois, US", "junk": 1}
+        r = await c.put("/api/modules/jb-weather/settings", json={"values": {"location": springfield_il, "units": "celsius"}}, headers=H)
         saved = (await r.json())["values"]["location"]
-        assert r.status == 200 and saved["label"] == "Lake Oswego, Oregon, US" and "junk" not in saved
+        assert r.status == 200 and saved["label"] == "Springfield, Illinois, US" and "junk" not in saved
         r = await c.put("/api/modules/jb-weather/settings", json={"values": {"location": {"name": "X", "latitude": 400, "longitude": 0}}}, headers=H)
         assert r.status == 400
         r = await c.put("/api/modules/jb-weather/settings", json={"values": {"refresh": 1}}, headers=H)
@@ -161,11 +161,11 @@ def test_typed_places_are_read_sensibly():
     from services.jb_admin import places
     assert places.parse("97034") == ({"name": "97034", "countryCode": "US"}, None)
     assert places.parse(" 97034-1234 ") == ({"name": "97034", "countryCode": "US"}, None)
-    assert places.parse("Portland, OR") == ({"name": "Portland"}, "Oregon")
+    assert places.parse("Austin, TX") == ({"name": "Austin"}, "Texas")
     assert places.parse("Portland, Maine") == ({"name": "Portland"}, "Maine")
     assert places.parse("Paris, France") == ({"name": "Paris"}, "France")
-    assert places.parse("lake  oswego") == ({"name": "lake oswego"}, None)
-    assert places.label({"name": "Portland", "admin1": "Oregon", "country": "United States", "country_code": "US"}) == "Portland, Oregon, US"
+    assert places.parse("san  jose") == ({"name": "san jose"}, None)
+    assert places.label({"name": "Austin", "admin1": "Texas", "country": "United States", "country_code": "US"}) == "Austin, Texas, US"
 
 
 MIX = REPO / "modules" / "jb-weathermix"

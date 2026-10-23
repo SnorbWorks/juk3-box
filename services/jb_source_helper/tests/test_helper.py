@@ -78,7 +78,7 @@ async def connect(client, token=None, device="dev-1"):
     app = App(await client.ws_connect("/helper"))
     hello = await app.get()
     assert hello["type"] == "hello" and hello["payload"]["jukeboxId"] == "jb1"
-    await app.send("client_hello", {"deviceId": device, "deviceName": "Shawn's iPhone", "appVersion": "0.1",
+    await app.send("client_hello", {"deviceId": device, "deviceName": "Alex's iPhone", "appVersion": "0.1",
                                     "token": token})
     return app
 
@@ -96,7 +96,7 @@ async def pair(client, helper, bus, device="dev-1"):
     challenge = await app.get()
     assert challenge["type"] == "pair_challenge"
     code = bus.last("pairing")["code"]
-    assert bus.last("pairing")["device"] == "Shawn's iPhone"
+    assert bus.last("pairing")["device"] == "Alex's iPhone"
     await app.send("pair_response", {"code": "x"})
     assert (await app.get()) == {"v": 1, "type": "pair_failed", "payload": {"triesLeft": 2}}
     await app.send("pair_response", {"code": code})
@@ -131,7 +131,7 @@ def test_a_phone_pairs_with_the_code_on_the_screen_and_its_library_reaches_the_b
         assert lib["tracks"][0]["duration_ms"] == 164200 and lib["tracks"][0]["added_at"] == 1709294400.0
         assert lib["playlists"] == [{"name": "Moons", "titles": ["Fly Me to the Moon", "Moon River"]}]
         assert bus.last("sync")["state"] == "ready"
-        assert bus.last("connected")["connected"] and bus.last("connected")["name"] == "Shawn's iPhone"
+        assert bus.last("connected")["connected"] and bus.last("connected")["name"] == "Alex's iPhone"
         assert helper.phones.known("dev-1", token) and token not in (tmp_path / "phones.json").read_text()
     run(tmp_path, check)
 
@@ -341,10 +341,10 @@ def test_the_owner_renames_a_phone_and_the_jukebox(tmp_path):
             renamed.append(name)
         helper.on_rename = on_rename
         app, token = await pair(client, helper, bus)
-        await helper.command({"action": "rename", "device_id": "dev-1", "name": "  Shawn's  phone "})
-        assert bus.last("connected")["name"] == "Shawn's phone"
+        await helper.command({"action": "rename", "device_id": "dev-1", "name": "  Alex's  phone "})
+        assert bus.last("connected")["name"] == "Alex's phone"
         helper.phones.seen("dev-1", "iPhone")                 # the app's own name doesn't win
-        assert helper.phones.name_of("dev-1") == "Shawn's phone"
+        assert helper.phones.name_of("dev-1") == "Alex's phone"
         await helper.command({"action": "settings", "name": 'The "Bar" $Box', "ble": False})
         assert renamed == ["The Bar Box"] and bus.last("settings")["name"] == "The Bar Box"
         assert (tmp_path / "airplay.env").read_text() == 'JB_AIRPLAY_NAME="The Bar Box"\n'

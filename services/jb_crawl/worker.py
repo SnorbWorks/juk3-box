@@ -3,7 +3,7 @@ finds, one JSON object per line on stdout. Run as a short-lived child of the
 jb-crawl supervisor (one process per crawl, so nothing it allocates outlives
 the crawl), only while the supervisor holds jb-source-phone's browse lease:
 
-    python -m services.jb_crawl.worker --mac 88:51:F2:56:4B:2B --branches playlists,artists
+    python -m services.jb_crawl.worker --mac AA:BB:CC:12:34:56 --branches playlists,artists
 
 Lines out:
     {"progress": "artists 120/303"}                 -- the supervisor's watchdog

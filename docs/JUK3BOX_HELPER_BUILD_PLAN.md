@@ -1,6 +1,6 @@
 # Juk3box Helper — iOS App Build Plan
 
-> **For Claude Code:** Work through this plan **one phase at a time**. At the end of each phase, stop, summarize what was built, list what Shawn must test on a real iPhone + Pi, and wait for confirmation before starting the next phase. BLE, MusicKit playback, AirPlay routing and hotspot joining **do not work in the iOS Simulator** — every phase ends with an on-device test.
+> **For Claude Code:** Work through this plan **one phase at a time**. At the end of each phase, stop, summarize what was built, list what the owner must test on a real iPhone + Pi, and wait for confirmation before starting the next phase. BLE, MusicKit playback, AirPlay routing and hotspot joining **do not work in the iOS Simulator** — every phase ends with an on-device test.
 
 > **Revised Oct 19, 2026** after review against the jukebox as built: a sleep test right after Phase 0 (go/no-go), a Bluetooth LE wake-up as part of the core design, the Pi side as `jb-source-helper` beside the Bluetooth source, Face ID dropped, the app in its own repo, and the open questions answered (§7).
 
@@ -63,7 +63,7 @@
 | Music | MusicKit (`MusicLibraryRequest`, `ApplicationMusicPlayer`) |
 | Secrets | Keychain (device tokens per paired jukebox) |
 | Tests | XCTest for protocol codec, state machines, reconnection logic |
-| Build | `xcodebuild` from the CLI; Shawn installs to device from Xcode |
+| Build | `xcodebuild` from the CLI; the owner installs to device from Xcode |
 
 **Required Info.plist / capabilities**
 - `NSAppleMusicUsageDescription`
@@ -74,7 +74,7 @@
 - App Groups (Phase 8, shared with widget / Live Activity extensions)
 - App Clip target + Associated Domains (Phase 9)
 
-**Code layout.** The app lives in **its own repo**, `juk3box-helper` (on the Mac at `~/Desktop/juk3box-helper`; bundle ID `com.our-millionaireideas.juk3boxhelper`, team BLN2JP24KQ). The Pi side (`jb-source-helper`) lives in `juk3-box` with the other services, and the protocol below is copied into `juk3-box/docs/contracts/` as the shared contract.
+**Code layout.** The app lives in **its own repo**, `juk3box-helper` (on the Mac at `~/Desktop/juk3box-helper`; bundle ID `com.our-millionaireideas.juk3boxhelper`). The Pi side (`jb-source-helper`) lives in `juk3-box` with the other services, and the protocol below is copied into `juk3-box/docs/contracts/` as the shared contract.
 
 **Tooling:** this MacBook Pro is Intel, so Xcode 26.3 is the newest it runs (Xcode 27 needs Apple silicon and macOS 26.6). Fine for building to a phone; App Store uploads need an Apple silicon Mac once Apple requires the Xcode 27 SDK (likely spring 2027).
 ```
@@ -143,8 +143,8 @@ Playlists, albums and artists are sent as their own kinds with member `songIds`.
 
 ## 5. Phases
 
-### Phase 0 — Accounts & project scaffold *(Shawn does the account steps)*
-**Shawn (manual):**
+### Phase 0 — Accounts & project scaffold *(the owner does the account steps)*
+**The owner (manual):**
 - Apple Developer Program account ($99/yr).
 - Register bundle ID (e.g. `com.juk3box.helper`); enable **MusicKit** under App Services for that ID.
 - Confirm an Apple Music subscription on the test iPhone.
@@ -153,7 +153,7 @@ Playlists, albums and artists are sent as their own kinds with member `songIds`.
 - XcodeGen `project.yml`, app target, test target, Info.plist keys and Background Audio capability from §3.
 - Empty SwiftUI app that launches on device.
 
-**Done when:** app installs and launches on Shawn's iPhone from Xcode.
+**Done when:** app installs and launches on Alex's iPhone from Xcode.
 
 *Progress (Oct 19): membership renewed; scaffold built in `juk3box-helper` and signed by automatic signing; Xcode 26.3 installed; phone paired. Left: Xcode's first launch, Developer Mode on the phone, register the App ID with MusicKit, install.*
 
@@ -198,7 +198,7 @@ The whole design depends on the Pi reaching the app when nothing is playing. Pro
 - AirPlay route: embed `AVRoutePickerView` on the Home screen with a clear prompt ("Select juk3box as your speaker"). Show the current route name if available.
 - Background audio enabled so control stays alive while playing.
 
-**Pi prerequisite (Shawn / Pi-side Claude Code session):** shairport-sync built with AirPlay 2 (`--with-airplay-2`, `nqptp`), advertised as "juk3box", output to the DAC.
+**Pi prerequisite (the owner / Pi-side Claude Code session):** shairport-sync built with AirPlay 2 (`--with-airplay-2`, `nqptp`), advertised as "juk3box", output to the DAC.
 
 **Done when:** from the mock-pi REPL (hardcoded test song ID), `play` starts the song, audio comes out of the jukebox over AirPlay, `track_ended` arrives at the end, and this still works with the iPhone locked.
 
@@ -279,7 +279,7 @@ The whole wizard, both sides, is now in [Setup Wizard — Plan](Setup%20Wizard%2
 
 ### Phase 10 — Paid plays (commercial venues) *(deferred; business decision first)*
 - Apple Pay in the App Clip for paid selections (credit packs like coin play).
-- Requires: merchant ID, a payment processor (e.g. Stripe) with a small server component, and a legal and licensing check — **public performance licensing for venues is a separate issue from payments**. Do not build until Shawn decides on the commercial path.
+- Requires: merchant ID, a payment processor (e.g. Stripe) with a small server component, and a legal and licensing check — **public performance licensing for venues is a separate issue from payments**. Do not build until the owner decides on the commercial path.
 
 ---
 
@@ -304,7 +304,7 @@ The whole wizard, both sides, is now in [Setup Wizard — Plan](Setup%20Wizard%2
 
 ---
 
-## 7. Open questions for Shawn
+## 7. Open questions for the owner
 1. ~~Pi 4 or Pi 5?~~ The Pi 5 is here; the move comes before the Pi side of this app (Oct 19).
 2. ~~CMS stack and repo?~~ Python services on an MQTT bus, in the `juk3-box` repo (`services/`, `shared/bus.py`, `deploy/deploy.sh`). The Pi side is `jb-source-helper` there.
 3. ~~Feed the house speakers?~~ Already built: whole-home audio sends the cabinet out to an AirPlay zone in sync (Oct 18). The helper's AirPlay audio goes through the same path.

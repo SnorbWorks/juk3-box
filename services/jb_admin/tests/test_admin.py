@@ -475,22 +475,22 @@ class RecordingBus:
 
 def test_phones_page_sends_only_phone_commands(tmp_path):
     async def check(client, admin):
-        admin.live["phones"] = {"phones": [{"mac": "88:51:F2:56:4B:2B", "name": "Shawn's iPhone", "connected": True}]}
+        admin.live["phones"] = {"phones": [{"mac": "AA:BB:CC:12:34:56", "name": "Alex's iPhone", "connected": True}]}
         data = await (await client.get("/api/phones", headers=H)).json()
-        assert data["phones"][0]["name"] == "Shawn's iPhone" and data["pairing"]["state"] == "idle"
+        assert data["phones"][0]["name"] == "Alex's iPhone" and data["pairing"]["state"] == "idle"
         # No bus: says so instead of pretending.
         assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 503
         admin.bus = RecordingBus()
         assert (await client.post("/api/phones/pair_start", json={}, headers=H)).status == 200
         assert (await client.post("/api/phones/pair_confirm", json={"ok": True}, headers=H)).status == 200
-        assert (await client.post("/api/phones/forget", json={"mac": "88:51:f2:56:4b:2b"}, headers=H)).status == 200
+        assert (await client.post("/api/phones/forget", json={"mac": "aa:bb:cc:12:34:56"}, headers=H)).status == 200
         assert (await client.post("/api/phones/forget", json={"mac": "nope"}, headers=H)).status == 400
         assert (await client.post("/api/phones/bluetooth", json={"on": False}, headers=H)).status == 200
         assert (await client.post("/api/phones/reboot", json={}, headers=H)).status == 404
         assert admin.bus.sent == [
             ("jukebox/jb-source-phone/cmd", {"action": "pair_start"}),
             ("jukebox/jb-source-phone/cmd", {"action": "pair_confirm", "ok": True}),
-            ("jukebox/jb-source-phone/cmd", {"action": "forget", "mac": "88:51:F2:56:4B:2B"}),
+            ("jukebox/jb-source-phone/cmd", {"action": "forget", "mac": "AA:BB:CC:12:34:56"}),
             ("jukebox/jb-source-phone/cmd", {"action": "bluetooth", "on": False}),
         ]
     run(tmp_path, check)
@@ -498,7 +498,7 @@ def test_phones_page_sends_only_phone_commands(tmp_path):
 
 def test_sources_page_switches_phones_and_sets_up_the_app(tmp_path):
     async def check(client, admin):
-        admin.live["source"] = {"active": {"kind": "phone", "id": "88:51:F2:56:4B:2B", "name": "Lena's iPhone"}, "offer": None}
+        admin.live["source"] = {"active": {"kind": "phone", "id": "AA:BB:CC:12:34:56", "name": "Lena's iPhone"}, "offer": None}
         admin.live["helper_settings"] = {"allow_pairing": False, "ble": True, "name": "Juk3box"}
         data = await (await client.get("/api/sources", headers=H)).json()
         assert data["source"]["active"]["name"] == "Lena's iPhone" and data["helper_settings"]["name"] == "Juk3box"

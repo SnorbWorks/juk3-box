@@ -1,6 +1,6 @@
 # Audio Analyzer — Architecture
 
-Oct 10, 2026 · @shawn
+Oct 10, 2026 · the owner
 
 The Audio Analyzer listens to whatever the jukebox is playing and produces a running description of the music — beat, energy, brightness, tempo, mood, and song identity — published once as a feature stream. It does not drive hardware itself: the lights, the background visuals, and anything else subscribe to it. This doc covers the analyzer from capture through to that published stream, and records the intent for what consumes it.
 

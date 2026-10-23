@@ -10,7 +10,7 @@ def bt(mac=BT, connected=True, name="Lena's iPhone"):
 
 def app(*phones):
     """jb-source-helper/connected's phones: (device, reachable[, name])."""
-    return {"phones": [{"device_id": d, "reachable": r, "name": (n[0] if n else "Shawn's iPhone")}
+    return {"phones": [{"device_id": d, "reachable": r, "name": (n[0] if n else "Alex's iPhone")}
                        for d, r, *n in phones]}
 
 
@@ -29,14 +29,14 @@ def test_the_first_phone_gets_the_jukebox_and_a_second_is_offered_not_switched()
     assert switches(c.bluetooth(bt(), 1)) == [(None, BT)]
     c.helper(app(("d1", True)), 2)
     assert c.state()["active"]["id"] == BT
-    assert c.state()["offer"] == {"kind": "helper", "id": "helper:d1", "name": "Shawn's iPhone"}
+    assert c.state()["offer"] == {"kind": "helper", "id": "helper:d1", "name": "Alex's iPhone"}
     # Not now: the offer goes, and isn't made again while it stays.
     c.decline()
     c.helper(app(("d1", True)), 3)
     assert c.state()["offer"] is None
     # Switch from Sources.
     assert switches(c.use("helper:d1", 4)) == [(BT, "helper:d1")]
-    assert c.state()["active"] == {"kind": "helper", "id": "helper:d1", "name": "Shawn's iPhone", "connected": True}
+    assert c.state()["active"] == {"kind": "helper", "id": "helper:d1", "name": "Alex's iPhone", "connected": True}
 
 
 def test_when_the_phone_leaves_another_takes_over_after_the_grace():
@@ -64,7 +64,7 @@ def test_a_restart_keeps_the_choice_and_asks_nothing():
     c = PhoneChoice()
     c.bluetooth(bt(), 0)
     c.helper(app(("d1", True)), 0)
-    c.restore({"active": {"kind": "helper", "id": "helper:d1", "name": "Shawn's iPhone"}}, 0)
+    c.restore({"active": {"kind": "helper", "id": "helper:d1", "name": "Alex's iPhone"}}, 0)
     actions = c.settled(1)
     assert switches(actions) == [] and c.state()["active"]["id"] == "helper:d1"
     assert c.state()["offer"] is None

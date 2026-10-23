@@ -1,6 +1,6 @@
 # Setup Wizard — Plan
 
-Oct 20, 2026 · @shawn
+Oct 20, 2026 · the owner
 
 The first-boot setup wizard (dev plan roadmap item 5, Phase 7b), in one place. It merges the helper app plan's Phase 6 (hotspot onboarding), pi5-move.md's work item 3 (hardware in setup, how the Pi 5 is powered) and the Platform plan's per-board suggestions; those keep their text and point here. Done when a freshly flashed card goes from boxed to playing a song with no SSH, no hand edits, and no visit to iOS Settings, on a Pi 4 and on a Pi 5.
 

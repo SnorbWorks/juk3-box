@@ -4,7 +4,7 @@ from services.jb_netwatch import setup_mode
 from services.jb_netwatch.setup_mode import SetupMode, join_reason, parse_scan, should_start
 from shared import setup_net
 
-SCAN = "Ducks Home:80:WPA2\nDucks Home:60:WPA2\nCafe\\: Free:40:\n:70:WPA2\nJuk3box Setup ABCD:90:WPA2\n"
+SCAN = "Home Wi-Fi:80:WPA2\nHome Wi-Fi:60:WPA2\nCafe\\: Free:40:\n:70:WPA2\nJuk3box Setup ABCD:90:WPA2\n"
 
 
 class FakeNM:
@@ -68,7 +68,7 @@ def test_it_starts_by_itself_only_on_a_jukebox_never_set_up():
 
 def test_the_network_list_is_each_network_once_strongest_first():
     nets = parse_scan(SCAN, own="Juk3box Setup ABCD")
-    assert nets == [{"ssid": "Ducks Home", "signal": 80, "secure": True},
+    assert nets == [{"ssid": "Home Wi-Fi", "signal": 80, "secure": True},
                     {"ssid": "Cafe: Free", "signal": 40, "secure": False}]
 
 
@@ -78,7 +78,7 @@ def test_a_failed_join_says_why():
 
 
 def test_requests_round_trip_and_bad_joins_are_caught(tmp_path):
-    setup_net.request("join", tmp_path, ssid="Ducks Home", password="correct horse")
+    setup_net.request("join", tmp_path, ssid="Home Wi-Fi", password="correct horse")
     setup_net.request("scan", tmp_path)
     reqs = setup_net.take_requests(tmp_path)
     assert [r["action"] for r in reqs] == ["join", "scan"] and setup_net.take_requests(tmp_path) == []
@@ -93,7 +93,7 @@ def test_starting_makes_the_hotspot_and_the_sign_in_sheet(tmp_path):
     s.consider(online=False, offline_for=30, uptime=90)
     st = setup_net.read_state(tmp_path / "setupnet")
     assert st["active"] and st["ssid"] == "Juk3box Setup 1234" and len(st["password"]) == 8
-    assert st["networks"][0]["ssid"] == "Ducks Home" and st["why"] == "not-set-up"
+    assert st["networks"][0]["ssid"] == "Home Wi-Fi" and st["why"] == "not-set-up"
     assert portal.on and (tmp_path / "dnsmasq-shared.d" / "juk3box-setup.conf").read_text() == "address=/#/10.42.0.1\n"
     add = next(c for c in nm.cmds if c[1:3] == ["connection", "add"])
     assert st["password"] in add and "ap" in add and "shared" in add
@@ -112,11 +112,11 @@ def test_a_set_up_jukebox_never_starts_it_by_itself(tmp_path):
 def test_joining_ends_setup_mode(tmp_path):
     s, nm, portal, _ = make(tmp_path)
     s.start("not-set-up")
-    setup_net.request("join", tmp_path / "setupnet", ssid="Ducks Home", password="correct horse")
+    setup_net.request("join", tmp_path / "setupnet", ssid="Home Wi-Fi", password="correct horse")
     s.tick()
     st = setup_net.read_state(tmp_path / "setupnet")
-    assert not st["active"] and st["join"] == {"state": "joined", "ssid": "Ducks Home", "id": ""}
-    assert setup_mode.CON_NAME not in nm.profiles and "Ducks Home" in nm.profiles
+    assert not st["active"] and st["join"] == {"state": "joined", "ssid": "Home Wi-Fi", "id": ""}
+    assert setup_mode.CON_NAME not in nm.profiles and "Home Wi-Fi" in nm.profiles
     assert not portal.on and not (tmp_path / "dnsmasq-shared.d" / "juk3box-setup.conf").exists()
 
 
@@ -124,11 +124,11 @@ def test_a_wrong_password_brings_the_hotspot_back_with_the_reason(tmp_path):
     nm = FakeNM(join_ok=False, join_out="Error: Connection activation failed: Secrets were required, but not provided.")
     s, nm, portal, _ = make(tmp_path, nm=nm)
     s.start("not-set-up")
-    setup_net.request("join", tmp_path / "setupnet", ssid="Ducks Home", password="wrong horse")
+    setup_net.request("join", tmp_path / "setupnet", ssid="Home Wi-Fi", password="wrong horse")
     s.tick()
     st = setup_net.read_state(tmp_path / "setupnet")
     assert st["active"] and st["join"]["state"] == "failed" and "password" in st["join"]["reason"]
-    assert "Ducks Home" not in nm.profiles and setup_mode.CON_NAME in nm.profiles and portal.on
+    assert "Home Wi-Fi" not in nm.profiles and setup_mode.CON_NAME in nm.profiles and portal.on
 
 
 def test_asked_for_and_unused_it_goes_back_after_a_while(tmp_path):
