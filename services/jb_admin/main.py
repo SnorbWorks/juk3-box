@@ -540,6 +540,20 @@ class Admin:
             raise error(400, str(e))
         return web.json_response(self.updates.view())
 
+    async def post_updates_ssh(self, request):
+        body = await json_body(request)
+        on, key = body.get("on"), body.get("key")
+        if not isinstance(on, bool) or not (key is None or isinstance(key, str)):
+            raise error(400, "Expected on (true or false) and a key.")
+        if key and not updates.add_key(key):
+            raise error(400, "That isn't an SSH public key (one line, like ssh-ed25519 AAAA… you@laptop).")
+        try:
+            await self.setup_ctl("ssh", "on" if on else "off", timeout=30)
+        except WizardError as e:
+            raise error(400, str(e))
+        self.log.info("updates: SSH turned %s in the admin", "on" if on else "off")
+        return web.json_response(self.updates.view())
+
     async def post_updates_restart(self, request):
         self.log.info("updates: restarting to finish installing (asked in the admin)")
         asyncio.get_running_loop().call_later(1, lambda: asyncio.ensure_future(self.reboot()))
@@ -1517,6 +1531,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/updates", admin.get_updates)
     r.add_post("/api/updates/os/{what}", admin.post_updates_os)
     r.add_post("/api/updates/restart", admin.post_updates_restart)
+    r.add_post("/api/updates/ssh", admin.post_updates_ssh)
     r.add_post("/api/updates/rootfs/{what}", admin.post_updates_rootfs)
     r.add_get("/api/update", admin.get_update)
     r.add_put("/api/update/auto", admin.put_update_auto)

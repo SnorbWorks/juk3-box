@@ -58,7 +58,7 @@ def test_eeprom_psu_is_set_and_cleared():
 def test_requests_outside_its_list_are_refused():
     for bad in (["reboot"], ["psu", "3000"], ["fan"], ["timezone", "../etc/passwd"], ["wifi-country", "usa"],
                 ["lights", "identify", "buttons,accent", "10"], ["lights", "load", "lasers", "10"],
-                ["lights", "load", "accent", "999"], ["lastfm", "not-a-key"], ["lastfm", "A" * 32]):
+                ["lights", "load", "accent", "999"], ["lastfm", "not-a-key"], ["lastfm", "A" * 32], ["ssh", "maybe"], ["ssh"]):
         with pytest.raises(ctl.Refused):
             ctl.dispatch(bad)
 

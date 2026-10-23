@@ -62,6 +62,41 @@ def rootfs_view(proc_cmdline: Path = Path("/proc/cmdline"), boot_cmdline: Path =
     return {"protected": has(proc_cmdline), "next_start": has(boot_cmdline), "data": os.path.ismount(data)}
 
 
+KEY_RE = re.compile(r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^\n]{0,200})?$")
+
+
+def authorized_keys(home: Path = Path.home()) -> Path:
+    return home / ".ssh" / "authorized_keys"
+
+
+def ssh_view(home: Path = Path.home()) -> dict:
+    """SSH for a developer: on now, and how many keys may log in."""
+    on = subprocess.run(["systemctl", "is-active", "--quiet", "ssh.service"]).returncode == 0
+    try:
+        keys = sum(1 for l in authorized_keys(home).read_text().splitlines() if KEY_RE.match(l.strip()))
+    except OSError:
+        keys = 0
+    return {"on": on, "keys": keys}
+
+
+def add_key(key: str, home: Path = Path.home()) -> bool:
+    """One public key allowed to log in as this user. False if it isn't one;
+    a key that's already there isn't added twice."""
+    key = key.strip()
+    if not KEY_RE.match(key):
+        return False
+    path = authorized_keys(home)
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    try:
+        lines = path.read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    if key.split()[1] not in {l.split()[1] for l in lines if len(l.split()) > 1}:
+        path.write_text("\n".join(lines + [key]) + "\n")
+    path.chmod(0o600)
+    return True
+
+
 def included(repo: Path = REPO) -> list[dict]:
     """What ships inside a Juk3box release, with its version (from the files)."""
     out = []
@@ -156,7 +191,7 @@ class Updates:
         if self._system is None:
             self._system = system_versions()
         return {"auto": j["auto"], "juk3box": j, "os": o, "keypad": k, "included": included(),
-                "system": self._system, "rootfs": rootfs_view(), "announce": self.announcement(j, o, k)}
+                "system": self._system, "rootfs": rootfs_view(), "ssh": ssh_view(), "announce": self.announcement(j, o, k)}
 
     def quiet(self) -> bool:
         """Nothing playing, from any source."""

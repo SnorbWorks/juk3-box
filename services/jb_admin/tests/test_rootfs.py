@@ -88,3 +88,15 @@ def test_the_updates_tab_sees_the_protection(tmp_path):
     proc.write_text(LINE)
     boot.write_text(rootfs.cmdline_with(LINE, True))
     assert updates.rootfs_view(proc, boot, tmp_path) == {"protected": False, "next_start": True, "data": False}
+
+
+def test_a_public_key_is_added_once_and_anything_else_is_refused(tmp_path):
+    key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleExampleExampleExampleExample00 dev@laptop"
+    assert updates.add_key(key, tmp_path)
+    assert updates.add_key(key.replace("dev@laptop", "same key"), tmp_path)
+    path = tmp_path / ".ssh" / "authorized_keys"
+    assert path.read_text() == key + "\n" and oct(path.stat().st_mode & 0o777) == "0o600"
+    for bad in ("", "AAAA", "ssh-ed25519", "ssh-dss AAAAB3 x", key + "\ncommand=rm ssh-rsa AAAA",
+                "-----BEGIN OPENSSH PRIVATE KEY-----"):
+        assert not updates.add_key(bad, tmp_path)
+    assert path.read_text() == key + "\n"

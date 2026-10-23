@@ -470,6 +470,17 @@ def cmd_keypad(args: list[str]) -> str:
     die("unknown keypad command")
 
 
+def cmd_ssh(what: str) -> str:
+    """SSH for a developer (the admin's Updates page). An image card has no
+    host keys until the first time it's turned on (seal.sh removes them)."""
+    if what == "on":
+        run("ssh-keygen", "-A")
+        run("systemctl", "enable", "--now", "ssh.service")
+    else:
+        run("systemctl", "disable", "--now", "ssh.service")
+    return what
+
+
 def name_taken(name: str) -> bool:
     """Does another device on the network answer to NAME.local? (Avahi gives up after about 5 s.)"""
     try:
@@ -505,7 +516,8 @@ def cmd_hostname(what: str, name: str) -> str:
 PERSIST = {"timezone": ["/etc/localtime", "/etc/timezone"],
            "wifi-country": ["/etc/default/crda", "/etc/wpa_supplicant/wpa_supplicant.conf"],
            "lastfm": ["/etc/juk3-box"],
-           "hostname": ["/etc/hostname", "/etc/hosts", "/etc/machine-info"]}
+           "hostname": ["/etc/hostname", "/etc/hosts", "/etc/machine-info"],
+           "ssh": ["/etc/ssh", "/etc/systemd/system"]}
 ROOTFS = "/usr/local/sbin/jb-rootfs"
 
 
@@ -539,6 +551,8 @@ def act(a: list[str]) -> str:
         return cmd_keypad(a[1:])
     if len(a) == 3 and a[0] == "hostname" and a[1] in ("check", "set"):
         return cmd_hostname(a[1], a[2])
+    if len(a) == 2 and a[0] == "ssh" and a[1] in ("on", "off"):
+        return cmd_ssh(a[1])
     if len(a) == 2 and a[0] == "rootfs" and a[1] in ("on", "off"):
         r = run(ROOTFS, a[1], check=False)
         if r.returncode:
