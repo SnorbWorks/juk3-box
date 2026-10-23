@@ -1,5 +1,6 @@
 import asyncio
 import json
+import socket
 import logging
 
 from aiohttp.test_utils import TestClient, TestServer
@@ -454,15 +455,20 @@ def test_the_one_name_gives_the_address():
     assert len(network_name("x" * 80)) == 63
 
 
-def test_the_address_follows_the_name_at_the_end_of_setup(tmp_path):
+def test_the_address_follows_the_name_at_once(tmp_path):
     async def check(client, admin, pi, calls):
-        await submit(client, "name", {"name": "Den Jukebox"})
-        assert ("hostname", "check", "den-jukebox") in calls                 # checked, not moved yet
-        assert not any(c[:2] == ("hostname", "set") for c in calls)
-        assert {"k": "Address", "v": "den-jukebox.local"} in admin.wizard.summary()
-        out = await submit(client, "finish")
-        assert ("hostname", "set", "den-jukebox") in calls
-        assert out == {"done": True, "address": "den-jukebox.local"}
+        out = await submit(client, "name", {"name": "Den Jukebox"})
+        assert ("call", "Den Jukebox") in calls                              # renamed with its address
+        moved = out["moved"]
+        assert moved["address"] == f"{socket.gethostname()}.local" and moved["pass"]
+        # The pass signs a browser in at the new address, once.
+        client.session.cookie_jar.clear()
+        assert (await client.get("/api/wizard")).status == 401
+        assert (await client.post("/api/handoff", json={"pass": moved["pass"]}, headers=H)).status == 200
+        assert (await client.get("/api/wizard")).status == 200
+        client.session.cookie_jar.clear()
+        assert (await client.post("/api/handoff", json={"pass": moved["pass"]}, headers=H)).status == 401
+        assert (await client.post("/api/handoff", json={"pass": "made-up"}, headers=H)).status == 401
     run(tmp_path, check)
 
 

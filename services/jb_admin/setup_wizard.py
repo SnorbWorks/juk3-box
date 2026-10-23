@@ -280,10 +280,9 @@ class Name(Step):
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 40:
             raise WizardError("A name of 1 to 40 characters, please.")
         name = name.strip()
-        # The address follows at the end (Finish): moving it now would lose
-        # this page partway through.
-        await w.admin.check_address(name)
-        await w.admin.rename_jukebox(name, address=False)
+        # The address follows at once (a new card's own one could be another
+        # jukebox's); the page moves there with a one-time pass (Wizard.submit).
+        await w.admin.rename_jukebox(name)
         return {"name": name}
 
 
@@ -994,7 +993,12 @@ class Wizard:
         if step.id == "finish":
             self.publish()
             return {"done": True, "address": kept["address"]}
-        return await self.view(self.after(step.id).id)
+        out = await self.view(self.after(step.id).id)
+        if step.id == "name":
+            # Where this page carries on: the name's address, signed in by a
+            # one-time pass (a login belongs to the address it was made at).
+            out["moved"] = {"address": f"{socket.gethostname()}.local", "pass": self.admin.handoff_pass()}
+        return out
 
     async def action(self, step_id: str, name: str, data: dict) -> dict:
         step = BY_ID.get(step_id)
@@ -1299,7 +1303,7 @@ class Wizard:
             # a phone's camera joins with; then the address on it.
             out["hotspot"] = {"ssid": hs.get("ssid"), "password": hs.get("password"), "why": hs.get("why"),
                               "qr": qr_rows(setup_net.wifi_qr_text(hs.get("ssid", ""), hs.get("password", ""))),
-                              "address": hs.get("url")}
+                              "address": f"http://{socket.gethostname()}.local:{PORT}/setup"}
             if join.get("state") == "failed":
                 out["problem"] = f"Couldn't join {join.get('ssid')}. {join.get('reason') or ''}".strip()
         ask = step.ask(self) if hasattr(step, "ask") else None

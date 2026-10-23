@@ -47,6 +47,17 @@ def test_the_overflow_swap_moves_to_the_data_partition():
     assert rootfs.swap_unit_with(unit) == "[Swap]\nWhat=/data/swapoverflow\nPriority=10\n"
 
 
+def test_a_new_card_names_itself_from_its_serial(tmp_path, monkeypatch):
+    serial = tmp_path / "serial-number"
+    serial.write_text("10000000a1b2c3d4\0")
+    monkeypatch.setattr(rootfs, "SERIAL", serial)
+    assert rootfs.first_name() == "juk3box-c3d4"
+    serial.write_text("")
+    assert rootfs.first_name() == "juk3box"
+    hosts = "127.0.0.1\tlocalhost\n127.0.1.1\tjuk3box\n"
+    assert rootfs.hosts_with(hosts, "juk3box-c3d4") == "127.0.0.1\tlocalhost\n127.0.1.1\tjuk3box-c3d4\n"
+
+
 def test_persist_refuses_anything_but_system_paths(monkeypatch):
     import pytest
     for bad in ("relative", "/etc/../root", "/proc/x", "/data/juk3-box"):

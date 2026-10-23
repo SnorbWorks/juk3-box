@@ -145,6 +145,7 @@ async function submit(data = {}) {
   busy = false;
   if (r.ok && r.data.restarting) return renderRestarting();
   if (r.ok && r.data.done) return renderFinished(true, r.data.address);
+  if (r.ok && r.data.moved && moveTo(r.data.moved)) return;
   if (r.ok && ONLY_STEP) return renderSaved();
   if (!r.ok) {
     local.error = r.data.error || 'That didn\'t work. Try again.';
@@ -306,6 +307,36 @@ function renderSaved() {
     h('a.wz-next', { href: '/#/setup', style: 'text-decoration:none' }, 'Back to the admin')));
 }
 
+// The Name step moved the jukebox's address to its name's: carry on there,
+// signed in by the one-time pass (a login belongs to its address). Opened by
+// its IP address (the jukebox's own Wi-Fi), the page stays where it is.
+function moveTo({ address, pass }) {
+  if (!location.hostname.endsWith('.local') || location.hostname === address) return false;
+  stopPolling();
+  root.replaceChildren(h('section.wz-hero', {},
+    h('img.wz-hero-logo', { src: '/static/setup/logo.png', alt: 'Juk3box' }),
+    h('div.wz-spin', { style: 'width:40px;height:40px;border-width:4px' }),
+    h('h1', {}, `Moving to ${address}`),
+    h('p', {}, 'Your jukebox has its new name. Setup carries on there in a moment.')));
+  const base = `${location.protocol}//${address}${location.port ? `:${location.port}` : ''}`;
+  const q = new URLSearchParams(location.search);
+  q.set('pass', pass);
+  // The new name is announced at once; a moment for the phone to hear it
+  // (the page's own rules don't let it ask another address first).
+  setTimeout(() => location.replace(`${base}/setup?${q}`), 4000);
+  return true;
+}
+
+// Arrived from the old address with a pass: sign in here, then forget it.
+async function usePass() {
+  const q = new URLSearchParams(location.search);
+  const pass = q.get('pass');
+  if (!pass) return;
+  q.delete('pass');
+  history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}`);
+  await api('POST', '/api/handoff', { pass });
+}
+
 function renderRestarting() {
   stopPolling();
   root.replaceChildren(h('section.wz-hero', {},
@@ -420,7 +451,7 @@ const STEPS = {
             document.getElementById('jbaddr').textContent = `${networkName(local.name)}.local`;
           } })),
         h('p', {}, 'Ideas: Den Jukebox, The Rec Room, Garage Jukebox.'),
-        h('p', {}, 'At the end of setup, its address on your network becomes ',
+        h('p', {}, 'Its address on your network becomes ',
           h('strong', { id: 'jbaddr' }, `${networkName(local.name || '')}.local`), '.'),
       ],
       next: { onClick: () => submit({ name: local.name }), disabled: !local.name?.trim() },
@@ -1119,4 +1150,4 @@ function nextChain() {
   else submit();
 }
 
-load(ONLY_STEP);
+usePass().finally(() => load(ONLY_STEP));

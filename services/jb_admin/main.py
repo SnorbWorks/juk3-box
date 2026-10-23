@@ -647,6 +647,25 @@ class Admin:
         self.set_cookie(response, self.auth.open_session())
         return response
 
+    def handoff_pass(self) -> str:
+        """A one-time pass that signs this browser in at another address
+        (setup moving to the jukebox's new name); good for 2 minutes."""
+        now = time.monotonic()
+        self.handoffs = {k: t for k, t in getattr(self, "handoffs", {}).items() if t > now}
+        code = secrets.token_urlsafe(18)
+        self.handoffs[code] = now + 120
+        return code
+
+    async def handoff(self, request):
+        body = await json_body(request)
+        code = body.get("pass")
+        until = getattr(self, "handoffs", {}).pop(code, 0) if isinstance(code, str) else 0
+        if until <= time.monotonic():
+            raise error(401, "That pass has expired. Sign in with your password.")
+        response = web.json_response({"ok": True})
+        self.set_cookie(response, self.auth.open_session())
+        return response
+
     async def logout(self, request):
         self.auth.close_session(self.token(request))
         response = web.json_response({"ok": True})
@@ -1480,7 +1499,7 @@ ADMIN_KEY = web.AppKey("admin", object)
 
 
 PUBLIC = {("GET", "/"), ("GET", "/setup"), ("GET", "/api/icons"), ("GET", "/api/session"), ("POST", "/api/setup"),
-          ("POST", "/api/login")}
+          ("POST", "/api/login"), ("POST", "/api/handoff")}
 
 
 def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
@@ -1516,6 +1535,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/", admin.index)
     r.add_static("/static/", STATIC_DIR)
     r.add_get("/api/session", admin.session)
+    r.add_post("/api/handoff", admin.handoff)
     r.add_post("/api/setup", admin.setup)
     r.add_post("/api/login", admin.login)
     r.add_get("/setup", admin.setup_page)
