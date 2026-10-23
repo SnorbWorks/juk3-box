@@ -202,6 +202,24 @@ def test_no_lights_skips_the_check_and_suggests_the_analyzer_off(tmp_path):
     run(tmp_path, check, lights={"buttons": False, "accent": False, "levelbar": False})
 
 
+def test_a_pi4_left_without_the_background_video_gets_the_still_picture(tmp_path):
+    async def check(client, admin, pi, calls):
+        v = await view(client, "suggestions")
+        assert "background_video" in [i["id"] for i in v["step"]["items"]]
+        v = await submit(client, "suggestions", {"on": []})
+        style = json.loads((tmp_path / "styles" / "neon" / "custom.json").read_text())
+        assert style["values"]["background"] == "assets/background.jpg"
+        assert json.loads((tmp_path / "setup.json").read_text())["answers"]["suggestions"]["off"][-1] == "background_video"
+    run(tmp_path, check, family="pi4")
+
+
+def test_a_pi4_keeping_the_background_video_keeps_it(tmp_path):
+    async def check(client, admin, pi, calls):
+        await submit(client, "suggestions", {"on": ["background_video"]})
+        assert not (tmp_path / "styles" / "neon" / "custom.json").exists()
+    run(tmp_path, check, family="pi4")
+
+
 def test_a_pi4_has_no_battery_or_cooling_step_and_the_power_step_only_checks(tmp_path):
     async def check(client, admin, pi, calls):
         steps = [s["id"] for s in (await view(client))["steps"]]

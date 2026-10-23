@@ -344,6 +344,30 @@ class Admin:
         except ModuleError as e:
             raise WizardError(f"Couldn't turn {m.get('name') or module_id} {'on' if on else 'off'}: {e}")
 
+    async def use_still_background(self) -> bool:
+        """The active theme's background video becomes its still picture (the
+        .jpg beside the video), for setup's Pi 4 suggestion. A background the
+        owner chose is left alone. False if nothing changed."""
+        theme_id = self.active_theme()
+        theme = self.load_theme(theme_id)
+        bg = theme.manifest.get("background") or {}
+        option = next((o for o in customize.options_of(theme.manifest)
+                       if o.get("type") == "picture" and o.get("role") == "background"), None)
+        if bg.get("type") != "video" or option is None:
+            return False
+        still = str(Path(str(bg.get("src", ""))).with_suffix(".jpg"))
+        owner = self.styles.get(theme_id, self.STYLE)[0] or {"style": None, "values": {}}
+        values = owner.get("values") or {}
+        if values.get(option["id"]) or not customize.valid(option, still, theme.root):
+            return False
+        clean, problems = customize.clean(theme.manifest, theme.root, {**owner, "values": {**values, option["id"]: still}})
+        if problems:
+            return False
+        self.styles.save_draft(theme_id, self.STYLE, clean)
+        self.styles.publish(theme_id, self.STYLE)
+        await self.announce("customize")
+        return True
+
     def has_module_setting(self, module_id: str, key: str) -> bool:
         m = next((m for m in self.registry.view() if m["id"] == module_id and not m.get("undeclared")), None)
         return m is not None and key in (m.get("owner_settings") or {})

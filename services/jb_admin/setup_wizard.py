@@ -826,8 +826,12 @@ class Suggestions(Step):
         keep_on = data.get("on") if isinstance(data.get("on"), list) else []
         off = []
         for item in self.items(w):
-            if item["kind"] == "module" and item["id"] not in keep_on:
+            if item["id"] in keep_on:
+                continue
+            if item["kind"] == "module":
                 await w.admin.set_module_enabled(item["id"], False)
+                off.append(item["id"])
+            elif item["id"] == "background_video" and await w.admin.use_still_background():
                 off.append(item["id"])
         return {"off": off}
 
