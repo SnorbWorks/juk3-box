@@ -24,7 +24,14 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 
 ### Next (Oct 22, 2026)
 
-1. **The card image**: build one and start a copy (the code is in place; no release has been made yet). With it, test the read-only system drive on a fresh card: the data partition at the first start, protection on at setup's Finish, a rename and a module install surviving a restart, an OS update restarting to install and back.
+1. **The card image: fresh-card test (in progress, Oct 22 evening).** v0.1.0 tried on a 1 GB Pi 4 (named juk3box2):
+   - Worked: first start made the data partition; setup ran; the name held; SSH closed; the analyzer suggestion turned it off; the knob and the video ran smoothly while unprotected.
+   - **Bug (open): with protection on, /data isn't mounted.** Admin › Updates said data: false, and the log from the protected start was gone after a power cut. Without /data the overflow swap is missing too, and the 1 GB Pi 4 starved (glitchy video, dead knob, admin unreachable). overlayroot's fstab rewrite (recurse=0) should keep our lines as they are, so the cause isn't known yet. Protection was turned off again on that card.
+   - Fixed (94eea5e): an unticked "background video" suggestion now gets the theme's still picture (setup only acted on modules before).
+   - Added (32acdfc): Admin › Updates › Remote access (SSH), a switch plus a public key, so a test card can be looked into. On an image card the admin account has no password, so SSH gives no sudo.
+   - v0.1.1 (both of the above) tagged and building. Next: flash it on the Pi 4, set up, SSH on with the dev key, protection on, restart, then read `findmnt`, `/etc/fstab`, `/media/root-ro/etc/fstab` and `journalctl -b` to find why /data doesn't mount. Then the rest of the checklist: a rename and a module install surviving a restart, an OS update restarting to install and back.
+   - Also found: a new card is called "juk3box" during setup, so with the cabinet on the same network one of them becomes "juk3box-2" (avahi). A new card could use a temporary setup name.
+   - Note: jukeboxes can't see releases while the repo is private (the update check says 404).
 2. ~~An Updates tab~~ *Done Oct 22*: Admin › Updates: Juk3box, Raspberry Pi OS (security fixes nightly when automatic; the rest when asked), the keypad program, the app, what's inside a release; overnight restarts when nothing plays; the dashboard says when there's news. Later: whole-system (Juk3box OS) updates.
 3. Waiting on hardware or the owner: the level bar joint; an Android phone (Roadmap item 3); WMM off in setup mode (watch for it in the fresh-card test).
 
