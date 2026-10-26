@@ -465,6 +465,9 @@ class Admin:
         return web.FileResponse(STATIC_DIR / "setup" / "index.html")
 
     async def wizard_view(self, request):
+        if await first_start_failed():
+            raise error(503, "The jukebox didn't finish preparing its card, so it can't keep what you set up yet. "
+                             "Unplug it for a moment, plug it back in, then open this page again.")
         return web.json_response(await self.wizard.view(request.query.get("step")))
 
     async def wizard_submit(self, request):
@@ -1452,6 +1455,18 @@ class Admin:
 
     async def index(self, request):
         return web.FileResponse(STATIC_DIR / "index.html")
+
+
+FIRST_START = Path("/etc/juk3-box/make-data-partition")   # deploy/jb-rootfs make-data
+
+
+async def first_start_failed(flag: Path = FIRST_START) -> bool:
+    """An image card whose first start didn't make its data partition
+    (deploy/systemd/jb-rootfs-data.service failed): setup would keep nothing."""
+    if not flag.exists():
+        return False
+    proc = await asyncio.create_subprocess_exec("systemctl", "is-failed", "--quiet", "jb-rootfs-data.service")
+    return await proc.wait() == 0
 
 
 def error(status: int, message: str, **extra) -> web.HTTPException:

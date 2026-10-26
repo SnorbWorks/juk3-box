@@ -231,14 +231,18 @@ def make_data() -> str:
     if not run("findmnt", "-n", str(DATA), check=False).stdout.strip():
         run("mount", data_part, str(DATA))
     for name, where in DATA_DIRS:
+        # Copied each time make-data runs, not only the first: after one that
+        # stopped partway, the jukebox ran with nothing bound, so what it
+        # kept meanwhile (a whole setup, once) is in the folders themselves.
         target = DATA / name
-        if not target.exists():
-            Path(where).mkdir(parents=True, exist_ok=True)
-            run("cp", "-a", f"{where}/.", str(target) + "/") if any(Path(where).iterdir()) \
-                else target.mkdir()
-            st = os.stat(where)
-            os.chown(target, st.st_uid, st.st_gid)
-            os.chmod(target, st.st_mode & 0o7777)
+        Path(where).mkdir(parents=True, exist_ok=True)
+        if os.path.ismount(where):       # bound already: nothing to bring over
+            continue
+        target.mkdir(exist_ok=True)
+        run("rsync", "-a", f"{where}/", f"{target}/")
+        st = os.stat(where)
+        os.chown(target, st.st_uid, st.st_gid)
+        os.chmod(target, st.st_mode & 0o7777)
     if SWAP_UNIT.exists():
         swap = DATA / "swapoverflow"
         if not swap.exists():

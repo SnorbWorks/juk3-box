@@ -53,6 +53,18 @@ def test_the_data_partition_goes_after_the_system_not_in_the_first_gap():
     assert rootfs.data_start((1064960, 16777216 + 1)) == 17842176 + 2048   # rounded up to 1 MiB
 
 
+def test_the_data_partition_is_made_before_the_overflow_swap_turns_on():
+    unit = (DEPLOY / "systemd" / "jb-rootfs-data.service").read_text()
+    before = next(l for l in unit.splitlines() if l.startswith("Before="))
+    assert "swap.target" in before and "var-swapoverflow.swap" in before
+
+
+def test_setup_waits_when_the_first_start_failed(tmp_path):
+    import asyncio
+    from services.jb_admin import main
+    assert asyncio.run(main.first_start_failed(tmp_path / "no-flag")) is False
+
+
 def test_protection_waits_for_the_data_partition_to_be_finished(tmp_path, monkeypatch):
     import pytest
     flag = tmp_path / "make-data-partition"

@@ -1,12 +1,13 @@
 # The first start of a card made from the Juk3box image: the data partition
 # (deploy/jb-rootfs make-data), before anything uses the folders it takes
 # over; then the jukebox restarts once. (The setup wizard's Finish protects
-# the system.)
+# the system.) Before the overflow swap: make-data moves it to /data, and
+# a swap file already turned on can't be removed.
 [Unit]
 Description=juk3-box data partition (first start)
 DefaultDependencies=no
 After=local-fs.target
-Before=sysinit.target systemd-journal-flush.service
+Before=sysinit.target systemd-journal-flush.service swap.target var-swapoverflow.swap
 ConditionPathExists=/etc/juk3-box/make-data-partition
 
 [Service]
