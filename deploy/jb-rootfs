@@ -246,6 +246,10 @@ def make_data() -> str:
             swap.chmod(0o600)
             run("mkswap", str(swap))
         write(SWAP_UNIT, swap_unit_with(SWAP_UNIT.read_text()))
+        # systemd has usually turned the old one on by now, and a swap file in
+        # use can't be removed (EPERM): make-data then stopped before the
+        # fstab, and setup ran with nothing bound to /data.
+        run("swapoff", "/var/swapoverflow", check=False)
         Path("/var/swapoverflow").unlink(missing_ok=True)
     write(FSTAB, fstab_with(FSTAB.read_text()))
     if Path("/etc/hostname").read_text().strip() == "juk3box":
