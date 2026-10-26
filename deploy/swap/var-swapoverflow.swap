@@ -11,9 +11,11 @@
 #   sudo systemctl daemon-reload && sudo systemctl enable --now var-swapoverflow.swap
 # Undo: sudo systemctl disable --now var-swapoverflow.swap && sudo rm /var/swapoverflow
 
+# No After=local-fs.target: tmp.mount comes after swap.target, so that's an
+# ordering cycle (systemd dropped tmp.mount or a swap job to break it, seen
+# on v0.1.5). systemd orders a swap file after the mount it lives on itself.
 [Unit]
 Description=Juk3box overflow swap (after zram)
-After=local-fs.target
 
 [Swap]
 What=/var/swapoverflow

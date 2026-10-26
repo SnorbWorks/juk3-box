@@ -159,6 +159,9 @@ def fstab_with(text: str) -> str:
 
 
 def swap_unit_with(text: str) -> str:
+    """The overflow swap's unit, for the file on /data (and without the
+    After=local-fs.target cycle that cards before v0.1.6 were made with)."""
+    text = re.sub(r"^After=local-fs\.target\n", "", text, flags=re.M)
     return re.sub(r"^What=.*$", f"What={DATA}/swapoverflow", text, flags=re.M)
 
 

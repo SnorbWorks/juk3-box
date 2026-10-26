@@ -61,6 +61,14 @@ def test_the_first_start_isnt_ordered_against_the_swap():
     assert "swap" not in before
 
 
+def test_the_overflow_swap_isnt_ordered_after_local_fs():
+    # tmp.mount is after swap.target: After=local-fs.target here is a cycle.
+    shipped = (DEPLOY / "swap" / "var-swapoverflow.swap").read_text()
+    assert "\nAfter=local-fs.target" not in shipped
+    old = "[Unit]\nAfter=local-fs.target\n[Swap]\nWhat=/var/swapoverflow\n"
+    assert rootfs.swap_unit_with(old) == "[Unit]\n[Swap]\nWhat=/data/swapoverflow\n"
+
+
 def test_the_swap_on_data_is_a_unit_named_after_its_file():
     # systemd won't load var-swapoverflow.swap with What=/data/swapoverflow.
     assert rootfs.DATA_SWAP_UNIT.name == "data-swapoverflow.swap"
