@@ -52,6 +52,9 @@ BEGIN = "# --- juk3box data: written by jb-rootfs; don't edit by hand ---"
 END = "# --- end juk3box data ---"
 FIRST_START = Path("/etc/juk3-box/make-data-partition")   # left by deploy/image/build-image.sh
 SWAP_UNIT = Path("/etc/systemd/system/var-swapoverflow.swap")
+# A swap unit is named after its file, so the one on /data is a new unit.
+DATA_SWAP_UNIT = Path("/etc/systemd/system/data-swapoverflow.swap")
+SWAP_WANTS = Path("/etc/systemd/system/swap.target.wants")
 SWAP_MB = 512
 SERIAL = Path("/proc/device-tree/serial-number")
 
@@ -249,12 +252,23 @@ def make_data() -> str:
             run("fallocate", "-l", f"{SWAP_MB}M", str(swap))
             swap.chmod(0o600)
             run("mkswap", str(swap))
-        write(SWAP_UNIT, swap_unit_with(SWAP_UNIT.read_text()))
-        # systemd has usually turned the old one on by now, and a swap file in
-        # use can't be removed (EPERM): make-data then stopped before the
-        # fstab, and setup ran with nothing bound to /data.
+        # data-swapoverflow.swap in place of var-swapoverflow.swap, enabled the
+        # way systemctl enable would (systemd is still starting).
+        write(DATA_SWAP_UNIT, swap_unit_with(SWAP_UNIT.read_text()))
+        SWAP_WANTS.mkdir(exist_ok=True)
+        (SWAP_WANTS / SWAP_UNIT.name).unlink(missing_ok=True)
+        link = SWAP_WANTS / DATA_SWAP_UNIT.name
+        if not link.is_symlink():
+            link.symlink_to(DATA_SWAP_UNIT)
+        SWAP_UNIT.unlink()
+        # systemd has often turned the old file on by now, and a swap file in
+        # use can't be removed (EPERM). Never worth stopping for: at worst it
+        # stays on the system drive, unused.
         run("swapoff", "/var/swapoverflow", check=False)
-        Path("/var/swapoverflow").unlink(missing_ok=True)
+        try:
+            Path("/var/swapoverflow").unlink(missing_ok=True)
+        except OSError as e:
+            print(f"jb-rootfs: left /var/swapoverflow: {e}", file=sys.stderr)
     write(FSTAB, fstab_with(FSTAB.read_text()))
     if Path("/etc/hostname").read_text().strip() == "juk3box":
         name = first_name()

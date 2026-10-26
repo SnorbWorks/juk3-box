@@ -53,10 +53,19 @@ def test_the_data_partition_goes_after_the_system_not_in_the_first_gap():
     assert rootfs.data_start((1064960, 16777216 + 1)) == 17842176 + 2048   # rounded up to 1 MiB
 
 
-def test_the_data_partition_is_made_before_the_overflow_swap_turns_on():
+def test_the_first_start_isnt_ordered_against_the_swap():
+    # Before=swap.target made a cycle (tmp.mount is after it) that systemd
+    # broke by dropping jobs, once this very one (v0.1.4).
     unit = (DEPLOY / "systemd" / "jb-rootfs-data.service").read_text()
     before = next(l for l in unit.splitlines() if l.startswith("Before="))
-    assert "swap.target" in before and "var-swapoverflow.swap" in before
+    assert "swap" not in before
+
+
+def test_the_swap_on_data_is_a_unit_named_after_its_file():
+    # systemd won't load var-swapoverflow.swap with What=/data/swapoverflow.
+    assert rootfs.DATA_SWAP_UNIT.name == "data-swapoverflow.swap"
+    text = rootfs.swap_unit_with((DEPLOY / "swap" / "var-swapoverflow.swap").read_text())
+    assert "What=/data/swapoverflow" in text
 
 
 def test_setup_waits_when_the_first_start_failed(tmp_path):
