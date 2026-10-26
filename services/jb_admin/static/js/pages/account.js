@@ -1,7 +1,7 @@
 // Account: change the owner password.
 
 import { post } from '../api.js';
-import { button, clear, field, h, pageHeader, showError, toast } from '../ui.js';
+import { button, clear, field, h, pageHeader, showError, toast, userField } from '../ui.js';
 
 export function show(main) {
   const current = h('input', { type: 'password', autocomplete: 'current-password', required: true });
@@ -26,6 +26,7 @@ export function show(main) {
     },
   },
   h('h2', { style: { marginBottom: '14px' } }, 'Password'),
+  userField(),
   field('Current password', current),
   field('New password', next, 'At least 8 characters.'),
   field('Type it again', again),

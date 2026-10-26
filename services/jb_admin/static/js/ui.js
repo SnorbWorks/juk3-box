@@ -151,6 +151,12 @@ export function field(label, control, help) {
   return h('div.field', name, control, help ? h('span.field-help', help) : null);
 }
 
+// The one account's name, "admin": shown beside a password so a phone's
+// password manager has a name to file it under (iOS won't save without one).
+export function userField() {
+  return field('User name', h('input', { type: 'text', name: 'username', autocomplete: 'username', value: 'admin', readOnly: true }));
+}
+
 export function switchControl(checked, onchange, label) {
   const input = h('input', { type: 'checkbox', checked, role: 'switch', onchange: () => onchange(input.checked) });
   // A label, so a click on the track or the words flips the (hidden) box.

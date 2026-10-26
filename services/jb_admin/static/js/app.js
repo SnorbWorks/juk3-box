@@ -2,7 +2,7 @@
 // of pages like WordPress's dashboard -- and a hash router (#/builder).
 
 import { ApiError, get, post, whenLoggedOut } from './api.js';
-import { button, clear, field, h, icon, loadIcons, showError, toast } from './ui.js';
+import { button, clear, field, h, icon, loadIcons, showError, toast, userField } from './ui.js';
 
 const PAGES = [
   { id: 'dashboard', label: 'Dashboard', icon: 'gauge', load: () => import('./pages/dashboard.js') },
@@ -19,6 +19,7 @@ const PAGES = [
   { id: 'modules', label: 'Modules', icon: 'boxes', load: () => import('./pages/modules.js') },
   { id: 'extensions', label: 'Extensions', icon: 'scroll-text', load: () => import('./pages/extensions.js') },
   { id: 'account', label: 'Account', icon: 'user', load: () => import('./pages/account.js') },
+  { id: 'advanced', label: 'Advanced', icon: 'settings', load: () => import('./pages/advanced.js') },
 ];
 
 const app = document.getElementById('app');
@@ -73,6 +74,7 @@ function showLogin(setup) {
   },
   h('div.login-brand', h('div.brand-mark', icon('radio')), h('div', h('div.brand-name', 'Juk3box'), h('div.brand-sub', 'Admin'))),
   setup ? h('p.login-lead', 'Welcome! Choose a password for the admin. You\'ll use it from any phone or computer on your network.') : null,
+  userField(),
   field(setup ? 'New password' : 'Password', password, setup ? 'At least 8 characters.' : null),
   setup ? field('Type it again', again) : null,
   message,

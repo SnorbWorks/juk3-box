@@ -7,7 +7,7 @@ jukebox that has never finished setup; otherwise only when asked (the
 cabinet's "Set up Wi-Fi", the admin). While it's on:
 
   - a NetworkManager access point, "Juk3box Setup XXXX" (the board serial's
-    last four), with a password shown on the cabinet and in its QR code;
+    last four), with a password shown on the cabinet;
   - every name looked up on it answers with the jukebox (a dnsmasq file NM's
     shared mode reads), and anything on port 80 is sent to the setup pages,
     which is what makes a phone pop its sign-in sheet;

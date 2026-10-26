@@ -85,7 +85,6 @@ def test_requests_round_trip_and_bad_joins_are_caught(tmp_path):
     assert setup_net.valid_join({"ssid": "x", "password": "short"})
     assert setup_net.valid_join({"ssid": "x" * 33})
     assert setup_net.valid_join({"ssid": "Open Cafe", "password": ""}) is None
-    assert setup_net.wifi_qr_text("A;B", 'p"w') == 'WIFI:T:WPA;S:A\\;B;P:p\\"w;;'
 
 
 def test_starting_makes_the_hotspot_and_the_sign_in_sheet(tmp_path):

@@ -82,8 +82,3 @@ def valid_join(req: dict) -> str | None:
         return "That has a character a network name can't have."
     return None
 
-
-def wifi_qr_text(ssid: str, password: str) -> str:
-    """The text of a "join this Wi-Fi" QR code, which phone cameras read."""
-    esc = lambda s: "".join("\\" + c if c in '\\;,:"' else c for c in s)
-    return f"WIFI:T:WPA;S:{esc(ssid)};P:{esc(password)};;"

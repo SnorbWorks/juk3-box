@@ -355,6 +355,13 @@ function renderRestarting() {
   setTimeout(tick, 3000);
 }
 
+// The one account's name, "admin", for a phone's password manager to file
+// the password under; fixed, there's only one.
+function userField() {
+  return h('div.wz-field', {}, h('label.wz-label', { for: 'pwuser' }, 'User name'),
+    h('input.wz-input', { id: 'pwuser', type: 'text', name: 'username', autocomplete: 'username', value: 'admin', readonly: true }));
+}
+
 function renderLogin() {
   let pw = '';
   const form = h('form.wz-body', { style: 'margin:0 auto', onSubmit: async e => {
@@ -366,6 +373,7 @@ function renderLogin() {
   } },
     h('h2', {}, 'Sign in to keep going'),
     h('p', {}, 'This jukebox already has a password. Sign in with it to carry on with setup.'),
+    userField(),
     h('div.wz-field', {}, h('label.wz-label', { for: 'pw' }, 'Password'),
       h('input.wz-input', { id: 'pw', type: 'password', autocomplete: 'current-password', onInput: e => { pw = e.target.value; } })),
     h('button.wz-next', { type: 'submit', style: 'flex:none' }, 'Sign in'));
@@ -423,9 +431,9 @@ const STEPS = {
       body: [
         h('p', {}, 'It keeps your jukebox\'s settings yours. You\'ll use it to open the admin from a phone or computer.'),
         // The account name a phone's password manager files the password
-        // under (with this page's address); not shown, there's only one.
-        h('input', { id: 'pwuser', type: 'text', name: 'username', autocomplete: 'username', value: 'admin', readonly: true,
-          tabindex: '-1', 'aria-hidden': 'true', style: 'position:absolute;left:-9999px;width:1px;height:1px;opacity:0' }),
+        // under (with this page's address). Shown: iOS's Passwords skipped
+        // a hidden one and then wouldn't save with the name left blank.
+        userField(),
         h('div.wz-field', {}, h('label.wz-label', { for: 'pw1' }, 'Password'),
           h('input.wz-input', { id: 'pw1', type: kind, name: 'password', autocomplete: 'new-password', value: local.pw, onInput: e => { local.pw = e.target.value; } })),
         h('div.wz-field', {}, h('label.wz-label', { for: 'pw2' }, 'Type it again'),
@@ -433,7 +441,7 @@ const STEPS = {
         h('label.wz-switch', {}, h('input', { type: 'checkbox', checked: !!local.showPw, onChange: e => { local.showPw = e.target.checked; render(); } }),
           h('span', {}, 'Show the password')),
         h('p', {}, 'At least 8 characters.'),
-        note('info', `If your phone suggests a strong password and saves it, look for it in your Passwords app under ${location.hostname}, user admin.`),
+        note('info', `If your phone suggests a strong password and saves it, look for it in your Passwords app under ${location.hostname}.`),
       ],
       next: { label: 'Next', onClick: go },
       back: false,
@@ -1055,7 +1063,7 @@ function controlsFormat(s) {
   return {
     body,
     next: local.mode === 'buttons'
-      ? { label: 'Teach the buttons', disabled: !p, onClick: () => controlsAct('start', { spec: p.spec, knob: local.knob, cancel: local.cancel }) }
+      ? { label: 'Teach buttons', disabled: !p, onClick: () => controlsAct('start', { spec: p.spec, knob: local.knob, cancel: local.cancel }) }
       : { disabled: !p, onClick: () => submit({ no_buttons: true, spec: p.spec }) },
     skip: true,
   };

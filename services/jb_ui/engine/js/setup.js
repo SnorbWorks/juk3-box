@@ -106,12 +106,12 @@ function addressJoin(s) {
   return join;
 }
 
-// Setup mode: join the jukebox's own Wi-Fi first. A phone's camera joins
-// from the QR code, and the setup page then opens by itself.
+// Setup mode: join the jukebox's own Wi-Fi first, from the phone's Wi-Fi
+// settings, and the setup page then opens by itself. (No "join" QR code:
+// iOS joined from one but never opened the sign-in sheet.)
 function hotspotJoin(hs) {
   const join = el('div', 'jb-setup-join');
-  join.append(el('div', 'jb-setup-label', 'Scan with your phone\'s camera to join'));
-  if (hs.qr?.length) join.append(qr(hs.qr));
+  join.append(el('div', 'jb-setup-label', 'On your phone, open Settings › Wi-Fi and join'));
   const creds = el('div', 'jb-setup-creds');
   for (const [k, v] of [['Wi-Fi', hs.ssid], ['Password', hs.password]]) {
     const row = el('div');
