@@ -47,6 +47,22 @@ def test_the_overflow_swap_moves_to_the_data_partition():
     assert rootfs.swap_unit_with(unit) == "[Swap]\nWhat=/data/swapoverflow\nPriority=10\n"
 
 
+def test_the_data_partition_goes_after_the_system_not_in_the_first_gap():
+    # juk3box3's card (v0.1.2): boot at 16384, system at 1064960 for 8 GiB
+    assert rootfs.data_start((1064960, 16777216)) == 17842176
+    assert rootfs.data_start((1064960, 16777216 + 1)) == 17842176 + 2048   # rounded up to 1 MiB
+
+
+def test_protection_waits_for_the_data_partition_to_be_finished(tmp_path, monkeypatch):
+    import pytest
+    flag = tmp_path / "make-data-partition"
+    flag.touch()
+    monkeypatch.setattr(rootfs, "FIRST_START", flag)
+    monkeypatch.setattr(rootfs, "status", lambda: {"data": True, "overlayroot": True})
+    with pytest.raises(rootfs.Refused):
+        rootfs.switch(True)
+
+
 def test_a_new_card_names_itself_from_its_serial(tmp_path, monkeypatch):
     serial = tmp_path / "serial-number"
     serial.write_text("10000000a1b2c3d4\0")

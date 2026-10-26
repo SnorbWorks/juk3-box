@@ -97,6 +97,8 @@ def status() -> dict:
 
 def switch(on: bool) -> str:
     s = status()
+    if on and FIRST_START.exists():
+        raise Refused("the data partition isn't finished (jb-rootfs make-data): protected, it would never be")
     if on and not s["data"]:
         raise Refused("this card has no data partition: protected, nothing the jukebox keeps would survive a restart")
     if on and not s["overlayroot"]:
@@ -165,6 +167,21 @@ def root_disk() -> tuple[str, int]:
     return disk, num
 
 
+def sectors(part: str) -> tuple[int, int]:
+    """A partition's first sector and length, in 512-byte sectors."""
+    sys_ = Path("/sys/class/block") / Path(part).name
+    return int((sys_ / "start").read_text()), int((sys_ / "size").read_text())
+
+
+def data_start(system: tuple[int, int], align: int = 2048) -> int:
+    """The data partition's first sector: just after the system's, on a 1 MiB
+    boundary. Told nothing, sfdisk takes the first free space, and an image
+    card has a few MiB free before the boot partition (v0.1.0-v0.1.2 cards
+    got a 7 MiB data partition there)."""
+    end = system[0] + system[1]
+    return -(-end // align) * align
+
+
 def first_name() -> str:
     """Every image card starts as "juk3box": this card's own name until setup
     names it (the serial's last four, as on its "Juk3box Setup" Wi-Fi), so it
@@ -192,11 +209,15 @@ def make_data() -> str:
     disk, num = root_disk()
     if num != 2:
         raise Refused(f"unexpected partitions: the system is partition {num}")
+    sys_part = f"{disk}p2" if disk[-1].isdigit() else f"{disk}2"
     data_part = f"{disk}p3" if disk[-1].isdigit() else f"{disk}3"
+    start = data_start(sectors(sys_part))
+    if Path(data_part).exists() and sectors(data_part)[0] < start:
+        raise Refused(f"{data_part} is before the system partition, not after it: make the card again")
     if not Path(data_part).exists():
         # After the system's partition, to the end of the card; the kernel
         # is told about the new one (the system's is in use, so no re-read).
-        run("sh", "-c", f"echo ',,L' | sfdisk --append --no-reread {disk}")
+        run("sh", "-c", f"echo 'start={start}, type=L' | sfdisk --append --no-reread {disk}")
         run("partx", "--add", "--nr", "3", disk, check=False)
         run("udevadm", "settle")
         for _ in range(20):
