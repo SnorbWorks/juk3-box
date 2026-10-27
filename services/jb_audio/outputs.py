@@ -81,6 +81,8 @@ class Settings:
     airplay_match: float = 1.0        # the AirPlay speaker's level relative to the cabinet's knob
     volume: float | None = None       # the cabinet's volume as last set, put back at startup (PipeWire
                                       # doesn't remember it for the DAC's stereo-fallback profile)
+    phone: dict | None = None         # {"mac", "boot"} of the phone connected now (phone_volume.py:
+                                      # a restart of jb-audio isn't a new connection)
 
     @property
     def delay_ms(self) -> int:
@@ -100,6 +102,8 @@ class Settings:
         self.measured_ms = int(min(max(self.measured_ms, 0), MAX_DELAY_S * 1000))
         self.offset_ms = int(min(max(self.offset_ms, -MAX_OFFSET_MS), MAX_OFFSET_MS))
         self.airplay_match = round(float(min(max(self.airplay_match, MATCH_MIN), MATCH_MAX)), 2)
+        if not isinstance(self.phone, dict):
+            self.phone = None
         if not isinstance(self.volume, (int, float)) or isinstance(self.volume, bool):
             self.volume = None
         else:
