@@ -23,6 +23,8 @@ import { sized } from './tracks.js';
 const VOLUME_STEP = 0.05;   // per knob detent
 const NOTICE_MS = 4000;
 const IDLE_CHECK_MS = 10000;
+// A pairing code knocked off the screen comes back this soon.
+const PAIRING_BACK_MS = 500;
 const OVERLAY_TICK_MS = 1000;
 
 // Used when a theme has no layout for the See All view.
@@ -404,18 +406,29 @@ function watchSystem() {
   // Pairing the Juk3box Helper app (jb-source-helper/pairing): the code to
   // type on the phone, on screen until it's paired (or given up on).
   // Shown over anything: the owner is standing at the cabinet waiting for it.
+  // Anything else that closes it (another notice's timer, the idle return to
+  // Home, a popup in front) only hides it until the screen is free again:
+  // seen Oct 27, the idle check closed a fresh code within seconds.
   let pairingShown = false;
+  const showPairing = () => {
+    const p = store.get('helperPairing');
+    if (p?.state !== 'code') return;
+    openPopup('notice', {
+      title: 'Pair Juk3box Helper',
+      message: `Type ${p.code} in the app on ${p.device || 'your phone'}.`,
+    }, {
+      onClose: () => {
+        pairingShown = false;
+        setTimeout(() => { if (!popupOpen()) showPairing(); }, PAIRING_BACK_MS);
+      },
+    });
+    pairingShown = true;
+  };
   store.watch(html, 'helperPairing', p => {
-    if (p?.state === 'code') {
-      openPopup('notice', {
-        title: 'Pair Juk3box Helper',
-        message: `Type ${p.code} in the app on ${p.device || 'your phone'}.`,
-      }, { onClose: () => { pairingShown = false; } });
-      pairingShown = true;
-    } else if (pairingShown) {
-      closePopup('notice');
-    }
+    if (p?.state === 'code') showPairing();
+    else if (pairingShown) closePopup('notice');
   });
+  setInterval(() => { if (!pairingShown && !popupOpen()) showPairing(); }, PAIRING_BACK_MS * 4);
 
   // A pick that didn't play: jb-core's pick doctor says why and what to
   // do ("Turn Bluetooth off and on again on your phone"), or that it's
@@ -454,6 +467,8 @@ function watchIdle() {
     const minutes = theme.settings.idle_home_minutes;
     // A preview stays on the screen the page builder is showing.
     if (PREVIEW || !minutes || (store.get('screen') === 'home' && !popupOpen())) return;
+    // Someone is pairing a phone at the cabinet: not unattended.
+    if (store.get('helperPairing')?.state === 'code') return;
     if (store.get('nowPlaying')?.status === 'playing') return;
     const last = Math.max(store.get('activity') || 0, startedAt);
     if (Date.now() - last < minutes * 60000) return;
