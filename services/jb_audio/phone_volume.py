@@ -37,6 +37,9 @@ STREAM_PREFIX = "bluez_input."
 # echo, not the owner moving the slider (the knob can turn faster than the
 # phone answers).
 ECHO_S = 1.5
+# The audio link shows up a moment after the phone connects (2 s, seen Oct 26),
+# at the phone's own level: the knob's goes to it as soon as it's there.
+LINK_WAIT_S, LINK_EVERY_S = 20, 0.5
 BOOT_ID = Path("/proc/sys/kernel/random/boot_id")
 
 log = logging.getLogger("jb-audio.phone-volume")
@@ -118,6 +121,7 @@ class PhoneVolume:
         self.mac: str | None = None
         self.level: float | None = None             # the knob's level, as last sent
         self._unsent = False                        # not reached the phone yet (no audio link)
+        self._waiting: asyncio.Task | None = None
         self._sent: list[tuple[float, int]] = []    # (when, n) we sent the phone
 
     # the phone coming and going
@@ -128,6 +132,8 @@ class PhoneVolume:
     def detach(self) -> None:
         self.mac = None
         self._unsent = False
+        if self._waiting:
+            self._waiting.cancel()
 
     # knob -> phone
     async def follow(self, level: float) -> None:
@@ -138,8 +144,10 @@ class PhoneVolume:
         n = avrcp(level)
         try:
             path = transport_path(await _run("busctl", "tree", "--list", "org.bluez"), self.mac)
-            self._unsent = not path              # no audio link yet: sent when the phone plays
+            self._unsent = not path              # no audio link yet: sent when it shows up
             if not path:
+                if not self._waiting or self._waiting.done():
+                    self._waiting = asyncio.create_task(self._send_when_linked())
                 return
             if int((await _run("busctl", "get-property", "org.bluez", path,
                                 "org.bluez.MediaTransport1", "Volume")).split()[1]) == n:
@@ -148,6 +156,13 @@ class PhoneVolume:
             await _run("busctl", "set-property", "org.bluez", path, "org.bluez.MediaTransport1", "Volume", "q", str(n))
         except (RuntimeError, ValueError, IndexError) as e:
             log.info("couldn't send the volume to the phone: %s", e)
+
+    async def _send_when_linked(self) -> None:
+        for _ in range(int(LINK_WAIT_S / LINK_EVERY_S)):
+            await asyncio.sleep(LINK_EVERY_S)
+            if not self._unsent or not self.mac or self.level is None:
+                return
+            await self.follow(self.level)
 
     def _is_echo(self, n: int) -> bool:
         now = time.monotonic()

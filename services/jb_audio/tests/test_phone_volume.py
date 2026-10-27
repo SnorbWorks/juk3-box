@@ -136,3 +136,34 @@ def test_a_phone_connecting_starts_everything_at_20_percent(monkeypatch, tmp_pat
     assert phone.mac is None and out.settings.phone is None
     asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": MAC}))
     assert levels == [0.2, 0.2]
+
+
+def test_the_knobs_level_reaches_the_phone_once_its_link_shows_up(monkeypatch):
+    # Connected, but the audio link comes a moment later (Oct 26: 2 s).
+    trees, calls = ["/org/bluez\n", "/org/bluez\n", TREE], []
+
+    async def fake_run(*args):
+        calls.append(args)
+        if args[:2] == ("busctl", "tree"):
+            return trees.pop(0) if len(trees) > 1 else trees[0]
+        if args[:2] == ("busctl", "get-property"):
+            return "q 51"
+        return ""
+
+    async def set_level(v):
+        pass
+
+    monkeypatch.setattr(pv, "_run", fake_run)
+    monkeypatch.setattr(pv, "LINK_EVERY_S", 0.01)
+
+    async def go():
+        phone = pv.PhoneVolume(set_level)
+        phone.attach(MAC)
+        await phone.follow(0.2)
+        assert phone._unsent
+        await phone._waiting
+        return phone
+
+    phone = asyncio.run(go())
+    assert not phone._unsent
+    assert calls[-1][-2:] == ("q", "25")
