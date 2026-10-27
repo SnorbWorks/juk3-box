@@ -79,15 +79,27 @@ install -D -o root -g root -m 0644 "$REPO/deploy/systemd/systemd-remount-fs.serv
 install -D -o root -g root -m 0644 "$REPO/deploy/install/nm-wifi.conf" /etc/NetworkManager/conf.d/50-juk3box-wifi.conf
 
 say "Overflow swap"
-if [ ! -f /var/swapoverflow ]; then
-  # Made under another name: building an image on a machine whose own
-  # /var/swapoverflow is in use, mkswap would take the path for that one.
-  fallocate -l 512M /var/swapoverflow.new
-  chmod 600 /var/swapoverflow.new
-  mkswap /var/swapoverflow.new >/dev/null
-  mv /var/swapoverflow.new /var/swapoverflow
+# A card that has made its data partition keeps the swap there
+# (data-swapoverflow.swap, jb-rootfs make-data): an update mustn't bring
+# back the one on /var, which can't start on a protected card. Undo what
+# v0.1.7's update did.
+if [ -f /etc/systemd/system/data-swapoverflow.swap ]; then
+  SWAP_UNIT=
+  rm -f /etc/systemd/system/var-swapoverflow.swap /etc/systemd/system/swap.target.wants/var-swapoverflow.swap
+  swapoff /var/swapoverflow 2>/dev/null || true
+  rm -f /var/swapoverflow
+else
+  SWAP_UNIT=var-swapoverflow.swap
+  if [ ! -f /var/swapoverflow ]; then
+    # Made under another name: building an image on a machine whose own
+    # /var/swapoverflow is in use, mkswap would take the path for that one.
+    fallocate -l 512M /var/swapoverflow.new
+    chmod 600 /var/swapoverflow.new
+    mkswap /var/swapoverflow.new >/dev/null
+    mv /var/swapoverflow.new /var/swapoverflow
+  fi
+  install -o root -g root -m 0644 "$REPO/deploy/swap/var-swapoverflow.swap" /etc/systemd/system/
 fi
-install -o root -g root -m 0644 "$REPO/deploy/swap/var-swapoverflow.swap" /etc/systemd/system/
 
 say "The bus (mosquitto, with installed modules' private socket)"
 /usr/local/sbin/jb-modctl setup
@@ -130,7 +142,7 @@ say "Turning it all on"
 systemctl daemon-reload
 [ -n "$IMAGE" ] || udevadm control --reload
 systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer jb-update-resume.service \
-  jb-rootfs-data.service var-swapoverflow.swap >/dev/null
+  jb-rootfs-data.service $SWAP_UNIT >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done
 
