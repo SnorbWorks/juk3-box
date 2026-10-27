@@ -82,3 +82,12 @@ def valid_join(req: dict) -> str | None:
         return "That has a character a network name can't have."
     return None
 
+
+
+def setup_qr_text(ssid: str, password: str) -> str:
+    """The cabinet's code for the Juk3box Helper app: the setup Wi-Fi's name
+    and password, laid out like a "join this Wi-Fi" code but under its own
+    prefix, so a phone's camera doesn't half-join from it (iOS joined from a
+    WIFI: code but never opened the sign-in sheet) and only the app reads it."""
+    esc = lambda s: "".join("\\" + c if c in '\\;,:"' else c for c in s)
+    return f"JUK3BOX:S:{esc(ssid)};P:{esc(password)};;"

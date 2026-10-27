@@ -107,8 +107,9 @@ function addressJoin(s) {
 }
 
 // Setup mode: join the jukebox's own Wi-Fi first, from the phone's Wi-Fi
-// settings, and the setup page then opens by itself. (No "join" QR code:
-// iOS joined from one but never opened the sign-in sheet.)
+// settings, and the setup page then opens by itself. The code below is for
+// the Juk3box Helper app only (JUK3BOX:, not a camera's "join" code: iOS
+// joined from one of those but never opened the sign-in sheet).
 function hotspotJoin(hs) {
   const join = el('div', 'jb-setup-join');
   join.append(el('div', 'jb-setup-label', 'On your phone, open Settings › Wi-Fi and join'));
@@ -120,6 +121,12 @@ function hotspotJoin(hs) {
   }
   join.append(creds);
   join.append(el('div', 'jb-setup-hint', `Setup opens by itself. If not, go to ${hs.address.replace(/^http:\/\//, '')}`));
+  if (hs.qr?.length) {
+    join.append(el('div', 'jb-setup-label app', 'Or scan with the Juk3box Helper app'));
+    const code = qr(hs.qr);
+    code.classList.add('app');
+    join.append(code);
+  }
   if (hs.why === 'asked') {
     // Started from the power menu: the knob can take it back.
     const cancel = el('div', 'jb-setup-button', 'Cancel');

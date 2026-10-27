@@ -323,7 +323,7 @@ def test_in_setup_mode_the_wifi_step_lists_networks_and_asks_to_join(tmp_path):
         assert r.status == 200
         assert setup_net.take_requests(folder) == [{"action": "join", "ssid": "Home Wi-Fi", "password": "correct horse", "hidden": False, "id": ""}]
         cab = admin.wizard.cabinet()
-        assert cab["active"] and cab["hotspot"]["ssid"] == "Juk3box Setup 1234" and "qr" not in cab["hotspot"]
+        assert cab["active"] and cab["hotspot"]["ssid"] == "Juk3box Setup 1234" and cab["hotspot"]["qr"]
         assert cab["say"].startswith("Pick your Wi-Fi")
     run(tmp_path, check)
 

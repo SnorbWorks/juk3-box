@@ -74,6 +74,8 @@ install -d -m 0755 /etc/polkit-1/rules.d
 install -o root -g root -m 0644 "$REPO/deploy/polkit/50-juk3-box-power.rules" "$REPO/deploy/polkit/51-juk3-box-drives.rules" /etc/polkit-1/rules.d/
 install -D -o root -g root -m 0644 "$REPO/deploy/kiosk/getty-autologin.conf" /etc/systemd/system/getty@tty1.service.d/autologin.conf
 install -D -o root -g root -m 0644 "$REPO/deploy/install/journald.conf" /etc/systemd/journald.conf.d/50-juk3-box.conf
+install -D -o root -g root -m 0644 "$REPO/deploy/systemd/systemd-remount-fs.service.d/50-juk3box-protected.conf" \
+  /etc/systemd/system/systemd-remount-fs.service.d/50-juk3box-protected.conf
 install -D -o root -g root -m 0644 "$REPO/deploy/install/nm-wifi.conf" /etc/NetworkManager/conf.d/50-juk3box-wifi.conf
 
 say "Overflow swap"

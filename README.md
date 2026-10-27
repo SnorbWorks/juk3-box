@@ -80,7 +80,7 @@ You need a Raspberry Pi 5 or 4, a microSD card (16 GB or more), and a computer t
    - **Or download** `juk3box-….img.xz` from the [newest release](https://github.com/SnorbWorks/juk3-box/releases/latest) and choose **Use custom** in Imager.
 3. Write the card. Skip Imager's settings (name, Wi-Fi, users): the jukebox asks for everything itself.
 4. Put the card in the Pi and start it. After a minute the screen shows **Juk3box Setup** with a Wi-Fi name and its password.
-5. On your phone, open Settings › Wi-Fi and join that network; the setup page opens by itself (or open the Juk3box Helper app and tap **Set up a new jukebox**). The setup pages walk you through the rest: a password, a name, your Wi-Fi, the hardware checks, your music.
+5. On your phone, open Settings › Wi-Fi and join that network; the setup page opens by itself (or open the Juk3box Helper app, tap **Set up a new jukebox** and scan the small code on the screen). The setup pages walk you through the rest: a password, a name, your Wi-Fi, the hardware checks, your music.
 
 With a network cable plugged in, the screen shows an address to open instead of the Wi-Fi.
 

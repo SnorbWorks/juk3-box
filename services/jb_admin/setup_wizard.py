@@ -1301,8 +1301,10 @@ class Wizard:
         if hs.get("active"):
             # Join the jukebox's own Wi-Fi first: its name and password, joined
             # from the phone's Wi-Fi settings (a "join" QR code joined, but iOS
-            # then never opened the sign-in sheet); then the address on it.
+            # then never opened the sign-in sheet), and a code only the Helper
+            # app reads (it joins and opens setup itself); then the address on it.
             out["hotspot"] = {"ssid": hs.get("ssid"), "password": hs.get("password"), "why": hs.get("why"),
+                              "qr": qr_rows(setup_net.setup_qr_text(hs.get("ssid", ""), hs.get("password", ""))),
                               "address": f"http://{socket.gethostname()}.local:{PORT}/setup"}
             if join.get("state") == "failed":
                 out["problem"] = f"Couldn't join {join.get('ssid')}. {join.get('reason') or ''}".strip()

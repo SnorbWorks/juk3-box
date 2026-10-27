@@ -660,6 +660,8 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 .jb-setup-join { background: #ffffff; color: #2a1640; border-radius: 3vmin; padding: 2.6vmin; display: flex; flex-direction: column; align-items: center; gap: 1.6vmin; }
 .jb-setup-label { font-size: 2.4vmin; font-weight: 800; text-align: center; }
 .jb-setup-qr { width: 30vmin; height: 30vmin; image-rendering: pixelated; }
+.jb-setup-label.app { font-size: 2vmin; font-weight: 700; color: #5d5470; margin-top: 0.6vmin; }
+.jb-setup-qr.app { width: 20vmin; height: 20vmin; }   /* the Helper app's; the main way is Settings › Wi-Fi */
 .jb-setup-address { font-size: 2.6vmin; font-weight: 800; color: #5b2491; text-align: center; overflow-wrap: anywhere; }
 .jb-setup-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.6vmin 2.4vmin;
   font-size: 2.2vmin; font-weight: 700; counter-reset: jb-setup; }

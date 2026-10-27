@@ -17,7 +17,7 @@ The first-boot setup wizard (dev plan roadmap item 5, Phase 7b), in one place. I
 ## Ways in
 
 1. **The helper app** (helper plan Phase 6): "Set up a new juk3box" joins the setup hotspot with `NEHotspotConfiguration`, shows `/setup/` in a WKWebView, leaves the hotspot after the Wi-Fi step (`removeConfiguration`), rejoins home Wi-Fi and finds the jukebox by Bonjour (`_juk3box._tcp`), then carries on: pairing (Phase 2 flow), MusicKit authorization, the AirPlay route step, the first library sync.
-2. **Any phone or computer, by the hotspot**: join `juk3box-setup-XXXX` (the cabinet screen shows its name, password and a Wi-Fi QR code); the captive portal opens `/setup/`, or type the address the screen shows.
+2. **Any phone or computer, by the hotspot**: join `Juk3box Setup XXXX` from the phone's Settings › Wi-Fi (the cabinet screen shows its name and password); the captive portal opens `/setup/`, or type the address the screen shows. (A camera "join this Wi-Fi" QR code was tried until v0.1.2: iOS joined from it but never opened the sign-in sheet, so it's gone.)
 3. **Any phone or computer, on the home network**: a jukebox with Ethernet plugged in (or Wi-Fi already set) never needs the hotspot. The screen shows `http://<name>.local:8080/setup` and a QR code for it. This is also how we build and test the wizard on this cabinet before setup mode exists.
 
 ## Setup mode (the Pi side of Phase 6)
@@ -134,7 +134,7 @@ A summary of every answer, with a link to change each (Re-running). Pick a song 
 
 | Phone or computer (the setup pages) | Cabinet screen |
 |---|---|
-| Every question, every name and password | The hotspot's name, password and Wi-Fi QR code; then the address and its QR code |
+| Every question, every name and password | The hotspot's name and password, and a small code for the Helper app; then the address and its QR code |
 | Choosing networks, zones, sources, switches | "Step 6 of 19: Power" and a short line of what's happening |
 | Answers to the cabinet checks (yes/no, retry) | The checks themselves: each light chain, the load test's live voltage and temperature, the test sound, the edge guide, each knob turn and key press |
 | The summary | "Restarting to apply your settings"; "Setup finished" |
@@ -172,7 +172,7 @@ The owner approved the mockup (claude.ai artifact "Juk3box Setup Wizard", https:
 - Righteous for headings, Nunito for text (both already in the kiosk's fonts, so nothing loads from the internet).
 - A phone shows "Step 3 of 7" with dots; a computer shows the step list down the left.
 - Plain words: "How is it powered?", "Which lights does it have?", "No lights is fine too".
-- The cabinet during setup: the logo and bars, how to join (setup Wi-Fi, its password, a QR code, the address), the progress list, and what to look at right now.
+- The cabinet during setup: the logo and bars, how to join (setup Wi-Fi and its password from Settings › Wi-Fi, the Helper app's code, the address), the progress list, and what to look at right now.
 
 ## Naming (decided Oct 20)
 
@@ -184,7 +184,7 @@ The product is **Juk3box** wherever a person reads it: the admin ("Juk3box Admin
 2. **The hardware steps** on this cabinet (5–12): board, power (with the EEPROM write behind a narrow root helper), clock battery, cooling, lights (with jb-lights per chain and `lights.json`), the one restart, the lights check, the load test. Test with the lights unplugged too.
 3. **Sound, screen, knob and keys, sources, whole-home, suggestions, finish** (13–19). The suggestions screen needs the Pi 5's measurements.
 4. **Name everywhere** (step 2's Bluetooth alias; the AirPlay name already follows).
-5. **Setup mode**: the hotspot (WMM off), the captive portal, the Wi-Fi scan and hand-off, jb-netwatch standing down, the cabinet's join screen and QR codes, the Reset-hold entry.
+5. **Setup mode**: the hotspot (WMM off), the captive portal, the Wi-Fi scan and hand-off, jb-netwatch standing down, the cabinet's join screen (name, password, the Helper app's code) and the address QR code, the Reset-hold entry.
 6. **The helper app's side** (helper plan Phase 6): `NEHotspotConfiguration`, the WKWebView, `removeConfiguration`, Bonjour, then pairing, MusicKit, the AirPlay route, the first sync.
 7. **Robustness the wizard leans on**: services that reconnect to the bus instead of exiting (the clock jump on boards without a battery).
 8. **A fresh card on both boards**, boxed to playing with no SSH; then the image or installer (roadmap item 8).
@@ -194,8 +194,8 @@ The product is **Juk3box** wherever a person reads it: the admin ("Juk3box Admin
 Built, in that order: 1–6 above, and the installer half of 8.
 
 - **1–4** run end to end on the cabinet (the owner finished it Oct 20). The admin's Setup page reads `/api/wizard-status`, which doesn't bring up the cabinet's setup screen. Renaming sets the Bluetooth name too.
-- **5, setup mode**, in jb-netwatch (`services/jb_netwatch/setup_mode.py`), talking to jb-admin and jb-core through request files (`shared/setup_net.py`, `/var/lib/juk3-box/setupnet`, admin's own). Starts by itself only on a jukebox that never finished setup and is offline (30 s with no Wi-Fi ever set, 3 min with one); otherwise from the power menu's Set up Wi-Fi, and then gives up after 15 minutes unused or on the cabinet's Cancel. The hotspot is an NM shared AP (`Juk3box Setup XXXX`, a password kept per board), every name answered with 10.42.0.1 (`dnsmasq-shared.d`, only while it's on) and port 80 redirected to the setup page by a small server inside jb-netwatch (no nft on the image). The cabinet shows a Wi-Fi QR code a phone camera joins with. Not done: WMM off (NetworkManager has no setting for it; watch for the Sidecar problem).
-- **6, the app**: "Set up a new jukebox" on Home (juk3box-helper `Features/Setup`): scans the code, notes the phone's network (`?ssid=` on the page), joins the hotspot, shows the page; the page tells the app when it starts joining (`webkit.messageHandlers.juk3box`), and the app lets go of the hotspot and finds the jukebox at its new address. Uses the Hotspot Configuration and Access Wi-Fi Information capabilities, both on for the App ID (checked Oct 22 in the app's provisioning profile); without them it would say to join from Settings.
+- **5, setup mode**, in jb-netwatch (`services/jb_netwatch/setup_mode.py`), talking to jb-admin and jb-core through request files (`shared/setup_net.py`, `/var/lib/juk3-box/setupnet`, admin's own). Starts by itself only on a jukebox that never finished setup and is offline (30 s with no Wi-Fi ever set, 3 min with one); otherwise from the power menu's Set up Wi-Fi, and then gives up after 15 minutes unused or on the cabinet's Cancel. The hotspot is an NM shared AP (`Juk3box Setup XXXX`, a password kept per board), every name answered with 10.42.0.1 (`dnsmasq-shared.d`, only while it's on) and port 80 redirected to the setup page by a small server inside jb-netwatch (no nft on the image). The cabinet says to join from Settings › Wi-Fi, with the name and password, and shows a smaller `JUK3BOX:S:<ssid>;P:<password>;;` code for the Helper app (WIFI:-style fields under its own prefix, so a camera doesn't half-join from it; v0.1.7). Not done: WMM off (NetworkManager has no setting for it; watch for the Sidecar problem).
+- **6, the app**: "Set up a new jukebox" on Home (juk3box-helper `Features/Setup`): scans the cabinet's JUK3BOX: code (or an older card's WIFI: one), notes the phone's network (`?ssid=` on the page), joins the hotspot, shows the page; the page tells the app when it starts joining (`webkit.messageHandlers.juk3box`), and the app lets go of the hotspot and finds the jukebox at its new address. Uses the Hotspot Configuration and Access Wi-Fi Information capabilities, both on for the App ID (checked Oct 22 in the app's provisioning profile); without them it would say to join from Settings.
 - **8, the card**: `deploy/make-card.sh` (from the Mac) runs `deploy/install/install.sh` on a fresh Raspberry Pi OS Lite and, after a check, `seal.sh`, which forgets the owner, Wi-Fi, phones, songs, the Last.fm key and setup so the next start opens setup mode. No Last.fm key is copied over (step 16a asks the owner).
 
 7 done Oct 22: `shared/bus.py` reconnects by itself, and mosquitto clears its module socket before each start (a restart used to fail until the next boot). Still to do: the knob step's key presses make real picks; the image for copying cards (machine id, SSH host keys, cloud-init).
