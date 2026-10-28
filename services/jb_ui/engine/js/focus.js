@@ -99,8 +99,33 @@ function workOutOrder() {
   // The nav: its first stop rests. Clockwise from there goes into the
   // content; counter-clockwise walks down the nav.
   const nav = stopsIn(restGroup);
-  const content = groups.filter(g => g !== restGroup && !restGroup.contains(g)).flatMap(stopsIn);
+  // Content groups in reading order by where their first stop sits, not the
+  // order the layout lists them: the frame's Sources badge (top right) comes
+  // after the screen in the markup, but before a screen whose stops start
+  // lower down (Home), and after a top bar beside it (All Songs).
+  const content = groups.filter(g => g !== restGroup && !restGroup.contains(g))
+    .map(stopsIn).filter(s => s.length)
+    .map(stops => ({ stops, r: unscrolledBox(stops[0]) }))
+    .sort((a, b) => readingOrder(a.r, b.r))
+    .flatMap(g => g.stops);
   return { stops: [nav[0], ...content, ...nav.slice(1).reverse()].filter(Boolean), rest: nav[0] || null };
+}
+
+// Where a stop sits with its scrolling area back at the top, so the order
+// is the same however far the screen happens to be scrolled.
+function unscrolledBox(el) {
+  const r = el.getBoundingClientRect();
+  const s = scrollerOf(el);
+  const dy = s ? s.scrollTop : 0;
+  return { top: r.top + dy, height: r.height, left: r.left };
+}
+
+// Rows top to bottom, left to right within a row. Two boxes share a row
+// when their vertical centers are within half a box's height of each other.
+function readingOrder(a, b) {
+  const dy = (a.top + a.height / 2) - (b.top + b.height / 2);
+  if (Math.abs(dy) < Math.min(a.height, b.height) / 2) return a.left - b.left;
+  return dy;
 }
 
 function stopsIn(group) {
@@ -108,14 +133,7 @@ function stopsIn(group) {
   const stops = [...(group.matches('[data-focus-stop]') ? [group] : []), ...group.querySelectorAll('[data-focus-stop]')]
     .map(el => ({ el, r: el.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && r.height > 0);
-  // Reading order: rows top to bottom, left to right within a row. Two
-  // stops share a row when their vertical centers are within half a
-  // stop's height of each other.
-  stops.sort((a, b) => {
-    const dy = (a.r.top + a.r.height / 2) - (b.r.top + b.r.height / 2);
-    if (Math.abs(dy) < Math.min(a.r.height, b.r.height) / 2) return a.r.left - b.r.left;
-    return dy;
-  });
+  stops.sort((a, b) => readingOrder(a.r, b.r));
   return stops.map(s => s.el);
 }
 
