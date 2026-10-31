@@ -15,8 +15,10 @@ the director's cues (director.py), in the scenes the style names
            eq       the classic EQ look (themes/accent_eq.py)
            ribbon   the flowing ribbon (themes/accent_ribbon.py)
            arena    the whole cabinet dark with blue sparkles, bursting white (show/arena.py), in every part
+           starfield, flow, beams (show/moves.py), in every part they suit: stars flying out from the
+                    middle; slow waves of colour; a rock show's beams sweeping from the top
   Foot   (accent chain 189-348, 4 rows x 40) the rhythm section
-           glow / pulse / rows (kick front, snare back) / chase / checker / offbeat
+           glow / pulse / rows (kick front, snare back) / chase / checker / offbeat / starfield / flow / beams
   Bar    (the 36 x 5 level bar) the secondary voice, as chunky blocks or lines:
            spectrum / classic / vu / ribbon, the music itself
            drumkit  a kit seen from above: hi-hat, snare, kick, tom, crash, each hit by its own drum
@@ -30,17 +32,22 @@ the director's cues (director.py), in the scenes the style names
            fire     flames rising with the music
            rain     a raindrop for each hi-hat
            sparks   hits bursting into sparks, hi-hats throwing single ones
+           starfield, flow
   Keys   (the keypad) the sparkle: sparkle / eq / pulse / glow / arena
 
-Every part renders 0..255 RGB floats; finish() applies the director's
-brightness, blackout and flash. Scene changes crossfade.
+Every part renders 0..255 RGB floats; finish() lays the crash cymbals'
+splashes over it, then the director's brightness (where the look sits in
+the show's light range, lifted by a slam or a swell), blackout and flash.
+Movement runs on the plan's steps (cues.move: a ballad's chase steps once a
+bar), not the raw beat; scene changes crossfade at the plan's pace (a cut
+when the drop slams in).
 """
 
 import math
 import random
 
 from services.jb_lights import accent, buttons, matrix
-from services.jb_lights.show import arena
+from services.jb_lights.show import arena, moves
 from services.jb_lights.themes import volume_bar_theme2 as bar_ribbon, volume_bar_theme3 as bar_spectrum
 from services.jb_lights.themes.accent_diner import CIRCLE, Diner
 from services.jb_lights.themes.accent_eq import EQ
@@ -48,8 +55,7 @@ from services.jb_lights.themes.accent_ribbon import AccentRibbon
 
 WHITE = (255.0, 255.0, 255.0)
 BLACK = (0.0, 0.0, 0.0)
-CROSSFADE_S = 0.8
-TIER_GAIN = {"calm": 0.45, "main": 0.8, "peak": 1.0}   # where in the style's light range each tier sits
+W_IN, H_IN = accent.UPPER_WIDTH_IN, accent.UPPER_WIDTH_IN / accent.UPPER_ASPECT
 
 # Where each letter and digit sits on the keypad, left to right (0..1); the
 # white-filtered keys pulse white.
@@ -82,26 +88,33 @@ def fresh_hat(owner, cues):
 
 
 def steps(cues, per_beat=1.0):
-    """Beats as movement steps: half time, double time, faster as a build rises."""
-    pace = {"half": 0.5, "beat": 1.0, "double": 2.0}[cues.style.pace]
-    if cues.tempo > 140 and pace >= 1.0:
-        pace /= 2                                  # fast songs move at half time
-    elif cues.tempo < 80:
-        pace *= 2
-    speed = 4 if cues.tension > 0.85 else 2 if cues.tension > 0.5 else 1
-    return cues.beat * pace * per_beat * speed
+    """Movement steps: the plan's (the director runs them at the song's rate,
+    quicker as a build rises)."""
+    return cues.move * per_beat
+
+
+def locked(cues):
+    """Does the movement follow the beat (or, for swing and ballads, the clock)?"""
+    return cues.plan.beat_locked if cues.plan is not None else cues.style.beat_locked
+
+
+def inches(xy):
+    return [(x * W_IN, y * H_IN) for x, y in xy]
 
 
 def gain(cues, part):
     lo, hi = cues.style.light
-    g = lo + (hi - lo) * TIER_GAIN[cues.tier]
+    g = lo + (hi - lo) * cues.look_gain
     if part == "upper":
         g *= 1 - 0.45 * cues.tension               # hold back as the build rises
-    return g * (1 - 0.4 * cues.cool)
+    g *= 1 - 0.4 * cues.cool
+    return g + (hi - g) * cues.lift if cues.lift > 0.005 else g
 
 
-def finish(frame, cues, part):
-    """Brightness, then the blackout, then the flash."""
+def finish(frame, cues, part, xy_in=None):
+    """The crash cymbals' splashes, then brightness, then the blackout, then the flash."""
+    if xy_in is not None:
+        frame = moves.splash(frame, cues, xy_in)
     g = gain(cues, part) * (1 - cues.black)
     f = cues.flash if part != "keys" else cues.flash * 0.8
     out = []
@@ -122,7 +135,7 @@ class Scenes:
     def frame(self, name, cues, snap, t, dt):
         if name != self.current:
             self.previous, self.current, self.fade = self.current, name, 0.0 if self.current else 1.0
-        self.fade = min(1.0, self.fade + dt / CROSSFADE_S)
+        self.fade = min(1.0, self.fade + dt / max(cues.crossfade, 1e-3))
         out = getattr(self, name)(cues, snap, t, dt)
         if self.fade < 1.0 and self.previous:
             before = getattr(self, self.previous)(cues, snap, t, 0.0)
@@ -150,22 +163,25 @@ class Upper(Scenes):
         self.slab_colour = 0
         self.peaks = [0.0] * len(self.columns)
         self.arena_look = arena.UpperArena(pos)
+        self.xy_in = inches(self.pos)
+        self.norm = moves.normalised(self.pos)
+        self.stars = moves.Starfield(self.xy_in, seed=11)
 
     def _record(self, out, cues, colour):
-        """The circle as a spinning record: one highlight going round once a bar."""
-        spin = (cues.beat / 4) * 2 * math.pi
+        """The circle as a spinning record: one highlight going round once a bar (of steps)."""
+        spin = (cues.move / 4) * 2 * math.pi
         for i in self.circle:
             d = (self.angle[i] - spin + math.pi) % (2 * math.pi) - math.pi
             out[i] = scale(colour, 0.15 + 0.85 * max(0.0, 1 - abs(d) / 0.9))
 
     def breathe(self, cues, snap, t, dt):
-        period = 8 * 60 / cues.tempo if cues.style.beat_locked else 7.0
+        period = min(12.0, max(3.5, 8 * 60 / (cues.tempo * max(cues.rate, 0.5)))) if locked(cues) else 7.0
         v = 0.45 + 0.3 * math.sin(2 * math.pi * t / period) + 0.25 * cues.level
         drift = t / 40
         return [scale(along(cues.palette, x * 0.6 + drift), v) for x in self.x]
 
     def wash(self, cues, snap, t, dt):
-        drift = cues.beat / 64 if cues.style.beat_locked else t / 30
+        drift = cues.move / 64 if locked(cues) else t / 30
         v = 0.4 + 0.6 * cues.level
         out = [scale(along(cues.palette, x * 0.8 + drift), v) for x in self.x]
         self._record(out, cues, cues.palette[-1])
@@ -191,7 +207,7 @@ class Upper(Scenes):
         return out
 
     def sweep(self, cues, snap, t, dt):
-        bar = cues.beat / 4
+        bar = cues.move / 4
         p = (bar % 1.0) * 4                         # 0..1 through the bar's first beat
         backwards = int(bar) % 2
         centre = (1.2 * p - 0.1) if p < 1 else None
@@ -254,11 +270,11 @@ class Upper(Scenes):
             if k is None:
                 out.append(scale(along(cues.palette, x * 0.5 + t / 60), 0.35))
                 continue
-            # Bubble tubes: a bubble rises up each tube once a beat, tubes out of step.
-            b = (cues.beat * 0.5 + k * 0.37) % 1.0
+            # Bubble tubes: a bubble rises up each tube every other step, tubes out of step.
+            b = (cues.move * 0.5 + k * 0.37) % 1.0
             v = 0.3 + 0.7 * max(0.0, 1 - abs(self.height[i] - b) / 0.15)
             out.append(scale(cues.palette[k % len(cues.palette)], v))
-        lit = int(cues.beat * 2) % 3
+        lit = int(cues.move * 2) % 3
         for k, i in enumerate(self.logo):
             out[i] = scale(warm, 1.0 if k % 3 == lit else 0.25)
         self._record(out, cues, cues.palette[1 % len(cues.palette)])
@@ -278,17 +294,26 @@ class Upper(Scenes):
         bands = snap.resample(16)
         beat = 0.3 * cues.pulse["kick"]
         bands = [min(1.0, v * (0.5 + 0.5 * cues.level) + (beat if k < 3 else 0.0)) for k, v in enumerate(bands)]
-        return [tuple(map(float, c)) for c in self.eq_look.frame(bands, dt)[:accent.UPPER]]
+        return [tuple(map(float, c)) for c in self.eq_look.frame(bands, dt, cues.palette)[:accent.UPPER]]
 
     def ribbon(self, cues, snap, t, dt):
         self.ribbon_clock += dt * (0.5 + 1.0 * cues.level)
         frame = self.ribbon_look.frame(self.ribbon_clock, swell=0.7 + 0.6 * cues.level,
-                                       ignite=cues.pulse["kick"] > 0.95)
+                                       ignite=cues.pulse["kick"] > 0.95, palette=cues.palette)
         return [tuple(map(float, c)) for c in frame[:accent.UPPER]]
 
 
     def arena(self, cues, snap, t, dt):
         return self.arena_look.frame(cues, dt)
+
+    def starfield(self, cues, snap, t, dt):
+        return self.stars.frame(cues, dt)
+
+    def flow(self, cues, snap, t, dt):
+        return moves.flow(self.norm, cues, t)
+
+    def beams(self, cues, snap, t, dt):
+        return moves.beams(self.norm, cues)
 
 
 class Foot(Scenes):
@@ -301,6 +326,10 @@ class Foot(Scenes):
         self.colour_bar = None
         self.colour_n = 0
         self.arena_look = arena.FootArena()
+        pos = accent.positions()[accent.UPPER:]
+        self.xy_in = inches(pos)
+        self.norm = moves.normalised(pos)
+        self.stars = moves.Starfield(self.xy_in, seed=12)
 
     def _grid(self, fn):
         out = [BLACK] * self.size
@@ -310,7 +339,7 @@ class Foot(Scenes):
         return out
 
     def _bar_colour(self, cues):
-        bar = int(cues.beat // 4)
+        bar = int(cues.move // 4)
         if bar != self.colour_bar:
             self.colour_bar, self.colour_n = bar, self.colour_n + 1
         return cues.palette[self.colour_n % len(cues.palette)]
@@ -368,6 +397,15 @@ class Foot(Scenes):
     def arena(self, cues, snap, t, dt):
         return self.arena_look.frame(cues, dt)
 
+    def starfield(self, cues, snap, t, dt):
+        return self.stars.frame(cues, dt)
+
+    def flow(self, cues, snap, t, dt):
+        return moves.flow(self.norm, cues, t)
+
+    def beams(self, cues, snap, t, dt):
+        return moves.beams(self.norm, cues, count=4 if cues.character in ("big", "solo") else 2)
+
 
 class Bar(Scenes):
     def __init__(self):
@@ -384,6 +422,10 @@ class Bar(Scenes):
         self.burst_held = False
         self.heat = [0.0] * matrix.COLS
         self.arena_look = arena.BarArena()
+        pos = matrix.positions()
+        self.xy_in = inches(pos)
+        self.norm = moves.normalised(pos)
+        self.stars = moves.Starfield(self.xy_in, seed=13)
 
     def spectrum(self, cues, snap, t, dt):
         """The classic analyzer, in the song's palette: bass on the left,
@@ -413,7 +455,7 @@ class Bar(Scenes):
         # The level is against the song's own loud parts, so a loud song sits
         # near the top: spread its upper half across the bar, plus the drive.
         swing = max(0.0, min(1.0, (cues.level - 0.45) / 0.55))
-        level = swing if not cues.style.beat_locked else min(1.0, 0.75 * swing + 0.3 * cues.pulse["drive"])
+        level = swing if not locked(cues) else min(1.0, 0.75 * swing + 0.3 * cues.pulse["drive"])
         self.peak = max(level, self.peak - dt * 0.5)
         half = matrix.COLS / 2
         out = [BLACK] * self.size
@@ -429,7 +471,7 @@ class Bar(Scenes):
     def ribbon(self, cues, snap, t, dt):
         self.ribbon_clock += dt * (0.5 + 1.0 * cues.level)
         frame = self.ribbon_look.frame(self.ribbon_clock, swell=0.7 + 0.6 * cues.level,
-                                       ignite=cues.pulse["kick"] > 0.95)
+                                       ignite=cues.pulse["kick"] > 0.95, palette=cues.palette)
         return [tuple(float(v) for v in c) for c in frame]
 
     # The bar as a canvas of chunky blocks (its pixels are twice as tall as
@@ -489,11 +531,11 @@ class Bar(Scenes):
         return out
 
     def bounce(self, cues, snap, t, dt):
-        """A ball landing on every beat, crossing the bar once a bar."""
-        bar = cues.beat / 4
+        """A ball landing on every step, crossing the bar once every four."""
+        bar = cues.move / 4
         x = (bar % 1.0) * 2
         x = (x if x <= 1 else 2 - x) * (matrix.COLS - 2)          # there and back
-        height = abs(math.sin(math.pi * (cues.beat % 1.0))) * (matrix.ROWS - 1)
+        height = abs(math.sin(math.pi * (cues.move % 1.0))) * (matrix.ROWS - 1)
         out = [scale(cues.palette[-1], 0.04 + 0.2 * cues.pulse["kick"]) if r == 0 else BLACK
                for c in range(matrix.COLS) for r in range(matrix.ROWS)]
         colour = cues.palette[int(bar) % len(cues.palette)]
@@ -550,9 +592,9 @@ class Bar(Scenes):
         return out
 
     def comet(self, cues, snap, t, dt):
-        """A comet streaking across on each beat, its tail behind it."""
-        n = int(cues.beat)
-        head = (cues.beat % 1.0) * (matrix.COLS + 8)
+        """A comet streaking across on each step, its tail behind it."""
+        n = int(cues.move)
+        head = (cues.move % 1.0) * (matrix.COLS + 8)
         backwards = n % 2
         colour = cues.palette[n % len(cues.palette)]
         out = self._blank()
@@ -627,6 +669,12 @@ class Bar(Scenes):
     def arena(self, cues, snap, t, dt):
         return self.arena_look.frame(cues, dt)
 
+    def starfield(self, cues, snap, t, dt):
+        return self.stars.frame(cues, dt)
+
+    def flow(self, cues, snap, t, dt):
+        return moves.flow(self.norm, cues, t)
+
 
 class Keys:
     """The keypad's part: RGBW per pixel. Not a Scenes: one look per style."""
@@ -693,8 +741,8 @@ class AccentShow:
         cues = self.cues = snap.cues or self.cues
         if cues is None:
             return [(0, 0, 0)] * accent.NUM_PIXELS
-        up = finish(self.upper.frame(cues.scene["upper"], cues, snap, t, dt), cues, "upper")
-        ft = finish(self.foot.frame(cues.scene["foot"], cues, snap, t, dt), cues, "foot")
+        up = finish(self.upper.frame(cues.scene["upper"], cues, snap, t, dt), cues, "upper", self.upper.xy_in)
+        ft = finish(self.foot.frame(cues.scene["foot"], cues, snap, t, dt), cues, "foot", self.foot.xy_in)
         return [(int(r), int(g), int(b)) for r, g, b in up + ft]
 
 
@@ -707,5 +755,5 @@ class BarShow:
         cues = self.cues = snap.cues or self.cues
         if cues is None:
             return [(0, 0, 0)] * matrix.NUM_PIXELS
-        out = finish(self.bar.frame(cues.scene["bar"], cues, snap, t, dt), cues, "bar")
+        out = finish(self.bar.frame(cues.scene["bar"], cues, snap, t, dt), cues, "bar", self.bar.xy_in)
         return [(int(r), int(g), int(b)) for r, g, b in out]

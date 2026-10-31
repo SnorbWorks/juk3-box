@@ -48,7 +48,10 @@ class EQ:
         self.flow = 0.0
         self.t = 0.0
 
-    def frame(self, bands, dt):
+    def frame(self, bands, dt, palette=None):
+        """palette: a light show's colours (0..255) for the columns, the logo,
+        the circle and the wave, in place of the rainbow -- the same EQ, in
+        the song's colours."""
         self.t += dt
         n = len(self.tubes)
         # Bands -> columns (resampled if the counts differ).
@@ -57,8 +60,21 @@ class EQ:
         energy = sum(bands) / len(bands)
         out = [(0.0, 0.0, 0.0)] * accent.NUM_PIXELS
 
-        def rgb(h, s, v):
-            return colorsys.hsv_to_rgb(h % 1.0, s, max(0.0, min(1.0, v)))
+        if palette:
+            cols = [tuple(v / 255 for v in c) for c in palette]
+
+            def hue_at(h):          # the palette as a loop, where the rainbow had its hues
+                x = (h % 1.0) * len(cols)
+                k = int(x)
+                a, b = cols[k % len(cols)], cols[(k + 1) % len(cols)]
+                return tuple(p + (q - p) * (x - k) for p, q in zip(a, b))
+
+            def rgb(h, s, v):
+                v = max(0.0, min(1.0, v))
+                return tuple(c * v for c in hue_at(h))
+        else:
+            def rgb(h, s, v):
+                return colorsys.hsv_to_rgb(h % 1.0, s, max(0.0, min(1.0, v)))
 
         for k, tube in enumerate(self.tubes):
             lv = self.level[k]

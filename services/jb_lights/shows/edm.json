@@ -1,11 +1,16 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "edm",
   "name": "EDM",
   "description": "Neon magenta, cyan and UV violet; the footlights on the kick; builds strobe the footlights.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["edm"],
+  "fits": {
+    "groove": 0.8,
+    "energy": 0.8,
+    "pace": 0.7
+  },
   "palettes": [
     ["#FF00C8", "#00E5FF", "#7A00FF"],
     ["#00E5FF", "#2040FF", "#B000FF"],
@@ -15,27 +20,35 @@
   "peak": ["#FFFFFF", "#00E5FF", "#FF00C8"],
   "light": [0.2, 1.0],
   "strobe": 2,
-  "gap": "blackout",
-  "pace": "beat",
   "drive": "kick",
   "release": 0.18,
   "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "flash",
+    "gap": "blackout"
+  },
   "roles": {
     "storyteller": {
       "calm": ["breathe", "ribbon"],
       "main": ["chase", "sweep", "eq"],
       "peak": ["chase", "slab"]
     },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["pulse", "rows"],
-      "peak": ["rows", "chase"]
-    },
+    "rhythm": {"calm": ["glow"], "main": ["pulse", "rows"], "peak": ["rows", "chase"]},
     "meter": {
       "calm": ["ribbon", "trace"],
       "main": ["spectrum", "tiles", "drumkit", "ripple", "comet", "classic"],
       "peak": ["mirror", "ripple", "sparks", "counter"]
     },
     "keys": "sparkle"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["eq", "sweep"], "meter": ["spectrum", "mirror"], "keys": "eq"},
+    "build": {"storyteller": ["chase"], "rhythm": ["chase"], "meter": ["counter", "ripple"]},
+    "big": {"storyteller": ["chase", "slab", "beams"], "rhythm": ["rows", "chase"]}
   }
 }

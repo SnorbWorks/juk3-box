@@ -1,0 +1,58 @@
+{
+  "format": 2,
+  "id": "rock-show",
+  "name": "Rock Show",
+  "description": "A stage rig: beams sweeping from the top and hitting with the kick, white-hot crash splashes, a blackout and a slam on the big moments. The verses keep to the spectrum; the choruses get the whole rig.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["rock", "metal"],
+  "fits": {
+    "aggressive": 0.6,
+    "energy": 0.85,
+    "pace": 0.6,
+    "voice": 0.6
+  },
+  "palettes": [
+    ["#FF2A00", "#FFB000", "#FFFFFF"],
+    ["#FFFFFF", "#2F6BFF", "#FF2A00"],
+    ["#FFB000", "#FF5A00", "#FFF2C0"],
+    ["#B000FF", "#FF2A00", "#FFFFFF"]
+  ],
+  "peak": ["#FFFFFF", "#FFD27A", "#FF2A00"],
+  "light": [0.25, 1.0],
+  "strobe": 1,
+  "drive": "kick",
+  "release": 0.14,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "slam",
+    "gap": "blackout"
+  },
+  "roles": {
+    "storyteller": {"calm": ["wash"], "main": ["beams", "slab"], "peak": ["beams", "sweep"]},
+    "rhythm": {"calm": ["glow"], "main": ["beams", "pulse"], "peak": ["beams", "rows"]},
+    "meter": {"calm": ["vu"], "main": ["drumkit", "fire"], "peak": ["fire", "sparks", "drumkit"]},
+    "keys": "pulse"
+  },
+  "sections": {
+    "vocal": {
+      "storyteller": ["rise", "eq"],
+      "rhythm": ["rows", "pulse"],
+      "meter": ["spectrum", "vu"],
+      "keys": "eq"
+    },
+    "build": {"storyteller": ["chase", "sweep"], "rhythm": ["chase"], "meter": ["counter", "comet"]},
+    "big": {
+      "storyteller": ["beams"],
+      "rhythm": ["beams", "rows"],
+      "meter": ["fire", "sparks"],
+      "keys": "pulse"
+    },
+    "solo": {"storyteller": ["beams", "sweep"], "meter": ["sparks", "fire"]}
+  }
+}

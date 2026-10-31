@@ -24,9 +24,12 @@ def test_the_light_show_page_lists_shows_and_saves_settings(tmp_path):
     async def check(c, admin):
         r = await (await c.get("/api/lights", headers=H)).json()
         ids = [s["id"] for s in r["shows"]]
-        assert "arena" in ids and len(ids) == 13 and r["settings"]["idle"] == "city"
+        assert "arena" in ids and "starfield" in ids and len(ids) == 17 and r["settings"]["idle"] == "city"
+        shows = {s["id"]: s for s in r["shows"]}
+        assert {"tender", "slow"} <= set(shows["love"]["fits"]) and "love songs" in shows["love"]["tags"]
+        assert {"70s", "80s"} <= set(shows["starfield"]["fits"]) and shows["starfield"]["songs"]
         metal = next(g for g in r["groups"] if g["id"] == "metal")
-        assert metal["rotation"] == ["metal", "arena"] and not metal["custom"]
+        assert metal["rotation"] == ["metal", "arena", "rock-show"] and not metal["custom"]
         assert {c["id"] for c in r["hardware"]["chains"]} == {"accent", "levelbar", "buttons"}
         ok = await c.post("/api/lights/settings", json={"rotations": {"metal": ["arena"]}, "brightness": 0.6,
                                                         "quiet": {"enabled": True}}, headers=H)
@@ -60,8 +63,41 @@ def test_shows_upload_download_preview_and_delete(tmp_path):
         n = sum(ch["pixels"] for ch in p["chains"])
         assert len(base64.b64decode(p["frames"])) == n * 3 * int(p["fps"] * p["seconds"])
         assert "p" in p["tiers"]                                              # the drop reaches the peak
+        looks = {m["label"]: m["character"] for m in p["moments"]}
+        assert looks["Verse"] == "vocal" and looks["Chorus"] == "big" and p["feel"] == "upbeat"
+        love = await (await c.get("/api/lights/preview/my-show?feel=love", headers=H)).json()
+        assert love["feel"] == "love" and love["plan"]["rate"] <= 0.5 and love["plan"]["accents"]["drop"] == "swell"
+        assert love["tempo"] < p["tempo"] and ["love", "Love song"] in love["feels"]
         assert (await c.delete("/api/lights/shows/arena", headers=H)).status == 400
         assert (await c.delete("/api/lights/shows/my-show", headers=H)).status == 200
         s = (await (await c.get("/api/lights", headers=H)).json())["settings"]
         assert s["pin"] is None and s["rotations"] == {"rock": ["rock"]}       # nothing points at it any more
+    run(tmp_path, check)
+
+
+def test_learned_songs_are_listed_with_their_parts_and_can_be_forgotten(tmp_path):
+    songs = tmp_path / "songs"
+    songs.mkdir()
+    key = "0123456789abcdef"
+    (songs / f"{key}.json").write_text(json.dumps({
+        "format": 1, "song": {"title": "A song", "artist": "A band", "duration": 200.0},
+        "learned": "2026-10-30T12:00:00", "plays": 3, "tempo": 120.0, "feel": {"words": ["moody", "slow"]},
+        "sections": [{"start": 0.0, "end": 20.0, "label": "A", "role": "intro", "energy": 0.1, "voice": 0.0},
+                     {"start": 20.0, "end": 60.0, "label": "B", "role": "verse", "energy": 0.5, "voice": 0.8},
+                     {"start": 60.0, "end": 90.0, "label": "C", "role": "chorus", "energy": 1.0, "voice": 0.8,
+                      "drums": 0.9}]}))
+    (songs / f"{key}.npz").write_bytes(b"recording")
+    (songs / "notes.json").write_text("{}")                                   # not a song's map
+
+    async def check(c, admin):
+        r = await (await c.get("/api/lights/songs", headers=H)).json()
+        assert len(r["songs"]) == 1
+        s = r["songs"][0]
+        assert (s["title"], s["plays"], s["words"]) == ("A song", 3, ["moody", "slow"])
+        assert [x["character"] for x in s["sections"]] == ["quiet", "vocal", "big"]
+        assert (await c.delete("/api/lights/songs/../../etc", headers=H)).status == 404
+        assert (await c.delete("/api/lights/songs/ffffffffffffffff", headers=H)).status == 404
+        assert (await c.delete(f"/api/lights/songs/{key}", headers=H)).status == 200
+        assert not list(songs.glob(f"{key}.*"))                              # the map and the recording
+        assert (await (await c.get("/api/lights/songs", headers=H)).json())["songs"] == []
     run(tmp_path, check)

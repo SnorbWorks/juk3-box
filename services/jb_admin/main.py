@@ -73,8 +73,10 @@ DEFAULTS = {
     # privileged helper's folder (deploy/jb-setupctl).
     "setup_path": str(DATA / "setup.json"),
     "lights_path": str(DATA / "lights.json"),
-    # admin › Light Show: the owner's light settings and uploaded shows (jb-lights reads them).
+    # admin › Light Show: the owner's light settings and uploaded shows (jb-lights reads them),
+    # and the songs jb-analyzer has learned (their maps).
     "lights_dir": str(DATA / "lights"),
+    "songs_dir": str(DATA / "songs"),
     "setupctl_dir": str(DATA / "setupctl"),
     "setupnet_dir": str(DATA / "setupnet"),
     # Updates from the project's releases (deploy/jb-update, root): what it last found.
@@ -160,7 +162,7 @@ class Admin:
         self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]),
                              setupnet_dir=Path(cfg["setupnet_dir"]))
         self.updates = updates.Updates(self)
-        self.lights = LightsAdmin(Path(cfg["lights_dir"]), dirs[-1], Path(cfg["lights_path"]))
+        self.lights = LightsAdmin(Path(cfg["lights_dir"]), dirs[-1], Path(cfg["lights_path"]), Path(cfg["songs_dir"]))
         self._updates_task = None
 
     # The bus ------------------------------------------------------------
@@ -886,9 +888,21 @@ class Admin:
 
     async def light_preview(self, request):
         try:
-            return web.json_response(await asyncio.to_thread(self.lights.preview, request.match_info["id"]))
+            return web.json_response(await asyncio.to_thread(self.lights.preview, request.match_info["id"],
+                                                             request.query.get("feel")))
         except LightsError as e:
             raise error(404, str(e))
+
+    async def get_light_songs(self, request):
+        return web.json_response({"songs": await asyncio.to_thread(self.lights.songs)})
+
+    async def forget_light_song(self, request):
+        try:
+            self.lights.forget(request.match_info["key"])
+        except LightsError as e:
+            raise error(404, str(e))
+        self.log.info("forgot learned song %s", request.match_info["key"])
+        return web.json_response({"ok": True})
 
     async def audio_action(self, request):
         """What the Sound page may ask jb-audio to do."""
@@ -1639,6 +1653,8 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_get("/api/lights/shows/{id}", admin.get_light_show)
     r.add_delete("/api/lights/shows/{id}", admin.delete_light_show)
     r.add_get("/api/lights/preview/{id}", admin.light_preview)
+    r.add_get("/api/lights/songs", admin.get_light_songs)
+    r.add_delete("/api/lights/songs/{key}", admin.forget_light_song)
     r.add_get("/api/display", admin.get_display)
     r.add_post("/api/display/{action}", admin.display_action)
     r.add_get("/api/drives", admin.get_drives)

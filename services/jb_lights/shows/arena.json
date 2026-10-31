@@ -1,38 +1,36 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "arena",
   "name": "Arena",
   "description": "A dark cabinet with blue sparkles, then on the drop the whole cabinet flashes white and sparkles away from the centre.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["metal", "edm", "bass"],
-  "palettes": [
-    ["#081AFF", "#96AFFF"]
-  ],
+  "fits": {
+    "energy": 0.8,
+    "aggressive": 0.5,
+    "groove": 0.6
+  },
+  "palettes": [["#081AFF", "#96AFFF"]],
   "peak": ["#081AFF", "#96AFFF"],
   "light": [1.0, 1.0],
   "strobe": 0,
-  "gap": "blackout",
-  "pace": "beat",
   "drive": "kick",
   "release": 0.18,
   "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "none",
+    "drop": "burst",
+    "gap": "blackout"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["arena"],
-      "main": ["arena"],
-      "peak": ["arena"]
-    },
-    "rhythm": {
-      "calm": ["arena"],
-      "main": ["arena"],
-      "peak": ["arena"]
-    },
-    "meter": {
-      "calm": ["arena"],
-      "main": ["arena"],
-      "peak": ["arena"]
-    },
+    "storyteller": {"calm": ["arena"], "main": ["arena"], "peak": ["arena"]},
+    "rhythm": {"calm": ["arena"], "main": ["arena"], "peak": ["arena"]},
+    "meter": {"calm": ["arena"], "main": ["arena"], "peak": ["arena"]},
     "keys": "arena"
   }
 }

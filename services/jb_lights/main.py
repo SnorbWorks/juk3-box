@@ -53,7 +53,7 @@ def state(feed, inputs, run) -> dict:
     return {"v": 1, "look": snap.look if snap else "idle", "chains": sorted(run),
             "show": {"id": show.name, "name": show.title or show.name, "source": show.source} if show else None,
             "tier": cues.tier if cues else None, "idle": lib.settings["idle"], "pin": lib.settings["pin"],
-            "inputs": inputs.report(), "notes": lib.notes[:20], "ts": int(time.time())}
+            "song": feed.report(), "inputs": inputs.report(), "notes": lib.notes[:20], "ts": int(time.time())}
 
 
 def report(feed, inputs, run, stop):

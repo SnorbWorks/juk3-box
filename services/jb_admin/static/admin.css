@@ -676,6 +676,14 @@ a.btn { text-decoration: none; }
 .ls-stage .loading { color: #a7aaad; }
 .ls-canvas { width: 100%; max-width: 392px; height: auto; display: block; }
 .ls-caption { font-size: 13px; color: var(--text-2); text-align: center; font-variant-numeric: tabular-nums; }
+.ls-why { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.ls-map-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+.ls-timeline { position: relative; height: 24px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.ls-seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 600; overflow: hidden; box-shadow: inset -1px 0 0 rgba(0, 0, 0, .35); }
+.ls-head { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text); box-shadow: 0 0 0 1px var(--surface); }
+.ls-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-2); }
+.ls-legend span { display: inline-flex; gap: 5px; align-items: center; }
+.ls-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 dl.kv { grid-template-columns: max-content 1fr; margin: 0; column-gap: 16px; }
 dl.kv dt { color: var(--text-3); }
 dl.kv dd { margin: 0; }

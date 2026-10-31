@@ -20,10 +20,10 @@ def test_genre_and_tags_pick_the_style_and_mood_is_the_fallback():
     assert pick("hip-hop", [], 0.7) == "hiphop"
     assert pick(None, ["seen live", "Funk", "80s"], 0.7) == "soul"
     assert pick("dubstep", ["edm"], 0.9, seed=0) in ("bass", "arena")
-    # A genre group's shows take turns, song by song: metal's own, then arena.
-    assert lib.rotation("metal") == ["metal", "arena"]
-    assert {pick("metal", [], 0.8, seed=n) for n in range(4)} == {"metal", "arena"}
-    assert pick("rock", [], 0.8, seed=1) == "rock"
+    # Before the feel, a genre group's shows take turns, song by song: metal's own, then arena, the rock show.
+    assert lib.rotation("metal") == ["metal", "arena", "rock-show"]
+    assert {pick("metal", [], 0.8, seed=n) for n in range(4)} == {"metal", "arena", "rock-show"}
+    assert pick("rock", [], 0.8, seed=2) == "rock"
     # A compound tag counts by its main word.
     assert styles.group_of(None, ["sludge", "doom metal"], 0.4) == "metal"
     assert styles.group_of(None, ["seen live", "dream pop"], 0.4) == "pop"
@@ -134,7 +134,7 @@ def test_a_new_song_restyles_and_the_genre_arriving_late_restyles_too():
     r.genre, r.tags, r.genre_at = "country", ["country"], 1.0
     assert run(d, r, 1, 1)[0].style.name == "country"
     r.title, r.genre, r.tags = "Two", "rock", ["rock"]
-    assert run(d, r, 2, 1)[0].style.name == "rock"
+    assert run(d, r, 2, 1)[0].style.name in ("rock", "rock-show")
 
 
 def stream(feed, t, genre="edm", kick=False):

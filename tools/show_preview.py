@@ -2,11 +2,17 @@
 stream (tools/analyze_song.py --json) through jb-lights' real show code and
 render a video of the cabinet -- upper panel, level bar, footlights and
 keypad at their real positions -- with the song's audio, and a caption of
-what the director is doing (style, tier, scenes, and each gap, hit, section
-and drop as it happens).
+what the director is doing (the show, tier, the section's character and
+label, the movement rate, scenes, and each gap, hit, section and drop as it
+happens).
 
     venv/bin/python -m tools.analyze_song song.m4a --json song.jsonl --quiet
     venv/bin/python -m tools.show_preview song.jsonl --audio song.m4a --out song.mp4 [--start 40 --seconds 30]
+
+analyze_song runs the pipeline only, so the stream has no feel (that comes
+from the analyzer's ears on the cabinet): --feel stands in for one with a
+kind of song from jb_lights/preview.py (upbeat, moody, love, hard, 80s), and
+the show is then chosen by fit the way the cabinet chooses it.
 
 Needs ffmpeg and Pillow. Runs the same frames the service would (the
 accent chain's brightness and current cap included).
@@ -21,6 +27,7 @@ from PIL import Image, ImageDraw
 from services.jb_lights import accent, buttons, matrix
 from services.jb_lights.accent_lights import Looks
 from services.jb_lights.audio_feed import AudioFeed, LookPicker
+from services.jb_lights.preview import FEELS
 from services.jb_lights.levelbar import MusicLooks
 from services.jb_lights.themes.accent_city import BRIGHTNESS
 from services.jb_lights.themes.accent_diner import limit
@@ -51,6 +58,7 @@ def main():
     ap.add_argument("--seconds", type=float)
     ap.add_argument("--title", default="")
     ap.add_argument("--genre", help="stand in for Last.fm's genre (offline there are no tags)")
+    ap.add_argument("--feel", choices=sorted(FEELS), help="stand in for the analyzer's feel (offline there is none)")
     ap.add_argument("--tour", help="cycle the level bar through these scenes (comma-separated), 5 s each")
     args = ap.parse_args()
 
@@ -84,9 +92,15 @@ def main():
                 m["data"]["identity"] = {"title": args.title, "artist": None}
                 if args.genre:
                     m["data"]["genre"], m["data"]["tags"] = args.genre, [args.genre]
+                if args.feel:
+                    m["data"]["feel"] = FEELS[args.feel][2]
             feed.on_message(m["topic"], m["data"], now=m["t"])
             if m["topic"].endswith("events") and m["data"]["type"] not in ("clip", "sound"):
-                notes.append((m["t"], m["data"]["type"].upper()))
+                e = m["data"]
+                name = e["type"].upper()
+                if e["type"] == "section" and e.get("label"):
+                    name += f" {e['label']}{e.get('n', 1)} {e.get('role') or ''}".rstrip()
+                notes.append((m["t"], name))
             k += 1
         snap = feed.snapshot(now=t)
         if args.tour and snap.cues:
@@ -114,7 +128,8 @@ def main():
         cues = snap.cues
         lines = [f"{args.title}  {int(t // 60)}:{t % 60:04.1f}"]
         if cues:
-            lines.append(f"style {cues.style.name}  tier {cues.tier}  {cues.tempo:.0f} bpm  beat {cues.bar_beat + 1}")
+            lines.append(f"show {cues.style.name}  tier {cues.tier}  {cues.tempo:.0f} bpm  beat {cues.bar_beat + 1}")
+            lines.append(f"{cues.character} {cues.label or '-'} #{cues.n}  moves {cues.rate:g}/beat  smooth {cues.smooth:.1f}")
             lines.append(f"upper {cues.scene['upper']}  foot {cues.scene['foot']}  bar {cues.scene['bar']}  keys {cues.scene['keys']}")
         else:
             lines.append(snap.look)
@@ -123,7 +138,7 @@ def main():
             lines.append("  ".join(recent[-3:]))
         d.text((12, 10), lines[0], fill=(200, 200, 210))
         for n, line in enumerate(lines[1:]):
-            d.text((12, H - 110 + n * 16), line, fill=(255, 220, 80) if n == 2 else (200, 200, 210))
+            d.text((12, H - 110 + n * 16), line, fill=(255, 220, 80) if n == 3 else (200, 200, 210))
         enc.stdin.write(img.tobytes())
     enc.stdin.close()
     enc.wait()

@@ -1,11 +1,17 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "oldies",
   "name": "Oldies",
   "description": "The marquee: chasing bulbs, bubble tubes and a spinning record in incandescent amber. Never flashes.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["oldies"],
+  "fits": {
+    "eras": ["50s", "60s", "70s"],
+    "valence": 0.65,
+    "energy": 0.5,
+    "aggressive": 0.1
+  },
   "palettes": [
     ["#FFA040", "#D01030", "#40E0B0"],
     ["#FFA040", "#F0F0FF", "#20B0B0"],
@@ -14,27 +20,25 @@
   "peak": ["#FFE0B0", "#FFA040", "#D01030"],
   "light": [0.4, 0.85],
   "strobe": 0,
-  "gap": "dim",
-  "pace": "beat",
   "drive": "snare",
   "release": 0.35,
   "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": "dim"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["marquee"],
-      "main": ["marquee", "tubes"],
-      "peak": ["tubes", "marquee"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["chase"],
-      "peak": ["chase", "pulse"]
-    },
-    "meter": {
-      "calm": ["vu"],
-      "main": ["vu", "bounce", "tiles"],
-      "peak": ["tiles", "counter"]
-    },
+    "storyteller": {"calm": ["marquee"], "main": ["marquee", "tubes"], "peak": ["tubes", "marquee"]},
+    "rhythm": {"calm": ["glow"], "main": ["chase"], "peak": ["chase", "pulse"]},
+    "meter": {"calm": ["vu"], "main": ["vu", "bounce", "tiles"], "peak": ["tiles", "counter"]},
     "keys": "pulse"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["tubes", "marquee"], "meter": ["vu", "tiles"]}
   }
 }

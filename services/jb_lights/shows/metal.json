@@ -1,11 +1,15 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "metal",
   "name": "Metal",
   "description": "Red, amber and white or icy blue slabs; the kick at half time; fire on the bar.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["metal"],
+  "fits": {
+    "aggressive": 0.9,
+    "energy": 0.9
+  },
   "palettes": [
     ["#FF1000", "#FF8000", "#FFFFFF"],
     ["#80C0FF", "#FFFFFF", "#6000C0"],
@@ -14,27 +18,31 @@
   "peak": ["#FFFFFF", "#FF1000"],
   "light": [0.2, 1.0],
   "strobe": 2,
-  "gap": "blackout",
-  "pace": "half",
   "drive": "kick",
   "release": 0.12,
   "beat_locked": true,
+  "motion": {
+    "pace": "half",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "flash",
+    "gap": "blackout"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["wash"],
-      "main": ["slab"],
-      "peak": ["slab", "chase"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["pulse"],
-      "peak": ["pulse", "rows"]
-    },
-    "meter": {
-      "calm": ["fire"],
-      "main": ["fire", "drumkit"],
-      "peak": ["fire", "sparks"]
-    },
+    "storyteller": {"calm": ["wash"], "main": ["slab"], "peak": ["slab", "chase"]},
+    "rhythm": {"calm": ["glow"], "main": ["pulse"], "peak": ["pulse", "rows"]},
+    "meter": {"calm": ["fire"], "main": ["fire", "drumkit"], "peak": ["fire", "sparks"]},
     "keys": "sparkle"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["slab", "rise"], "meter": ["fire", "vu"]},
+    "big": {
+      "storyteller": ["slab", "beams", "chase"],
+      "rhythm": ["pulse", "beams"],
+      "meter": ["fire", "sparks"]
+    },
+    "solo": {"storyteller": ["beams", "chase"], "meter": ["sparks", "fire"]}
   }
 }

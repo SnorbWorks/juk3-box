@@ -24,7 +24,8 @@ def test_the_effect_library_is_what_the_parts_can_draw():
 
 
 def test_every_built_in_show_checks_out():
-    assert len(styles.STYLES) == 13
+    assert len(styles.STYLES) == 17
+    assert {"moody", "love", "starfield", "rock-show"} <= set(styles.STYLES)
     for f in styles.BUILTIN_DIR.glob("*.json"):
         assert styles.check(json.loads(f.read_text())) == [], f.name
 
@@ -35,7 +36,9 @@ def test_a_bad_show_file_says_what_is_wrong():
                               roles={**show()["roles"], "rhythm": {"calm": ["moonwalk"], "main": ["glow"], "peak": ["glow"]}}))
     text = " / ".join(probs)
     assert "id must be" in text and "palette 1" in text and "strobe" in text and "moonwalk" in text
-    assert styles.check(show(format=2))[0].startswith("it's show format 2")
+    assert styles.check(show(format=3))[0].startswith("it's show format 3")
+    assert styles.check(show(fits={"moody": 2, "eras": ["40s"], "colour": 1}, motion={"pace": "fast"},
+                             accents={"crash": "boom"}, sections={"chorus": {}, "big": {"rhythm": ["moonwalk"]}}))
     assert styles.check(show(inputs={"cues": {"lightning": "explode"}}))
     assert styles.check(show(inputs={"palette": 0.3, "cues": {"lightning": "flicker"}})) == []
 
@@ -54,14 +57,14 @@ def test_uploaded_and_module_shows_join_the_rotations(tmp_path):
     assert lib.shows["my-show"].source == "uploaded" and lib.shows["weather"].source == "jb-weather"
     assert "not-mine" not in lib.shows                      # a module's show is named after the module
     assert any("broken.json" in n for n in lib.notes) and any("not-mine" in n for n in lib.notes)
-    assert lib.rotation("rock") == ["rock", "my-show"]       # the group's own built-in first
-    assert lib.rotation("chill") == ["chill", "weather"]
+    assert lib.rotation("rock") == ["rock", "rock-show", "my-show"]   # the group's own first, then built-ins
+    assert lib.rotation("chill") == ["chill", "moody", "weather"]
 
 
 def test_the_owner_picks_rotations_disables_and_pins(tmp_path):
     path = tmp_path / "settings.json"
     lib = Library(settings_path=path, shows_dir=tmp_path / "none", modules_dir=tmp_path / "none")
-    assert lib.rotation("metal") == ["metal", "arena"]
+    assert lib.rotation("metal") == ["metal", "arena", "rock-show"]
     path.write_text(json.dumps({"rotations": {"metal": ["arena"]}, "disabled": ["edm"]}))
     lib.refresh(force=True)
     assert lib.rotation("metal") == ["arena"]

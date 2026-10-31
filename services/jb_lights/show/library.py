@@ -6,11 +6,16 @@
              "weather-…")
   uploaded   /var/lib/juk3-box/lights/shows/*.json (admin › Light Show)
 
-A song's genre group (styles.group_of) has a rotation -- the owner's list
-for it, or every show made "for" it (its own built-in first) -- and the
-song's seed picks one, so a song always gets the same show. A pinned show
-plays for every song. Disabled shows are never picked. Changes on disk are
-picked up within REFRESH_S, without a restart.
+Which show a song gets (choose()): a pinned show, for every song; else,
+once the analyzer has said what kind of song it is (its feel), the show
+that fits it best (plan.fit: the feel against each show's "fits", its
+decade and tags, its genre group) -- of every show, or of the owner's
+rotation when they made one for the song's genre group. Before the feel,
+the genre group's rotation -- the owner's list for it, or every show made
+"for" it (its own built-in first) -- with the song's seed picking one
+(pick()). Shows that fit about as well take turns by the seed, so a song
+always gets the same show. Disabled shows are never picked. Changes on disk
+are picked up within REFRESH_S, without a restart.
 """
 
 import json
@@ -18,7 +23,7 @@ import time
 from pathlib import Path
 
 from services.jb_lights import owner
-from services.jb_lights.show import styles
+from services.jb_lights.show import plan, styles
 
 UPLOADED_DIR = owner.DIR / "shows"
 MODULES_DIR = Path("/var/lib/juk3-box/modules")
@@ -138,6 +143,25 @@ class Library:
         if sid != "city" and sid in self.shows and sid not in self.settings["disabled"]:
             return self.shows[sid]
         return None
+
+    def choose(self, feel, genre, tags, arousal, seed=0) -> tuple:
+        """(the show for a song, why: the words it was chosen by)."""
+        self.refresh()
+        s = self.settings
+        group = styles.group_of(genre, tags, arousal)
+        pin = s["pin"]
+        if pin in self.shows and pin not in s["disabled"]:
+            return self.shows[pin], plan.why(feel, None, pinned=True)
+        named = styles.genre_group(genre, tags)     # only a genre the song has counts toward the fit
+        if not feel:
+            return self.pick(genre, tags, arousal, seed), plan.why(None, named)
+        if group in s["rotations"]:
+            ids = self.rotation(group)
+        else:
+            # every show made for songs (one naming no genre and no feel is an idle show, like Weather's)
+            ids = [sid for sid, st in self.shows.items()
+                   if sid not in s["disabled"] and (st.groups or st.fits)] or [styles.LIVELY]
+        return self.shows[plan.best(self.shows, ids, feel, named, tags, seed)], plan.why(feel, named)
 
     def pick(self, genre, tags, arousal, seed=0) -> styles.Style:
         self.refresh()

@@ -1,40 +1,41 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "chill",
   "name": "Chill",
   "description": "Lavender, soft gold and teal; slow breathing.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["chill"],
-  "palettes": [
-    ["#9080D0", "#5070A0"],
-    ["#FFD890", "#FFB090"],
-    ["#40B0B0", "#3060C0"]
-  ],
+  "fits": {
+    "energy": 0.2,
+    "pace": 0.25,
+    "valence": 0.5,
+    "aggressive": 0.0
+  },
+  "palettes": [["#9080D0", "#5070A0"], ["#FFD890", "#FFB090"], ["#40B0B0", "#3060C0"]],
   "peak": ["#FFE8C0", "#C0B0FF"],
   "light": [0.1, 0.7],
   "strobe": 0,
-  "gap": "",
-  "pace": "half",
   "drive": "level",
   "release": 0.6,
   "beat_locked": false,
+  "motion": {
+    "pace": "half",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": ""
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["breathe"],
-      "main": ["breathe", "ribbon"],
-      "peak": ["wash"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["glow"],
-      "peak": ["glow"]
-    },
-    "meter": {
-      "calm": ["ribbon"],
-      "main": ["ribbon", "trace", "rain"],
-      "peak": ["ribbon", "tiles"]
-    },
+    "storyteller": {"calm": ["breathe"], "main": ["breathe", "ribbon"], "peak": ["wash"]},
+    "rhythm": {"calm": ["glow"], "main": ["glow"], "peak": ["glow"]},
+    "meter": {"calm": ["ribbon"], "main": ["ribbon", "trace", "rain"], "peak": ["ribbon", "tiles"]},
     "keys": "glow"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["breathe", "flow"], "meter": ["ribbon", "trace"]},
+    "big": {"storyteller": ["wash", "flow"], "rhythm": ["glow", "flow"]}
   }
 }

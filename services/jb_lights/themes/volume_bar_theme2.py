@@ -39,11 +39,26 @@ def _lerp(a, b, k):
     return tuple(int(x + (y - x) * k) for x, y in zip(a, b))
 
 
-def _palette(d):
-    for (d0, c0), (d1, c1) in zip(PALETTE, PALETTE[1:]):
+def _palette(d, stops=PALETTE):
+    for (d0, c0), (d1, c1) in zip(stops, stops[1:]):
         if d <= d1:
             return _lerp(c0, c1, (d - d0) / (d1 - d0))
-    return PALETTE[-1][1]
+    return stops[-1][1]
+
+
+def colours(palette=None):
+    """(the band's stops, its hot spots, its sparkles): the ribbon's own, or
+    in a light show's colours -- a white-hot core, then the song's colours
+    from the brightest to the darkest at the edge, hot spots in its warmest."""
+    if not palette:
+        return PALETTE, HOT, SPARK
+    cs = sorted((tuple(int(v) for v in c) for c in palette), key=sum, reverse=True)
+    core = _lerp(cs[0], (255, 255, 255), 0.6)
+    if len(cs) == 1:
+        cs = [cs[0], _lerp(cs[0], (0, 0, 0), 0.5)]
+    stops = [(0.0, core)] + [(0.35 + 0.65 * k / (len(cs) - 1), c) for k, c in enumerate(cs)]
+    hot = _lerp(max(cs, key=lambda c: c[0] - c[2]), (255, 255, 255), 0.2)
+    return stops, hot, _lerp(cs[0], (255, 255, 255), 0.5)
 
 
 class Ribbon:
@@ -68,10 +83,12 @@ class Ribbon:
             if self.sparks[key] < 0.05:
                 del self.sparks[key]
 
-    def frame(self, t, swell=1.0, ignite=None):
+    def frame(self, t, swell=1.0, ignite=None, palette=None):
         """swell scales the band's thickness (the music's loudness when
-        playing); ignite=True flares a hot spot (a beat) -- None = at random."""
+        playing); ignite=True flares a hot spot (a beat) -- None = at random;
+        palette: a light show's colours (colours())."""
         self._step_state(ignite)
+        stops, hot, spark_c = colours(palette)
         frame = matrix.blank()
         for c in range(matrix.COLS):
             x = c / (matrix.COLS - 1)
@@ -90,13 +107,13 @@ class Ribbon:
                 color = matrix.BLACK
                 if d < 1.15:
                     k = min(1.0, (1.15 - d) / 0.4)  # soft edge fade
-                    color = _palette(min(d, 1.0))
+                    color = _palette(min(d, 1.0), stops)
                     if self.hot[c] > 0.05 and d < 0.6:
-                        color = _lerp(color, HOT, self.hot[c] * 0.85)
+                        color = _lerp(color, hot, self.hot[c] * 0.85)
                     color = tuple(int(v * k * self.shimmer[c]) for v in color)
                 spark = self.sparks.get((c, row))
                 if spark:
-                    color = _lerp(color, SPARK, spark)
+                    color = _lerp(color, spark_c, spark)
                 frame[matrix.index(c, row)] = color
         return frame
 

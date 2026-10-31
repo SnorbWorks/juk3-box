@@ -1,6 +1,7 @@
 """admin › Light Show (docs/contracts/lights.md): the show library, the
-owner's light settings, uploaded shows, modules' inputs, the hardware, and
-previews rendered by the engine's own code.
+owner's light settings, uploaded shows, modules' inputs, the hardware,
+previews rendered by the engine's own code, and the songs the jukebox has
+learned (jb-analyzer's maps: what the lights know is coming).
 
 The admin writes; jb-lights reads (show/library.py picks up changes within
 a couple of seconds, no restart). What's playing comes back from jb-lights
@@ -8,15 +9,37 @@ on the bus (jukebox/jb-lights/state, retained).
 """
 
 import json
+import re
 from pathlib import Path
 
 from services.jb_lights import fixtures, owner, present
 from services.jb_lights.show import inputs as light_inputs
 from services.jb_lights.show import library as light_library
-from services.jb_lights.show import styles
+from services.jb_lights.show import plan, styles
 
 MAX_SHOW_BYTES = 64 * 1024
-PREVIEW_CACHE = 4
+PREVIEW_CACHE = 6
+# jb-analyzer's songs folder (services/jb_analyzer/memory.py, Store): <key>.json
+# is a song's map, <key>.npz the recording it was learned from. Read here
+# rather than through Store, which would bring numpy into the admin.
+SONGS_DIR = Path("/var/lib/juk3-box/songs")
+SONG_KEY_RE = re.compile(r"^[0-9a-f]{16}$")
+# A show's fits, in words: (the word for a high value, for a low one).
+FIT_WORDS = {"energy": ("energetic", "calm"), "valence": ("happy", "sad"), "tender": ("tender", None),
+             "aggressive": ("hard", None), "groove": ("groovy", None), "moody": ("moody", None),
+             "pace": ("fast", "slow"), "voice": ("sung", "instrumental")}
+
+
+def fits_words(st) -> list:
+    """The kind of song a show is made for, in words (from its fits)."""
+    words = []
+    for axis, (high, low) in FIT_WORDS.items():
+        v = st.fits.get(axis)
+        if isinstance(v, (int, float)) and v >= 0.65 and high:
+            words.append(high)
+        elif isinstance(v, (int, float)) and v <= 0.3 and low:
+            words.append(low)
+    return words + list(st.fits.get("eras", ()))
 
 
 class LightsError(Exception):
@@ -24,8 +47,9 @@ class LightsError(Exception):
 
 
 class LightsAdmin:
-    def __init__(self, lights_dir: Path, modules_dir: Path, lights_path: Path):
+    def __init__(self, lights_dir: Path, modules_dir: Path, lights_path: Path, songs_dir: Path = SONGS_DIR):
         self.dir = Path(lights_dir)
+        self.songs_dir = Path(songs_dir)
         self.settings_path = self.dir / "settings.json"
         self.shows_dir = self.dir / "shows"
         self.modules_dir = Path(modules_dir)
@@ -41,6 +65,8 @@ class LightsAdmin:
     def view(self, live: dict | None) -> dict:
         lib = self.library()
         shows = [{"id": sid, "name": st.title or sid, "description": st.description, "for": list(st.groups),
+                  "fits": fits_words(st), "tags": list(st.fits.get("tags", ()))[:6],
+                  "songs": bool(st.groups or st.fits),
                   "source": st.source, "version": st.version, "author": st.author,
                   "palette": ["#%02x%02x%02x" % tuple(c) for c in (st.palettes[0] if st.palettes else [])][:6],
                   "disabled": sid in lib.settings["disabled"]}
@@ -161,18 +187,59 @@ class LightsAdmin:
         if change:
             self._write(self.settings_path, owner.clean({**s, **change}))
 
-    def preview(self, sid: str) -> dict:
+    def preview(self, sid: str, feel: str | None = None) -> dict:
         from services.jb_lights import preview         # the engine: only when asked
         lib = self.library()
         st = lib.shows.get(sid)
         if st is None:
             raise LightsError("There's no show with that id.")
-        key = (sid, st.source, json.dumps(st.raw, sort_keys=True))
+        feel = feel if feel in preview.FEELS else next(iter(preview.FEELS))
+        key = (sid, feel, st.source, json.dumps(st.raw, sort_keys=True))
         if key not in self._previews:
             if len(self._previews) >= PREVIEW_CACHE:
                 self._previews.pop(next(iter(self._previews)))
-            self._previews[key] = preview.render(st)
+            self._previews[key] = preview.render(st, feel)
         return self._previews[key]
+
+    # Learned songs -----------------------------------------------------------
+
+    def songs(self) -> list:
+        """The songs the jukebox has learned, newest first: each one's map
+        as the lights read it (its sections and what each one is)."""
+        out = []
+        for f in self.songs_dir.glob("*.json") if self.songs_dir.is_dir() else []:
+            if not SONG_KEY_RE.match(f.stem):
+                continue
+            try:
+                d = json.loads(f.read_text())
+            except (OSError, ValueError):
+                continue
+            if not isinstance(d, dict) or not isinstance(d.get("sections"), list):
+                continue
+            song = d.get("song") if isinstance(d.get("song"), dict) else {}
+            secs = [x for x in d["sections"] if isinstance(x, dict) and isinstance(x.get("start"), (int, float))]
+            feel = d.get("feel") if isinstance(d.get("feel"), dict) else {}
+            out.append({"key": f.stem, "title": song.get("title"), "artist": song.get("artist"),
+                        "duration": song.get("duration"), "learned": d.get("learned"), "plays": d.get("plays"),
+                        "tempo": d.get("tempo"), "words": feel.get("words") or [],
+                        "sections": [{"start": x["start"], "end": x.get("end"), "label": x.get("label"),
+                                      "role": x.get("role"), "character": plan.character(x)} for x in secs]})
+        return sorted(out, key=lambda x: str(x.get("learned") or ""), reverse=True)
+
+    def forget(self, key: str) -> None:
+        """Forgets a learned song (its map and its recording): it's learned
+        again the next time it plays through."""
+        if not isinstance(key, str) or not SONG_KEY_RE.match(key):
+            raise LightsError("There's no song with that key.")
+        gone = False
+        for f in (self.songs_dir / f"{key}.json", self.songs_dir / f"{key}.npz"):
+            try:
+                f.unlink()
+                gone = True
+            except FileNotFoundError:
+                pass
+        if not gone:
+            raise LightsError("There's no song with that key.")
 
     @staticmethod
     def _write(path: Path, data: dict) -> None:

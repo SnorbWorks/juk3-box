@@ -7,9 +7,10 @@ its own thread), so both always agree on the look:
   idle    nothing playing for a few seconds -> the flowing waves (the ribbon) for
           3 minutes, then the idle looks (city, striped bar) for 3, and round again
   show    music playing -> the light show: the director (show/director.py) turns
-          the whole stream -- drums, the beat clock, gaps, hits, sections,
-          builds and drops -- into cues, in a style picked for the song's
-          genre (show/styles.py), and every part draws its own role
+          the whole stream -- drums, the cymbals, the beat clock, gaps, hits,
+          sections by name, builds and drops, the song's feel and its map --
+          into cues, by a plan for the song (show/plan.py) in the show that
+          fits it (show/styles.py), and every part draws its own role
   eq      (PLAYING_LOOK "auto") livelier music -> graphic EQ / classic analyzer
   ribbon  (PLAYING_LOOK "auto") calmer music -> the flowing ribbon
 
@@ -145,6 +146,16 @@ class Raw:
         self.gap_at = self.hit_at = self.section_at = self.drop_at = None
         self.hit_strength, self.hit_after_gap = 0.0, False
         self.section_energy = "same"
+        self.section = None              # the latest section event (label, role, n, size, voice, drums...)
+        self.crash_at, self.crash_v, self.ring = None, 0.0, 0.0
+        self.pos, self.pos_at, self.synced = None, 0.0, False    # where in the song (s), when it said
+        self.song, self.known = None, False                      # the song's id; learned (its map is whole)
+        self.feel, self.feel_at, self.voice = None, None, 0.0    # what kind of song (analyzer's feel.py)
+        self.map, self.map_at = None, None                       # the song's map (sections, moments)
+
+    def song_pos(self, now: float) -> float | None:
+        """Where in the song it is now (the analyzer's word, carried forward)."""
+        return None if self.pos is None else self.pos + (now - self.pos_at)
 
 
 class IdlePick:
@@ -223,6 +234,13 @@ class AudioFeed:
                 phase = _num(data.get("phase"))
                 raw.phase, raw.phase_at = (phase % 1.0 if phase is not None else None), now
                 raw.bar_beat = int(_num(data.get("bar_beat"), 0)) % 4
+                crash = _num(data.get("crash"), 0.0)
+                if crash > 0:
+                    raw.crash_at, raw.crash_v = now - max(0.0, _num(data.get("crash_ago"), 0.0)), min(1.0, crash)
+                raw.ring = max(0.0, min(1.0, _num(data.get("ring"), 0.0)))
+                pos = _num(data.get("pos"))
+                if pos is not None:
+                    raw.pos, raw.pos_at, raw.synced = pos, now, data.get("synced") is True
             elif kind == "slow":
                 mood = data.get("mood") or {}
                 a = mood.get("arousal")
@@ -234,6 +252,14 @@ class AudioFeed:
                 tags = [t for t in tags if isinstance(t, str)] if isinstance(tags, list) else []
                 if (genre, tags) != (raw.genre, raw.tags):
                     raw.genre, raw.tags, raw.genre_at = genre, tags, now
+                song = data.get("song") if isinstance(data.get("song"), str) else None
+                if song != raw.song:
+                    raw.song, raw.pos, raw.synced = song, None, False
+                raw.known = data.get("known") is True
+                feel = data.get("feel") if isinstance(data.get("feel"), dict) else None
+                if feel != raw.feel:
+                    raw.feel, raw.feel_at = feel, now
+                raw.voice = max(0.0, min(1.0, _num(data.get("voice"), 0.0)))
             elif kind == "events":
                 kind = data.get("type")
                 if kind == "drop":
@@ -247,8 +273,21 @@ class AudioFeed:
                 elif kind == "section":
                     raw.section_at = now
                     raw.section_energy = data.get("energy") if data.get("energy") in ("up", "down") else "same"
+                    raw.section = {k: v for k, v in data.items() if k not in ("v", "t", "type")}
+            elif kind == "map":
+                raw.map = data if isinstance(data.get("sections"), list) else None
+                raw.map_at = now
             elif kind == "status" and not data.get("online"):
                 self._last_fast = -1e9
+
+    def report(self, now=None) -> dict | None:
+        """The song's plan, look and map while the show plays (main.state);
+        under the lock, as the parts' threads update the director."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            if self.last is None or self.last.look != "show":
+                return None
+            return self.director.report(now, self.raw)
 
     def snapshot(self, now=None) -> Snapshot:
         now = time.monotonic() if now is None else now

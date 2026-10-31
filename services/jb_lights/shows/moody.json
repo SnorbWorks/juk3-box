@@ -1,0 +1,71 @@
+{
+  "format": 2,
+  "id": "moody",
+  "name": "Moody",
+  "description": "Deep blues and violet, moving slowly: breathing, flowing, the spectrum rising softly for the voice. Gaps go dark; nothing flashes.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["chill"],
+  "fits": {
+    "moody": 0.85,
+    "valence": 0.25,
+    "energy": 0.4,
+    "pace": 0.35,
+    "aggressive": 0.15,
+    "tender": 0.3,
+    "tags": [
+      "dark",
+      "moody",
+      "atmospheric",
+      "melancholy",
+      "melancholic",
+      "trip-hop",
+      "dream pop",
+      "shoegaze",
+      "darkwave",
+      "ethereal",
+      "haunting",
+      "brooding",
+      "downtempo",
+      "sad",
+      "heartbreak",
+      "lonely"
+    ]
+  },
+  "palettes": [
+    ["#0A1A6B", "#1E4FD8", "#5B2BA8"],
+    ["#062A5A", "#0D6E9A", "#1B2B8C"],
+    ["#101850", "#3A2A9C", "#2A78C8"]
+  ],
+  "peak": ["#4F8BFF", "#A9C8FF", "#6A3BD8"],
+  "light": [0.08, 0.8],
+  "strobe": 0,
+  "drive": "level",
+  "release": 0.6,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.85
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": "blackout"
+  },
+  "roles": {
+    "storyteller": {"calm": ["breathe", "flow"], "main": ["flow", "wash"], "peak": ["wash", "flow"]},
+    "rhythm": {"calm": ["glow"], "main": ["glow", "flow"], "peak": ["flow", "pulse"]},
+    "meter": {"calm": ["ribbon", "trace"], "main": ["ribbon", "mirror"], "peak": ["mirror", "tiles"]},
+    "keys": "glow"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["rise", "flow"], "meter": ["mirror", "spectrum"]},
+    "build": {"storyteller": ["wash"], "rhythm": ["flow"], "meter": ["trace"]},
+    "big": {
+      "storyteller": ["wash", "rise"],
+      "rhythm": ["pulse", "flow"],
+      "meter": ["mirror", "tiles"],
+      "keys": "pulse"
+    }
+  }
+}

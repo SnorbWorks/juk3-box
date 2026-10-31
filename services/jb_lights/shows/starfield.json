@@ -1,0 +1,64 @@
+{
+  "format": 2,
+  "id": "starfield",
+  "name": "Starfield",
+  "description": "Stars flying out from the middle of the cabinet, faster with the music; dark on the gaps, then bright when the beat slams back. For 70s and 80s songs, new wave, synthwave and alternative.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [],
+  "fits": {
+    "eras": ["70s", "80s"],
+    "energy": 0.6,
+    "groove": 0.55,
+    "tags": [
+      "alternative",
+      "alternative rock",
+      "new wave",
+      "synthwave",
+      "synthpop",
+      "post-punk",
+      "space rock",
+      "psychedelic",
+      "disco",
+      "80s",
+      "70s",
+      "indie",
+      "dream pop",
+      "electronic"
+    ]
+  },
+  "palettes": [
+    ["#FFFFFF", "#8EC5FF", "#C38BFF"],
+    ["#FFE6A8", "#FF7EB6", "#7AD7FF"],
+    ["#B7F7FF", "#FFFFFF", "#9F7CFF"]
+  ],
+  "peak": ["#FFFFFF", "#FFD27A", "#7AD7FF"],
+  "light": [0.15, 1.0],
+  "strobe": 1,
+  "drive": "kick",
+  "release": 0.25,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "slam",
+    "gap": "blackout"
+  },
+  "roles": {
+    "storyteller": {"calm": ["starfield"], "main": ["starfield"], "peak": ["starfield", "sweep"]},
+    "rhythm": {
+      "calm": ["starfield", "glow"],
+      "main": ["starfield", "chase"],
+      "peak": ["starfield", "pulse"]
+    },
+    "meter": {"calm": ["starfield"], "main": ["starfield", "comet"], "peak": ["starfield", "sparks"]},
+    "keys": "sparkle"
+  },
+  "sections": {
+    "vocal": {"meter": ["spectrum", "mirror"], "keys": "eq"},
+    "big": {"storyteller": ["starfield", "beams"], "rhythm": ["pulse", "starfield"]}
+  }
+}

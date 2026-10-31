@@ -1,40 +1,41 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "country",
   "name": "Country",
   "description": "Warm whites, amber and sunset; slow breath and wash. Never flashes.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["country"],
-  "palettes": [
-    ["#FFD8A0", "#FFA040", "#C05010"],
-    ["#FF8030", "#E06070", "#6080B0"],
-    ["#FFA040", "#FFC860"]
-  ],
+  "fits": {
+    "valence": 0.6,
+    "energy": 0.45,
+    "aggressive": 0.1,
+    "groove": 0.35
+  },
+  "palettes": [["#FFD8A0", "#FFA040", "#C05010"], ["#FF8030", "#E06070", "#6080B0"], ["#FFA040", "#FFC860"]],
   "peak": ["#FFE8C8", "#FFA040"],
   "light": [0.25, 0.75],
   "strobe": 0,
-  "gap": "dim",
-  "pace": "half",
   "drive": "kick",
   "release": 0.4,
   "beat_locked": true,
+  "motion": {
+    "pace": "half",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": "dim"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["breathe"],
-      "main": ["wash", "breathe"],
-      "peak": ["wash", "sweep"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["glow", "pulse"],
-      "peak": ["pulse"]
-    },
-    "meter": {
-      "calm": ["ribbon", "trace"],
-      "main": ["vu", "bounce"],
-      "peak": ["vu", "tiles"]
-    },
+    "storyteller": {"calm": ["breathe"], "main": ["wash", "breathe"], "peak": ["wash", "sweep"]},
+    "rhythm": {"calm": ["glow"], "main": ["glow", "pulse"], "peak": ["pulse"]},
+    "meter": {"calm": ["ribbon", "trace"], "main": ["vu", "bounce"], "peak": ["vu", "tiles"]},
     "keys": "pulse"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["rise", "wash"], "meter": ["vu", "spectrum"]},
+    "big": {"storyteller": ["sweep", "wash"], "rhythm": ["pulse"], "meter": ["vu", "tiles"]}
   }
 }

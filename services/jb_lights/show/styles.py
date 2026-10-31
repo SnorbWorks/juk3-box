@@ -1,11 +1,14 @@
 """Show styles: how the cabinet dresses each kind of music.
 
-A style is what a lighting designer brings to a genre: its palettes, how
-hard it hits, whether it strobes, what drives the rhythm, and which
-movement each part of the cabinet makes in each kind of moment. The
-director (director.py) picks one per song -- from the song's genre and
-listeners' tags (jb-analyzer's slow channel), else from its mood -- and the
-parts (parts.py) draw it.
+A style is what a lighting designer brings to a kind of music: its
+palettes, how hard it hits, whether it strobes, what drives the rhythm, and
+which movement each part of the cabinet makes in each kind of moment. Each
+song gets the one that fits it (library.choose, plan.fit): the analyzer's
+feel for the song against each show's "fits", its decade, tags and genre
+group counting too; until the feel is in, its genre group's shows take turns
+(from its genre and listeners' tags on jb-analyzer's slow channel, else its
+mood). The director (director.py) plays the song's plan and the parts
+(parts.py) draw it.
 
 Styles are **show files** (docs/contracts/lights.md, Shows): JSON recipes
 from the engine's effect library, no code. The built-in ones are in
@@ -22,8 +25,21 @@ show file:
   keys         the keypad: hats and accents
 
 Scenes are listed per tier -- calm (verses, breakdowns, quiet songs), main,
-peak (choruses, drops) -- as alternatives: each song picks its own, and
-they rotate every so many bars so a long song doesn't repeat itself.
+peak (choruses, drops) -- as alternatives. Format 2 adds what the
+choreographer (plan.py) plans a song with:
+  fits      what kind of song the show suits: targets on the analyzer's feel
+            (energy, valence, tender, aggressive, groove, moody, pace, voice,
+            0..1), decades ("eras") and listeners' tags ("tags")
+  motion    how it moves: its pace ("auto" follows the song) and how smooth
+            ("auto", or 0 punchy .. 1 flowing)
+  accents   what the big moments do: a crash cymbal ("splash", "flash",
+            "shimmer", "none"), a drop or the hit after a gap ("slam",
+            "flash", "swell", "burst"), a gap ("blackout", "dim", "")
+  sections  scenes per section character -- quiet, vocal, drive, big, build,
+            break, solo -- per role; a character it leaves out plays its
+            tier's scenes (CHARACTER_TIER)
+A format 1 file still loads: it fits by its genre groups alone, moves at
+its pace, and its tiers stand in for the characters.
 """
 
 import hashlib
@@ -33,21 +49,31 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 BUILTIN_DIR = Path(__file__).resolve().parent.parent / "shows"
-FORMATS = {1}
+FORMATS = {1, 2}
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 TIERS = ("calm", "main", "peak")
 ROLES = {"storyteller": "upper", "rhythm": "foot", "meter": "bar"}   # show file role -> part
 MAX_BYTES = 64 * 1024
+# A section's character (plan.character) and the tier that stands in for it.
+CHARACTERS = ("quiet", "vocal", "drive", "big", "build", "break", "solo")
+CHARACTER_TIER = {"quiet": "calm", "break": "calm", "vocal": "main", "drive": "main", "build": "main",
+                  "solo": "peak", "big": "peak"}
+FEEL_AXES = ("energy", "valence", "tender", "aggressive", "groove", "moody", "pace", "voice")
+ERAS = ("50s", "60s", "70s", "80s", "90s", "00s", "10s", "20s")
+PACES = ("auto", "half", "beat", "double")
+CRASHES = ("splash", "flash", "shimmer", "none")
+DROPS = ("slam", "flash", "swell", "burst")
+GAPS = ("blackout", "dim", "")
 
 # The effect library: the scenes each role can play (parts.py draws them;
 # tests check the two agree).
 SCENES = {
     "storyteller": {"breathe", "wash", "chase", "sweep", "rise", "slab", "wobble", "marquee", "tubes", "eq",
-                    "ribbon", "arena"},
-    "rhythm": {"glow", "pulse", "rows", "chase", "checker", "offbeat", "arena"},
+                    "ribbon", "arena", "starfield", "flow", "beams"},
+    "rhythm": {"glow", "pulse", "rows", "chase", "checker", "offbeat", "arena", "starfield", "flow", "beams"},
     "meter": {"spectrum", "classic", "vu", "ribbon", "drumkit", "tiles", "mirror", "bounce", "trace", "ripple",
-              "counter", "comet", "fire", "rain", "sparks", "arena"},
+              "counter", "comet", "fire", "rain", "sparks", "arena", "starfield", "flow"},
     "keys": {"sparkle", "eq", "pulse", "glow", "arena"},
 }
 
@@ -85,6 +111,18 @@ class Style:
     author: str = ""
     inputs: dict = field(default_factory=dict, compare=False, hash=False)   # what modules' lights do to it
     raw: dict = field(default=None, compare=False, hash=False, repr=False)  # the show file, as read
+    format: int = 1
+    fits: dict = field(default_factory=dict, compare=False, hash=False)     # what kind of song it suits
+    motion: dict = field(default_factory=lambda: {"pace": "auto", "smooth": "auto"}, compare=False, hash=False)
+    accents: dict = field(default_factory=lambda: {"crash": "splash", "drop": "flash", "gap": "blackout"},
+                          compare=False, hash=False)
+    sections: dict = field(default_factory=dict, compare=False, hash=False)  # part -> {character: scenes}
+
+    def scenes_for(self, part: str, character: str) -> tuple:
+        """The scenes a part may play in a section of this character."""
+        if part == "keys":
+            return (self.sections.get("keys", {}).get(character) or self.keys,)
+        return self.sections.get(part, {}).get(character) or getattr(self, part)[CHARACTER_TIER[character]]
 
 
 # Genre and tag words -> genre group. The first of a song's tags that matches
@@ -121,14 +159,19 @@ GROUP_NAMES = {"edm": "EDM and dance", "bass": "Dubstep and bass", "hiphop": "Hi
 CHILL, LIVELY = "chill", "pop"      # with no genre: calm music and the rest
 
 
-def group_of(genre, tags, arousal) -> str:
-    """A song's genre group: its genre, else the first tag we know (a
-    compound tag by its main word: "doom metal" is metal), else its mood."""
+def genre_group(genre, tags) -> str | None:
+    """The genre group a song's genre names, else the first tag we know (a
+    compound tag by its main word: "doom metal" is metal); None if none does."""
     words = [str(w).lower() for w in ([genre] if genre else []) + list(tags or [])]
     for g in [GENRE_STYLE.get(w) for w in words] + [GENRE_STYLE.get(p) for w in words for p in reversed(w.split())]:
         if g:
             return g
-    return CHILL if arousal is not None and arousal < 0.4 else LIVELY
+    return None
+
+
+def group_of(genre, tags, arousal) -> str:
+    """A song's genre group (genre_group), else its mood's."""
+    return genre_group(genre, tags) or (CHILL if arousal is not None and arousal < 0.4 else LIVELY)
 
 
 def seed(title, artist) -> int:
@@ -203,6 +246,8 @@ def check(d, source="uploaded") -> list[str]:
         extra = set(roles) - set(ROLES) - {"keys"}
         if extra:
             p.append(f"unknown roles: {', '.join(sorted(extra))}")
+    if d.get("format") == 2:
+        p += _check_format2(d)
     inputs = d.get("inputs", {})
     if not isinstance(inputs, dict):
         p.append("inputs must be an object")
@@ -217,17 +262,93 @@ def check(d, source="uploaded") -> list[str]:
     return p
 
 
+def _check_format2(d) -> list[str]:
+    p = []
+    fits = d.get("fits", {})
+    if not isinstance(fits, dict):
+        return ["fits must be an object"]
+    for k, v in fits.items():
+        if k in FEEL_AXES:
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 <= v <= 1:
+                p.append(f"fits.{k} must be 0 to 1 (the {k} of a song it suits)")
+        elif k == "eras":
+            if not isinstance(v, list) or not set(v) <= set(ERAS):
+                p.append(f"fits.eras must list decades from: {', '.join(ERAS)}")
+        elif k == "tags":
+            if not isinstance(v, list) or len(v) > 20 or not all(isinstance(t, str) and 0 < len(t) <= 40 for t in v):
+                p.append("fits.tags must list up to 20 words")
+        else:
+            p.append(f"fits.{k}: unknown (it can name {', '.join(FEEL_AXES)}, eras and tags)")
+    motion = d.get("motion", {})
+    if not isinstance(motion, dict):
+        p.append("motion must be an object")
+    else:
+        if motion.get("pace", "auto") not in PACES:
+            p.append(f"motion.pace must be one of {', '.join(map(repr, PACES))}")
+        sm = motion.get("smooth", "auto")
+        if sm != "auto" and (not isinstance(sm, (int, float)) or isinstance(sm, bool) or not 0 <= sm <= 1):
+            p.append("motion.smooth must be \"auto\" or 0 (punchy) to 1 (flowing)")
+    accents = d.get("accents", {})
+    if not isinstance(accents, dict):
+        p.append("accents must be an object")
+    else:
+        for key, ok in (("crash", CRASHES), ("drop", DROPS), ("gap", GAPS)):
+            if key in accents and accents[key] not in ok:
+                p.append(f"accents.{key} must be one of {', '.join(map(repr, ok))}")
+    secs = d.get("sections", {})
+    if not isinstance(secs, dict):
+        p.append("sections must be an object")
+        return p
+    for ch, roles in secs.items():
+        if ch not in CHARACTERS:
+            p.append(f"sections.{ch}: no such character (they are {', '.join(CHARACTERS)})")
+            continue
+        if not isinstance(roles, dict):
+            p.append(f"sections.{ch} must give scenes per role")
+            continue
+        for role, opts in roles.items():
+            if role == "keys":
+                if opts not in SCENES["keys"]:
+                    p.append(f"sections.{ch}.keys must be one of {', '.join(sorted(SCENES['keys']))}")
+            elif role not in ROLES:
+                p.append(f"sections.{ch}.{role}: unknown role")
+            elif not isinstance(opts, list) or not 1 <= len(opts) <= 12 or not all(o in SCENES[role] for o in opts):
+                p.append(f"sections.{ch}.{role} must list 1 to 12 of the {role}'s scenes "
+                         f"({', '.join(sorted(SCENES[role]))})")
+    return p
+
+
 def from_json(d, source="builtin") -> Style:
-    """A checked show file as a Style."""
+    """A checked show file as a Style (format 1 converted: it fits by its
+    genre groups, moves at its pace, and its tiers stand in for the characters)."""
     roles = d["roles"]
     tiers = {part: {t: tuple(roles[role][t]) for t in TIERS} for role, part in ROLES.items()}
+    strobe = d.get("strobe", 1)
+    if d.get("format") == 2:
+        motion = {"pace": d.get("pace", "auto"), "smooth": "auto", **d.get("motion", {})}
+        accents = {"crash": "splash", "drop": "flash" if strobe else "swell", "gap": d.get("gap", "blackout"),
+                   **d.get("accents", {})}
+        fits = d.get("fits", {})
+        sections = {}
+        for ch, rs in d.get("sections", {}).items():
+            for role, opts in rs.items():
+                part = ROLES.get(role, "keys")
+                sections.setdefault(part, {})[ch] = opts if role == "keys" else tuple(opts)
+    else:
+        motion = {"pace": d.get("pace", "beat"), "smooth": "auto"}
+        own = any("arena" in opts for opts in roles["storyteller"].values())   # it draws its own burst
+        accents = {"crash": "splash" if strobe else "shimmer",
+                   "drop": "burst" if own else "flash" if strobe else "swell", "gap": d.get("gap", "blackout")}
+        fits, sections = {}, {}
+    pace = motion["pace"] if motion["pace"] != "auto" else "beat"
     return Style(name=d["id"], palettes=tuple(P(*pal) for pal in d["palettes"]), peak=P(*d["peak"]),
-                 light=tuple(d.get("light", (0.3, 1.0))), strobe=d.get("strobe", 1), gap=d.get("gap", "blackout"),
-                 pace=d.get("pace", "beat"), drive=d.get("drive", "kick"), release=float(d.get("release", 0.2)),
+                 light=tuple(d.get("light", (0.3, 1.0))), strobe=strobe, gap=accents["gap"],
+                 pace=pace, drive=d.get("drive", "kick"), release=float(d.get("release", 0.2)),
                  beat_locked=d.get("beat_locked", True), keys=roles.get("keys", "sparkle"),
                  title=d["name"], description=d.get("description", ""), groups=tuple(d.get("for", ())),
                  source=source, version=d["version"], author=str(d.get("author", ""))[:80],
-                 inputs=d.get("inputs", {}), raw=d, **tiers)
+                 inputs=d.get("inputs", {}), raw=d, format=d.get("format", 1), fits=fits, motion=motion,
+                 accents=accents, sections=sections, **tiers)
 
 
 def load(path: Path, source="uploaded") -> tuple[Style | None, list[str]]:

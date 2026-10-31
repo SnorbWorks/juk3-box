@@ -1,41 +1,49 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "rock",
   "name": "Rock",
   "description": "Red and amber or blue and white slabs, a new one every bar; the snare drives.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["rock"],
-  "palettes": [
-    ["#FF2000", "#FF9000"],
-    ["#2050FF", "#FFFFFF"],
-    ["#FF9000", "#FFC040"],
-    ["#8000FF", "#FF2000"]
-  ],
+  "fits": {
+    "aggressive": 0.5,
+    "energy": 0.7,
+    "pace": 0.6
+  },
+  "palettes": [["#FF2000", "#FF9000"], ["#2050FF", "#FFFFFF"], ["#FF9000", "#FFC040"], ["#8000FF", "#FF2000"]],
   "peak": ["#FFFFFF", "#FF2000"],
   "light": [0.3, 1.0],
   "strobe": 1,
-  "gap": "blackout",
-  "pace": "beat",
   "drive": "snare",
   "release": 0.16,
   "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "slam",
+    "gap": "blackout"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["wash"],
-      "main": ["slab", "rise"],
-      "peak": ["slab", "sweep"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["pulse", "rows"],
-      "peak": ["pulse"]
-    },
+    "storyteller": {"calm": ["wash"], "main": ["slab", "rise"], "peak": ["slab", "sweep"]},
+    "rhythm": {"calm": ["glow"], "main": ["pulse", "rows"], "peak": ["pulse"]},
     "meter": {
       "calm": ["vu", "fire"],
       "main": ["drumkit", "vu", "fire"],
       "peak": ["fire", "drumkit", "sparks"]
     },
     "keys": "pulse"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["rise", "eq"], "meter": ["vu", "spectrum"], "keys": "eq"},
+    "big": {
+      "storyteller": ["beams", "slab", "sweep"],
+      "rhythm": ["beams", "pulse"],
+      "meter": ["fire", "sparks", "drumkit"]
+    },
+    "solo": {"storyteller": ["beams", "sweep"], "meter": ["sparks", "fire"]}
   }
 }

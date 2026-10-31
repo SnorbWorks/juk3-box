@@ -1,40 +1,40 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "jazz",
   "name": "Jazz",
   "description": "Amber and steel blue, almost still; follows the level, not the beat.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["jazz"],
-  "palettes": [
-    ["#FFA040", "#A01020"],
-    ["#4070B0", "#302080"],
-    ["#FFA040", "#FFC860"]
-  ],
+  "fits": {
+    "energy": 0.35,
+    "groove": 0.45,
+    "pace": 0.4,
+    "aggressive": 0.05
+  },
+  "palettes": [["#FFA040", "#A01020"], ["#4070B0", "#302080"], ["#FFA040", "#FFC860"]],
   "peak": ["#FFC860", "#FFA040"],
   "light": [0.2, 0.6],
   "strobe": 0,
-  "gap": "",
-  "pace": "half",
   "drive": "level",
   "release": 0.5,
   "beat_locked": false,
+  "motion": {
+    "pace": "half",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": ""
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["wash"],
-      "main": ["wash", "breathe"],
-      "peak": ["wash"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["glow"],
-      "peak": ["glow"]
-    },
-    "meter": {
-      "calm": ["vu"],
-      "main": ["vu", "trace", "rain"],
-      "peak": ["vu", "tiles"]
-    },
+    "storyteller": {"calm": ["wash"], "main": ["wash", "breathe"], "peak": ["wash"]},
+    "rhythm": {"calm": ["glow"], "main": ["glow"], "peak": ["glow"]},
+    "meter": {"calm": ["vu"], "main": ["vu", "trace", "rain"], "peak": ["vu", "tiles"]},
     "keys": "glow"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["wash", "breathe"], "meter": ["vu", "trace"]}
   }
 }

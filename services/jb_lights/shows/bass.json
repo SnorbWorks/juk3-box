@@ -1,40 +1,50 @@
 {
-  "format": 1,
+  "format": 2,
   "id": "bass",
   "name": "Bass",
   "description": "Dark, toxic green, red and purple; the panel as wide as the bass; half time on the snare.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Juk3box",
   "for": ["bass"],
-  "palettes": [
-    ["#39FF14", "#7A00FF"],
-    ["#FF0022", "#7A00FF"],
-    ["#39FF14", "#00E5FF"]
-  ],
+  "fits": {
+    "aggressive": 0.6,
+    "energy": 0.8,
+    "groove": 0.5,
+    "pace": 0.55
+  },
+  "palettes": [["#39FF14", "#7A00FF"], ["#FF0022", "#7A00FF"], ["#39FF14", "#00E5FF"]],
   "peak": ["#FFFFFF", "#39FF14"],
   "light": [0.0, 1.0],
   "strobe": 2,
-  "gap": "blackout",
-  "pace": "half",
   "drive": "snare",
   "release": 0.15,
   "beat_locked": true,
+  "motion": {
+    "pace": "half",
+    "smooth": "auto"
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "slam",
+    "gap": "blackout"
+  },
   "roles": {
-    "storyteller": {
-      "calm": ["breathe"],
-      "main": ["slab", "wobble"],
-      "peak": ["wobble", "slab"]
-    },
-    "rhythm": {
-      "calm": ["glow"],
-      "main": ["pulse"],
-      "peak": ["pulse", "rows"]
-    },
+    "storyteller": {"calm": ["breathe"], "main": ["slab", "wobble"], "peak": ["wobble", "slab"]},
+    "rhythm": {"calm": ["glow"], "main": ["pulse"], "peak": ["pulse", "rows"]},
     "meter": {
       "calm": ["vu", "trace"],
       "main": ["mirror", "drumkit", "tiles"],
       "peak": ["ripple", "sparks", "mirror"]
     },
     "keys": "pulse"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["wobble", "eq"], "meter": ["mirror", "spectrum"], "keys": "eq"},
+    "build": {"storyteller": ["slab"], "rhythm": ["pulse"], "meter": ["counter", "ripple"]},
+    "big": {
+      "storyteller": ["wobble", "slab"],
+      "rhythm": ["pulse", "rows"],
+      "meter": ["ripple", "sparks", "mirror"]
+    }
   }
 }

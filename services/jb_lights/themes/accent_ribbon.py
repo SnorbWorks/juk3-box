@@ -23,7 +23,7 @@ import time
 
 from services.jb_lights import accent
 from services.jb_lights.themes.accent_diner import limit
-from services.jb_lights.themes.volume_bar_theme2 import HOT, SPARK, _lerp, _palette
+from services.jb_lights.themes.volume_bar_theme2 import _lerp, _palette, colours
 
 FPS = 40
 BRIGHTNESS = 0.6
@@ -57,21 +57,24 @@ class AccentRibbon:
         half = 0.22 + 0.08 * math.sin(t * 0.8 + x * 4.0) + 0.04 * math.sin(t * 2.3 - x * 7.0)
         return centre, half
 
-    def _colour(self, i, d, c):
+    def _colour(self, i, d, c, look):
+        stops, hot, spark_c = look
         colour = (0, 0, 0)
         if d < 1.15:
             k = min(1.0, (1.15 - d) / 0.4)
-            colour = _palette(min(d, 1.0))
+            colour = _palette(min(d, 1.0), stops)
             if self.hot[c] > 0.05 and d < 0.6:
-                colour = _lerp(colour, HOT, self.hot[c] * 0.85)
+                colour = _lerp(colour, hot, self.hot[c] * 0.85)
             colour = tuple(int(v * k * self.shimmer[c]) for v in colour)
         spark = self.sparks.get(i)
-        return _lerp(colour, SPARK, spark) if spark else colour
+        return _lerp(colour, spark_c, spark) if spark else colour
 
-    def frame(self, t, swell=1.0, ignite=None):
+    def frame(self, t, swell=1.0, ignite=None, palette=None):
         """swell scales the band's thickness (the music's loudness when
-        playing); ignite=True flares a hot spot (a beat) -- None = at random."""
+        playing); ignite=True flares a hot spot (a beat) -- None = at random;
+        palette: a light show's colours (volume_bar_theme2.colours())."""
         self._step(ignite)
+        look = colours(palette)
         out = [(0, 0, 0)] * accent.NUM_PIXELS
         for i in range(accent.NUM_PIXELS):
             x, y = self.pos[i]
@@ -83,7 +86,7 @@ class AccentRibbon:
             d = abs(y - centre) / max(half, 0.05)
             if 1.2 < d < 1.5 and random.random() < 0.002:
                 self.sparks[i] = 1.0
-            out[i] = self._colour(i, d, self.bucket[i])
+            out[i] = self._colour(i, d, self.bucket[i], look)
         return out
 
 

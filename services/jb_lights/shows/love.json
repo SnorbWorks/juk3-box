@@ -1,0 +1,58 @@
+{
+  "format": 2,
+  "id": "love",
+  "name": "Love",
+  "description": "Flowing reds, roses and pinks rolling slowly across the cabinet; the voice on the level bar; the big moments swell instead of flashing.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [],
+  "fits": {
+    "tender": 0.85,
+    "valence": 0.6,
+    "energy": 0.35,
+    "pace": 0.25,
+    "aggressive": 0.0,
+    "tags": [
+      "love",
+      "love songs",
+      "love song",
+      "romantic",
+      "romance",
+      "ballad",
+      "ballads",
+      "wedding",
+      "slow jams",
+      "love ballad",
+      "sensual"
+    ]
+  },
+  "palettes": [
+    ["#FF2050", "#FF6FA8", "#B0103A"],
+    ["#FF4D6D", "#FF9EB5", "#C2185B"],
+    ["#E0115F", "#FF80AB", "#FF3D3D"]
+  ],
+  "peak": ["#FFD0DC", "#FF4D6D", "#FFFFFF"],
+  "light": [0.12, 0.85],
+  "strobe": 0,
+  "drive": "level",
+  "release": 0.7,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.9
+  },
+  "accents": {
+    "crash": "shimmer",
+    "drop": "swell",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {"calm": ["flow", "breathe"], "main": ["flow"], "peak": ["flow", "wash"]},
+    "rhythm": {"calm": ["glow"], "main": ["flow", "glow"], "peak": ["flow"]},
+    "meter": {"calm": ["ribbon"], "main": ["ribbon", "mirror"], "peak": ["mirror", "ribbon"]},
+    "keys": "glow"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["flow", "breathe"], "meter": ["mirror", "ribbon"]}
+  }
+}
