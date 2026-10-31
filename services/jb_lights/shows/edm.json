@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "id": "edm",
+  "name": "EDM",
+  "description": "Neon magenta, cyan and UV violet; the footlights on the kick; builds strobe the footlights.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["edm"],
+  "palettes": [
+    ["#FF00C8", "#00E5FF", "#7A00FF"],
+    ["#00E5FF", "#2040FF", "#B000FF"],
+    ["#7A00FF", "#FF2A9A", "#1A1AFF"],
+    ["#00FF9C", "#00B0FF", "#FF00C8"]
+  ],
+  "peak": ["#FFFFFF", "#00E5FF", "#FF00C8"],
+  "light": [0.2, 1.0],
+  "strobe": 2,
+  "gap": "blackout",
+  "pace": "beat",
+  "drive": "kick",
+  "release": 0.18,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["breathe", "ribbon"],
+      "main": ["chase", "sweep", "eq"],
+      "peak": ["chase", "slab"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["pulse", "rows"],
+      "peak": ["rows", "chase"]
+    },
+    "meter": {
+      "calm": ["ribbon", "trace"],
+      "main": ["spectrum", "tiles", "drumkit", "ripple", "comet", "classic"],
+      "peak": ["mirror", "ripple", "sparks", "counter"]
+    },
+    "keys": "sparkle"
+  }
+}

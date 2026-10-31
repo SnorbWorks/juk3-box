@@ -1,6 +1,7 @@
 from services.jb_lights import accent, buttons, matrix
 from services.jb_lights.show import arena, styles
 from services.jb_lights.show.director import Director
+from services.jb_lights.show.library import Library
 from services.jb_lights.show.parts import Bar, Foot, Keys, Upper, finish
 from services.jb_lights.tests.test_show import raw, run
 from services.jb_lights.themes.accent_city import BRIGHTNESS
@@ -10,7 +11,7 @@ DT = 0.025
 
 
 def cues_at(beat, since_burst=1e9, tier="main", hat=0.0, kick=0.0, tempo=120.0):
-    d = Director(pinned=lambda: "arena")
+    d = Director(Library({"pin": "arena"}))
     cues, _ = run(d, raw(), 0, 0.1)
     cues.beat, cues.bar_beat, cues.tier, cues.tempo = beat, int(beat) % 4, tier, tempo
     cues.pulse = {**cues.pulse, "hat": hat, "kick": kick, "drive": kick}
@@ -27,10 +28,10 @@ def luma(frame):
 
 
 def test_the_owner_pins_the_style_for_every_song():
-    d = Director(pinned=lambda: "arena")
+    d = Director(Library({"pin": "arena"}))
     cues, _ = run(d, raw(genre="country"), 0, 0.5)
     assert cues.style.name == "arena" and set(cues.scene.values()) == {"arena"}
-    d = Director(pinned=lambda: "no-such-style")
+    d = Director(Library({"pin": "no-such-style"}))
     cues, _ = run(d, raw(genre="country"), 0, 0.5)
     assert cues.style.name == "country"
 
@@ -75,7 +76,7 @@ def test_bursts_come_on_the_drop_not_the_moments_just_before_it():
     """Owner, 2026-10-30: the flash led the beat. A section lifting and the
     hit after a gap come just before a drop; only the drop (or a really big
     hit on its own) bursts."""
-    d = Director(pinned=lambda: "arena")
+    d = Director(Library({"pin": "arena"}))
     r = raw()
     cues, t = run(d, r, 0, 1.0)
     assert cues.since_burst > 100

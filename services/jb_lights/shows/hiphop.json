@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "id": "hiphop",
+  "name": "Hip-hop",
+  "description": "Gold, purple and deep red; kick at the front, snare at the back; the spectrum rising.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["hiphop"],
+  "palettes": [
+    ["#FFB000", "#6A0DAD"],
+    ["#B0102A", "#FFB000"],
+    ["#6A0DAD", "#FF2A9A"],
+    ["#FFB000", "#20103A"]
+  ],
+  "peak": ["#FFD060", "#FFFFFF", "#6A0DAD"],
+  "light": [0.3, 0.9],
+  "strobe": 1,
+  "gap": "blackout",
+  "pace": "beat",
+  "drive": "kick",
+  "release": 0.22,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["wash"],
+      "main": ["wash", "rise"],
+      "peak": ["sweep", "rise"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["rows"],
+      "peak": ["rows", "pulse"]
+    },
+    "meter": {
+      "calm": ["trace", "vu"],
+      "main": ["drumkit", "tiles", "vu", "bounce"],
+      "peak": ["drumkit", "mirror", "ripple"]
+    },
+    "keys": "sparkle"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "id": "pop",
+  "name": "Pop",
+  "description": "Pink, sky and yellow, a new palette each section; breathe, wash and sweep.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["pop"],
+  "palettes": [
+    ["#FF5FA2", "#4FC3F7", "#FFE14D"],
+    ["#4FC3F7", "#9C6BFF", "#FF5FA2"],
+    ["#FFE14D", "#FF7A59", "#FF5FA2"],
+    ["#5FFFC8", "#4FC3F7", "#C9A0FF"]
+  ],
+  "peak": ["#FFFFFF", "#FF5FA2", "#FFE14D"],
+  "light": [0.4, 1.0],
+  "strobe": 1,
+  "gap": "blackout",
+  "pace": "beat",
+  "drive": "kick",
+  "release": 0.22,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["breathe", "ribbon"],
+      "main": ["wash", "sweep"],
+      "peak": ["sweep", "chase"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["pulse", "chase"],
+      "peak": ["chase", "rows"]
+    },
+    "meter": {
+      "calm": ["ribbon", "trace"],
+      "main": ["spectrum", "bounce", "tiles", "counter"],
+      "peak": ["mirror", "comet", "sparks"]
+    },
+    "keys": "eq"
+  }
+}

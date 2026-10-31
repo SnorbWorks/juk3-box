@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "latin",
+  "name": "Latin",
+  "description": "Rasta red, gold and green, coral and turquoise; the footlights on the off-beat.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["latin"],
+  "palettes": [
+    ["#FF2020", "#FFC000", "#20C040"],
+    ["#FF6050", "#FF00A0", "#20E0D0"],
+    ["#FFE020", "#20E0D0", "#FF6050"]
+  ],
+  "peak": ["#FFFFFF", "#FFE020", "#FF00A0"],
+  "light": [0.3, 0.9],
+  "strobe": 1,
+  "gap": "blackout",
+  "pace": "beat",
+  "drive": "offbeat",
+  "release": 0.3,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["wash"],
+      "main": ["wash", "sweep"],
+      "peak": ["sweep", "chase"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["offbeat"],
+      "peak": ["offbeat", "pulse"]
+    },
+    "meter": {
+      "calm": ["vu"],
+      "main": ["vu", "drumkit", "bounce", "tiles"],
+      "peak": ["spectrum", "counter", "sparks"]
+    },
+    "keys": "sparkle"
+  }
+}

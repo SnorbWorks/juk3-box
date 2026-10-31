@@ -1,7 +1,8 @@
 """The show's director: jb-analyzer's stream in, cues for every part out.
 
 What it decides, moment to moment (docs/Light Show Styles.md):
-  style    per song, from genre, tags or mood (styles.pick); the song's own
+  style    per song, from genre, tags or mood (library.pick: the owner's
+           pin or the genre's rotation); the song's own
            seed picks among the style's palettes and scenes, so two songs
            of one genre still look different
   palette  moves on at each new section; drops and big choruses switch to
@@ -31,8 +32,8 @@ Pure: update() reads the feed's raw state under its lock and returns Cues.
 import math
 from dataclasses import dataclass
 
-from services.jb_lights import present
 from services.jb_lights.show import styles
+from services.jb_lights.show.library import Library
 
 ROTATE_BARS = 16          # each part changes its movement this often, within a section...
 BAR_ROTATE_BARS = 8       # ...the level bar, the cabinet's secondary voice, twice as often
@@ -73,8 +74,8 @@ class Cues:
 
 
 class Director:
-    def __init__(self, pinned=present.show_style):
-        self.pinned = pinned          # () -> the owner's pinned style name, or None
+    def __init__(self, library=None):
+        self.library = library or Library()      # every show, and the owner's choices
         self.song = None
         self.style = styles.STYLES["pop"]
         self.seed = 0
@@ -101,7 +102,7 @@ class Director:
     def _new_song(self, raw, now):
         self.song = (raw.title, raw.artist)
         self.seed = styles.seed(raw.title, raw.artist)
-        self.style = styles.pick(raw.genre, raw.tags, raw.arousal, self.pinned(), self.seed)
+        self.style = self.library.pick(raw.genre, raw.tags, raw.arousal, self.seed)
         self.palette_n = self.seed % len(self.style.palettes)
         self.peak_until = -1e9
         self.beat, self.prev_phase = 0.0, None
@@ -133,7 +134,7 @@ class Director:
         if (raw.title, raw.artist) != self.song:
             self._new_song(raw, now)
         elif raw.genre_at is not None and self._fresh("genre", raw.genre_at):
-            style = styles.pick(raw.genre, raw.tags, raw.arousal, self.pinned(), self.seed)
+            style = self.library.pick(raw.genre, raw.tags, raw.arousal, self.seed)
             if style is not self.style:
                 self.style = style
                 self.palette_n = self.seed % len(style.palettes)

@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "oldies",
+  "name": "Oldies",
+  "description": "The marquee: chasing bulbs, bubble tubes and a spinning record in incandescent amber. Never flashes.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["oldies"],
+  "palettes": [
+    ["#FFA040", "#D01030", "#40E0B0"],
+    ["#FFA040", "#F0F0FF", "#20B0B0"],
+    ["#D01030", "#FFC040", "#FFA040"]
+  ],
+  "peak": ["#FFE0B0", "#FFA040", "#D01030"],
+  "light": [0.4, 0.85],
+  "strobe": 0,
+  "gap": "dim",
+  "pace": "beat",
+  "drive": "snare",
+  "release": 0.35,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["marquee"],
+      "main": ["marquee", "tubes"],
+      "peak": ["tubes", "marquee"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["chase"],
+      "peak": ["chase", "pulse"]
+    },
+    "meter": {
+      "calm": ["vu"],
+      "main": ["vu", "bounce", "tiles"],
+      "peak": ["tiles", "counter"]
+    },
+    "keys": "pulse"
+  }
+}

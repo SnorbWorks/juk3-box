@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "soul",
+  "name": "Soul",
+  "description": "Disco gold, red, green and blue; the footlights a checkerboard flipping on the beat.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["soul"],
+  "palettes": [
+    ["#FFC040", "#FF2020", "#20FF60", "#2060FF"],
+    ["#FF00A0", "#8000FF", "#FF8090"],
+    ["#FFC040", "#FFE8C0", "#FF3000"]
+  ],
+  "peak": ["#FFFFFF", "#FFC040", "#FF00A0"],
+  "light": [0.35, 0.95],
+  "strobe": 1,
+  "gap": "blackout",
+  "pace": "beat",
+  "drive": "kick",
+  "release": 0.25,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["wash"],
+      "main": ["chase", "wash"],
+      "peak": ["chase", "sweep"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["checker"],
+      "peak": ["checker", "chase"]
+    },
+    "meter": {
+      "calm": ["vu"],
+      "main": ["spectrum", "drumkit", "counter", "classic"],
+      "peak": ["spectrum", "sparks", "mirror"]
+    },
+    "keys": "sparkle"
+  }
+}

@@ -6,6 +6,7 @@ from services.jb_lights.audio_feed import AudioFeed, LookPicker, Raw
 from services.jb_lights.levelbar import MusicLooks
 from services.jb_lights.show import styles
 from services.jb_lights.show.director import MAX_FLASHES_PER_S, Director
+from services.jb_lights.show.library import Library
 from services.jb_lights.show.parts import Bar, Foot, Keys, Upper
 from services.jb_lights.themes.buttons_music import ButtonsMusic
 from services.jb_lights.themes.volume_bar_idle import Idle
@@ -14,17 +15,20 @@ A = "jukebox/analysis/audio/"
 
 
 def test_genre_and_tags_pick_the_style_and_mood_is_the_fallback():
-    assert styles.pick("hip-hop", [], 0.7).name == "hiphop"
-    assert styles.pick(None, ["seen live", "Funk", "80s"], 0.7).name == "soul"
-    assert styles.pick("dubstep", ["edm"], 0.9).name == "bass"
-    # A genre with a rotation: each song's seed picks one of its styles.
-    assert {styles.pick("metal", [], 0.8, seed=n).name for n in range(4)} == {"metal", "arena"}
-    assert styles.pick("rock", [], 0.8, seed=1).name == "rock"
+    lib = Library({})
+    pick = lambda *a, seed=0: lib.pick(*a, seed=seed).name
+    assert pick("hip-hop", [], 0.7) == "hiphop"
+    assert pick(None, ["seen live", "Funk", "80s"], 0.7) == "soul"
+    assert pick("dubstep", ["edm"], 0.9, seed=0) in ("bass", "arena")
+    # A genre group's shows take turns, song by song: metal's own, then arena.
+    assert lib.rotation("metal") == ["metal", "arena"]
+    assert {pick("metal", [], 0.8, seed=n) for n in range(4)} == {"metal", "arena"}
+    assert pick("rock", [], 0.8, seed=1) == "rock"
     # A compound tag counts by its main word.
-    assert styles.pick(None, ["sludge", "doom metal"], 0.4, seed=0).name == "metal"
-    assert styles.pick(None, ["seen live", "dream pop"], 0.4).name == "pop"
-    assert styles.pick(None, [], 0.2).name == "chill"
-    assert styles.pick(None, ["polka"], 0.8).name == "pop"
+    assert styles.group_of(None, ["sludge", "doom metal"], 0.4) == "metal"
+    assert styles.group_of(None, ["seen live", "dream pop"], 0.4) == "pop"
+    assert pick(None, [], 0.2) == "chill"
+    assert pick(None, ["polka"], 0.8) == "pop"
     assert styles.seed("Song", "Band") == styles.seed("Song", "Band") != styles.seed("Other", "Band")
 
 
@@ -149,7 +153,7 @@ def _valid(frame, n):
 def test_every_style_renders_on_every_part_through_the_feed():
     for name in styles.STYLES:
         # Pinned, so a genre's rotation can't pick another style for the test song.
-        feed = AudioFeed(picker=LookPicker("show"), director=Director(pinned=lambda: name))
+        feed = AudioFeed(picker=LookPicker("show"), director=Director(Library({"pin": name})))
         looks, bar, keys = Looks(accent.positions()), MusicLooks(Idle()), ButtonsMusic()
         genre = next((g for g, s in styles.GENRE_STYLE.items() if s == name), "pop")
         t = 0.0

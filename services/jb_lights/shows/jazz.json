@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "jazz",
+  "name": "Jazz",
+  "description": "Amber and steel blue, almost still; follows the level, not the beat.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["jazz"],
+  "palettes": [
+    ["#FFA040", "#A01020"],
+    ["#4070B0", "#302080"],
+    ["#FFA040", "#FFC860"]
+  ],
+  "peak": ["#FFC860", "#FFA040"],
+  "light": [0.2, 0.6],
+  "strobe": 0,
+  "gap": "",
+  "pace": "half",
+  "drive": "level",
+  "release": 0.5,
+  "beat_locked": false,
+  "roles": {
+    "storyteller": {
+      "calm": ["wash"],
+      "main": ["wash", "breathe"],
+      "peak": ["wash"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["glow"],
+      "peak": ["glow"]
+    },
+    "meter": {
+      "calm": ["vu"],
+      "main": ["vu", "trace", "rain"],
+      "peak": ["vu", "tiles"]
+    },
+    "keys": "glow"
+  }
+}

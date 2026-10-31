@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "country",
+  "name": "Country",
+  "description": "Warm whites, amber and sunset; slow breath and wash. Never flashes.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["country"],
+  "palettes": [
+    ["#FFD8A0", "#FFA040", "#C05010"],
+    ["#FF8030", "#E06070", "#6080B0"],
+    ["#FFA040", "#FFC860"]
+  ],
+  "peak": ["#FFE8C8", "#FFA040"],
+  "light": [0.25, 0.75],
+  "strobe": 0,
+  "gap": "dim",
+  "pace": "half",
+  "drive": "kick",
+  "release": 0.4,
+  "beat_locked": true,
+  "roles": {
+    "storyteller": {
+      "calm": ["breathe"],
+      "main": ["wash", "breathe"],
+      "peak": ["wash", "sweep"]
+    },
+    "rhythm": {
+      "calm": ["glow"],
+      "main": ["glow", "pulse"],
+      "peak": ["pulse"]
+    },
+    "meter": {
+      "calm": ["ribbon", "trace"],
+      "main": ["vu", "bounce"],
+      "peak": ["vu", "tiles"]
+    },
+    "keys": "pulse"
+  }
+}
