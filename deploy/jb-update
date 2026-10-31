@@ -41,7 +41,10 @@ restart to install is still to come (resume.json).
 
 A copy without /opt/juk3-box/VERSION is a developer's (deploy.sh): it's
 never updated from here. Runs as root: from the timer (jb-update.timer),
-or jb-setupctl's "update" requests (the admin's Updates card).
+or jb-setupctl's "update" requests (the admin's Updates card). Never two
+at once (each would install over the other's files): the nightly run
+leaves it to the next night when another is under way, and jb-setupctl
+doesn't start one beside it.
 """
 
 import hashlib
@@ -80,6 +83,9 @@ STATUS_RE = re.compile(r"^(dlstatus|pmstatus):(.+?):(\d+(?:\.\d+)?):(.*)$")
 RESTART_RE = re.compile(r"^(linux-image|linux-headers|raspi-firmware|rpi-eeprom|raspberrypi-sys-mods|libc6|systemd|dbus)")
 RESUME = DIR / "resume.json"
 ROOTFS = "/usr/local/sbin/jb-rootfs"
+# The other updates: the admin's Update now and Raspberry Pi OS installs
+# (deploy/jb-setupctl), and the install after a restart to install.
+OTHER_UNITS = ("jb-update-now", "jb-update-os", "jb-update-resume")
 APT_DATA = Path("/data/cache/apt")       # apt's lists and downloads while protected
 APT_OPTS = ("-y", "-q", "-o", "DPkg::Lock::Timeout=300",
             "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold")
@@ -141,6 +147,13 @@ def os_phase(name, **changes) -> dict:
 
 def auto_on() -> bool:
     return read_json(SETTINGS, {}).get("auto", True) is not False
+
+
+def under_way(unit: str) -> bool:
+    """A oneshot unit (jb-update-resume) is "activating" until it's done,
+    which systemctl is-active doesn't count as active."""
+    return run("systemctl", "is-active", unit, check=False).stdout.strip() in \
+        ("active", "activating", "deactivating", "reloading")
 
 
 def fetch(url: str, dest: Path | None = None) -> bytes | None:
@@ -525,6 +538,9 @@ def main():
     elif a == ["apply"]:
         s = apply()
     elif a == ["auto"]:
+        if any(under_way(u) for u in OTHER_UNITS):
+            print("jb-update: another update is under way; this one waits for the next night")
+            sys.exit(0)
         if auto_on() and protected():
             # Both in one start without protection, not a restart each.
             s = check()

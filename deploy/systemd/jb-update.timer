@@ -1,5 +1,7 @@
 # Nightly, between 3:30 and 4:30 (each jukebox picks its own minute), or
-# at the next start if it was off then.
+# within the hour after the next start if it was off then. A protected
+# system (deploy/jb-rootfs) forgets the last run when it restarts, so that's
+# within the hour after nearly every start.
 [Unit]
 Description=juk3-box nightly update check
 

@@ -340,6 +340,35 @@ def test_the_start_that_installs_says_so_until_the_last_restart(jb, monkeypatch)
     assert not jb.RESUME.exists() and [c for c, _ in jb.ran] == [ON, REBOOT]
 
 
+def test_the_nightly_run_never_starts_beside_another_update(jb, monkeypatch):
+    # It once started during the install after a restart to install (v0.3.1). A
+    # oneshot unit is "activating" until it's done: is-active says 3, not running.
+    monkeypatch.setattr(jb.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(jb.sys, "argv", ["jb-update", "auto"])
+    monkeypatch.setattr(jb, "auto_on", lambda: False)
+    states, done = {}, []
+    recorded = jb.run
+
+    def run(*cmd, check=True, **kw):
+        if cmd[:2] == ("systemctl", "is-active"):
+            state = states.get(cmd[2], "inactive")
+            return subprocess.CompletedProcess(cmd, 0 if state == "active" else 3, state + "\n", "")
+        return recorded(*cmd, check=check, **kw)
+    monkeypatch.setattr(jb, "run", run)
+    monkeypatch.setattr(jb, "check", lambda: done.append("check") or {})
+    monkeypatch.setattr(jb, "os_check", lambda: done.append("os-check") or {})
+    for unit, state in (("jb-update-resume", "activating"), ("jb-update-now", "active"), ("jb-update-os", "active")):
+        states.clear()
+        states[unit] = state
+        with pytest.raises(SystemExit) as e:
+            jb.main()
+        assert e.value.code == 0 and done == [] and not jb.STATE.exists()
+    states.clear()
+    with pytest.raises(SystemExit) as e:
+        jb.main()
+    assert e.value.code == 0 and done == ["check", "os-check"]
+
+
 def test_a_step_from_before_the_last_restart_is_over(tmp_path, monkeypatch):
     from services.jb_admin import updates
     now = time.time()

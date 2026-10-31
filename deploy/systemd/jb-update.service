@@ -2,7 +2,9 @@
 # the owner left automatic updates on. Started by jb-update.timer.
 [Unit]
 Description=juk3-box update (nightly)
-After=network-online.target
+# Not beside the install after a restart to install (it once started in the
+# middle of one): it waits, and that start's restart cancels it.
+After=network-online.target jb-update-resume.service
 Wants=network-online.target
 
 [Service]

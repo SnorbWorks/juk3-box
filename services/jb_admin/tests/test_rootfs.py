@@ -136,6 +136,14 @@ def test_resume_installs_then_protects_again_and_restarts(tmp_path, monkeypatch)
     assert up.read_json(up.STATE, {})["os"]["phase"] == "protecting"     # until that restart
 
 
+def test_the_nightly_run_waits_for_the_install_after_a_restart():
+    # It once started in the middle of one (v0.3.1). That start ends in a
+    # restart, which cancels the nightly run waiting behind it.
+    unit = (DEPLOY / "systemd" / "jb-update.service").read_text()
+    after = next(l for l in unit.splitlines() if l.startswith("After="))
+    assert "jb-update-resume.service" in after.split("=", 1)[1].split()
+
+
 def test_protected_reads_the_kernel_command_line():
     assert up.protected("overlayroot=tmpfs:recurse=0 console=tty1")
     assert not up.protected("console=tty1 root=PARTUUID=x")

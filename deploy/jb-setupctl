@@ -285,22 +285,28 @@ def cmd_lastfm(value: str) -> str:
     return "changed" if changed else "unchanged"
 
 
+def under_way(*units) -> bool:
+    """Any of them running. A oneshot unit (the nightly jb-update, the install
+    after a restart to install) is "activating" until it's done, which
+    systemctl is-active doesn't count as active."""
+    return any(run("systemctl", "is-active", u, check=False).stdout.strip() in
+               ("active", "activating", "deactivating", "reloading") for u in units)
+
+
 def cmd_update(what: str) -> str:
     if what == "check":
         return run(UPDATE, "check", check=False).stdout.strip()
     if what in ("auto-on", "auto-off"):
         return run(UPDATE, "set-auto", what[5:]).stdout.strip()
     if what == "apply":
-        if run("systemctl", "is-active", "--quiet", UPDATE_UNIT, check=False).returncode == 0 or \
-                run("systemctl", "is-active", "--quiet", "jb-update", check=False).returncode == 0:
+        if under_way(UPDATE_UNIT, "jb-update", "jb-update-resume"):
             return "already updating"
         run("systemctl", "reset-failed", UPDATE_UNIT, check=False)
         run("systemd-run", f"--unit={UPDATE_UNIT}", "--collect", "--no-block", "--quiet", UPDATE, "apply")
         return "started"
     if what in ("os-check", "os-security", "os-all"):
         # apt takes minutes: on its own, like apply; the admin follows the state.
-        if any(run("systemctl", "is-active", "--quiet", u, check=False).returncode == 0
-               for u in (OS_UNIT, UPDATE_UNIT, "jb-update")):
+        if under_way(OS_UNIT, UPDATE_UNIT, "jb-update", "jb-update-resume"):
             return "already updating"
         verb = ("os-check",) if what == "os-check" else ("os-apply", what[3:])
         run("systemctl", "reset-failed", OS_UNIT, check=False)

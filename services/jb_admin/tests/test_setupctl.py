@@ -3,6 +3,7 @@
 import importlib.machinery
 import json
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,30 @@ def test_requests_outside_its_list_are_refused():
                 ["lights", "load", "accent", "999"], ["lastfm", "not-a-key"], ["lastfm", "A" * 32], ["ssh", "maybe"], ["ssh"]):
         with pytest.raises(ctl.Refused):
             ctl.dispatch(bad)
+
+
+def test_an_update_never_starts_beside_another(monkeypatch):
+    # The nightly run and the install after a restart to install are oneshot units:
+    # "activating" while they run, which systemctl is-active (3) doesn't count.
+    states, started = {}, []
+
+    def run(*cmd, check=True, **kw):
+        if cmd[:2] == ("systemctl", "is-active"):
+            state = states.get(cmd[2], "inactive")
+            return subprocess.CompletedProcess(cmd, 0 if state == "active" else 3, state + "\n", "")
+        if cmd[0] == "systemd-run":
+            started.append(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(ctl, "run", run)
+    for unit, state in (("jb-update", "activating"), ("jb-update-resume", "activating"), (ctl.UPDATE_UNIT, "active")):
+        states.clear()
+        states[unit] = state
+        assert ctl.cmd_update("apply") == "already updating"
+        assert ctl.cmd_update("os-all") == "already updating"
+    assert started == []
+    states.clear()
+    assert ctl.cmd_update("apply") == "started" and ctl.cmd_update("os-security") == "started"
+    assert started == [f"--unit={ctl.UPDATE_UNIT}", f"--unit={ctl.OS_UNIT}"]
 
 
 def test_the_lastfm_key_is_set_and_cleared_keeping_the_other_settings():
