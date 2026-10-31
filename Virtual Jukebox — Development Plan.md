@@ -16,7 +16,7 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 | 4 Phone source | Bluetooth and the Helper app, one phone in charge at a time (Oct 20). Open: a second phone with a library; Bluetooth reliability in the cabinet |
 | 5 Library | Done: exact artists and albums from the Helper app, borrowed by Bluetooth songs it also has (Oct 22); play counts and Most Played |
 | 6 Core | Done. Reset clears a half-typed pick (checked Oct 22); holding it cancels a song |
-| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20). Arena show, drop on its kick, keypad back in the show on a Pi 5 (Oct 30). Next: the light platform (Phase 11) |
+| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20). Arena show, drop on its kick, keypad back in the show on a Pi 5 (Oct 30). Light platform (Phase 11) released in v0.2.0 (Oct 30) |
 | 7 UI platform | Done; Neon is the default (Oct 21) |
 | 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, Last.fm), Updates (Oct 22), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
 | 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Read-only system drive built for image cards (Oct 22; test on a fresh card with the image). Open, later: the live netwatch test, log rotation, cold boot under a minute, pull-the-plug tests |
@@ -531,7 +531,7 @@ Not in v0.2.0: effects written as code by others (needs sandboxed per-pixel code
 - [x] Engine layers and safety in all three chains (accent, level bar, keypad)
 - [x] Admin › Light Show (Now, Shows, Preview, Inputs, Safety, Hardware)
 - [x] Weather 1.4: lights signals, cues and an idle show
-- [ ] Release v0.2.0 (with the Bluetooth-sync fix)
+- [x] Release v0.2.0 (with the Bluetooth-sync fix): released Oct 30 after the owner checked it on the cabinet
 
 ## Roadmap (agreed Oct 14, 2026)
 
