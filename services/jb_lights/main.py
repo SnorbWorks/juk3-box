@@ -30,6 +30,7 @@ import os
 import signal
 import sys
 import threading
+import time
 import traceback
 
 from services.jb_lights import accent_lights, levelbar, pio_chains, present
@@ -39,6 +40,28 @@ from services.jb_lights.themes import buttons_theme1
 from shared import hardware
 
 BAR_THEME = 5   # idle colour stripes beside the city (user, 2026-10-19); music picks the rest
+STATE_TOPIC = "jukebox/jb-lights/state"
+REPORT_S = 2.0
+
+
+def state(feed, inputs, run) -> dict:
+    """What the lights are doing, for admin › Light Show › Now (retained)."""
+    snap = feed.last
+    lib = feed.director.library
+    cues = snap.cues if snap else None
+    show = cues.style if cues else None
+    return {"v": 1, "look": snap.look if snap else "idle", "chains": sorted(run),
+            "show": {"id": show.name, "name": show.title or show.name, "source": show.source} if show else None,
+            "tier": cues.tier if cues else None, "idle": lib.settings["idle"], "pin": lib.settings["pin"],
+            "inputs": inputs.report(), "notes": lib.notes[:20], "ts": int(time.time())}
+
+
+def report(feed, inputs, run, stop):
+    while not stop.wait(REPORT_S):
+        try:
+            inputs.publish(STATE_TOPIC, state(feed, inputs, run), retain=True)
+        except Exception:           # the report is a courtesy: never take the lights down for it
+            traceback.print_exc()
 
 
 def chains_to_run(wanted: dict[str, bool], pio: set[str] | None) -> tuple[set[str], list[str]]:
@@ -93,6 +116,7 @@ def main():
         workers.append(supervised("accent", lambda: accent_lights.run(stop=stop, feed=feed, inputs=inputs)))
     for w in workers:
         w.start()
+    threading.Thread(target=report, args=(feed, inputs, run, stop), name="report", daemon=True).start()
     try:
         if "buttons" in run:
             buttons_theme1.main(feed=feed, inputs=inputs)

@@ -31,6 +31,7 @@ def config(tmp_path):
             "media_dir": str(tmp_path / "media"),
             "media_cache_dir": str(tmp_path / "cache"),
             "admin_dir": str(tmp_path / "admin"),
+            "lights_dir": str(tmp_path / "lights"),
             "module_dirs": [str(Path(__file__).resolve().parents[2])]}
 
 

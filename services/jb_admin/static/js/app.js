@@ -9,6 +9,7 @@ const PAGES = [
   { id: 'sources', label: 'Sources', icon: 'cable', load: () => import('./pages/sources.js') },
   { id: 'sound', label: 'Sound', icon: 'volume-2', load: () => import('./pages/sound.js') },
   { id: 'displays', label: 'Displays', icon: 'monitor', load: () => import('./pages/displays.js') },
+  { id: 'lights', label: 'Light Show', icon: 'lightbulb', load: () => import('./pages/lights.js') },
   { id: 'builder', label: 'Page Builder', icon: 'layout-template', load: () => import('./pages/builder.js') },
   { id: 'themes', label: 'Themes', icon: 'palette', load: () => import('./pages/themes.js') },
   { id: 'appearance', label: 'Appearance', icon: 'swatch-book', load: () => import('./pages/appearance.js') },

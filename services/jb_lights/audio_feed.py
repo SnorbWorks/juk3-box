@@ -172,6 +172,7 @@ class AudioFeed:
         self.picker = picker or LookPicker()
         self.director = director or Director()
         self.idle_director = Director(library=IdlePick(self.director.library))
+        self.last = None                     # the latest snapshot (main.report)
         self.raw = Raw()
         self._lock = threading.Lock()
         self._last_fast = -1e9
@@ -265,7 +266,7 @@ class AudioFeed:
                 cues = self.idle_director.update(now, idle_raw(now))
             else:
                 cues = None
-            return Snapshot(
+            self.last = Snapshot(
                 bands=list(self.raw.bands),
                 level=self.raw.level,
                 beat_age=now - self._last_beat,
@@ -274,3 +275,4 @@ class AudioFeed:
                 look=look,
                 cues=cues,
             )
+            return self.last

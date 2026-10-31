@@ -34,6 +34,7 @@ from services.jb_admin import bus_relay, schema, theme_store, updates
 from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
+from services.jb_admin.lights_admin import MAX_SHOW_BYTES, LightsAdmin, LightsError
 from services.jb_admin.media_lib import MediaLibrary
 from services.jb_admin.drive_import import DriveImport
 from services.jb_admin.module_mgr import Manager as ModuleManager, ModuleError, review as module_review, unit_of
@@ -72,6 +73,8 @@ DEFAULTS = {
     # privileged helper's folder (deploy/jb-setupctl).
     "setup_path": str(DATA / "setup.json"),
     "lights_path": str(DATA / "lights.json"),
+    # admin › Light Show: the owner's light settings and uploaded shows (jb-lights reads them).
+    "lights_dir": str(DATA / "lights"),
     "setupctl_dir": str(DATA / "setupctl"),
     "setupnet_dir": str(DATA / "setupnet"),
     # Updates from the project's releases (deploy/jb-update, root): what it last found.
@@ -157,6 +160,7 @@ class Admin:
         self.wizard = Wizard(self, Path(cfg["setup_path"]), Path(cfg["lights_path"]),
                              setupnet_dir=Path(cfg["setupnet_dir"]))
         self.updates = updates.Updates(self)
+        self.lights = LightsAdmin(Path(cfg["lights_dir"]), dirs[-1], Path(cfg["lights_path"]))
         self._updates_task = None
 
     # The bus ------------------------------------------------------------
@@ -180,6 +184,7 @@ class Admin:
         "jukebox/jb-core/source": "source",
         "jukebox/jb-library/drives-in": "drives_in",
         "jukebox/jb-input/status": "input",
+        "jukebox/jb-lights/state": "lights",
     }
     # The setup wizard listens to these: the cabinet's yes/no and the controls
     # step's teaching (jb-input's learn mode).
@@ -840,6 +845,50 @@ class Admin:
             "board": self.board.get("name") or "",
             "bus": self.bus is not None,
         })
+
+    # Light Show (lights_admin.py) -----------------------------------------------
+
+    async def get_lights(self, request):
+        return web.json_response({**self.lights.view(self.live.get("lights")), "bus": self.bus is not None})
+
+    async def post_light_settings(self, request):
+        try:
+            settings = self.lights.save_settings(await json_body(request))
+        except LightsError as e:
+            raise error(400, str(e))
+        return web.json_response({"settings": settings})
+
+    async def upload_light_show(self, request):
+        tmp = await save_upload(request, Path(self.cfg["admin_dir"]) / "uploads", ".json", MAX_SHOW_BYTES)
+        try:
+            info = self.lights.upload(tmp.read_bytes(), replace=request.query.get("replace") == "1")
+        except LightsError as e:
+            raise error(400, str(e))
+        finally:
+            tmp.unlink(missing_ok=True)
+        self.log.info("light show %s uploaded", info["id"])
+        return web.json_response(info)
+
+    async def get_light_show(self, request):
+        try:
+            data = self.lights.show_file(request.match_info["id"])
+        except LightsError as e:
+            raise error(404, str(e))
+        return web.json_response(data, headers={
+            "Content-Disposition": f'attachment; filename="{data["id"]}.json"'})
+
+    async def delete_light_show(self, request):
+        try:
+            self.lights.delete(request.match_info["id"])
+        except LightsError as e:
+            raise error(400, str(e))
+        return web.json_response({"ok": True})
+
+    async def light_preview(self, request):
+        try:
+            return web.json_response(await asyncio.to_thread(self.lights.preview, request.match_info["id"]))
+        except LightsError as e:
+            raise error(404, str(e))
 
     async def audio_action(self, request):
         """What the Sound page may ask jb-audio to do."""
@@ -1584,6 +1633,12 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/helper/{action}", admin.helper_action)
     r.add_get("/api/audio", admin.get_audio)
     r.add_post("/api/audio/{action}", admin.audio_action)
+    r.add_get("/api/lights", admin.get_lights)
+    r.add_post("/api/lights/settings", admin.post_light_settings)
+    r.add_post("/api/lights/shows", admin.upload_light_show)
+    r.add_get("/api/lights/shows/{id}", admin.get_light_show)
+    r.add_delete("/api/lights/shows/{id}", admin.delete_light_show)
+    r.add_get("/api/lights/preview/{id}", admin.light_preview)
     r.add_get("/api/display", admin.get_display)
     r.add_post("/api/display/{action}", admin.display_action)
     r.add_get("/api/drives", admin.get_drives)

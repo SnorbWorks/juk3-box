@@ -84,6 +84,7 @@ class Style:
     version: str = ""
     author: str = ""
     inputs: dict = field(default_factory=dict, compare=False, hash=False)   # what modules' lights do to it
+    raw: dict = field(default=None, compare=False, hash=False, repr=False)  # the show file, as read
 
 
 # Genre and tag words -> genre group. The first of a song's tags that matches
@@ -226,7 +227,7 @@ def from_json(d, source="builtin") -> Style:
                  beat_locked=d.get("beat_locked", True), keys=roles.get("keys", "sparkle"),
                  title=d["name"], description=d.get("description", ""), groups=tuple(d.get("for", ())),
                  source=source, version=d["version"], author=str(d.get("author", ""))[:80],
-                 inputs=d.get("inputs", {}), **tiers)
+                 inputs=d.get("inputs", {}), raw=d, **tiers)
 
 
 def load(path: Path, source="uploaded") -> tuple[Style | None, list[str]]:

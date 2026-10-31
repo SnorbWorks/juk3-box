@@ -268,6 +268,10 @@ class Inputs:
         self._client.loop_start()
         return self
 
+    def publish(self, topic: str, payload: dict, retain: bool = False):
+        if self._client:
+            self._client.publish(topic, json.dumps(payload), retain=retain)
+
     def stop(self):
         if self._client:
             self._client.loop_stop()
