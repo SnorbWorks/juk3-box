@@ -6,6 +6,8 @@ the owner says which are wired in and jb-admin writes it here:
     /var/lib/juk3-box/lights.json   {"buttons": true, "accent": true, "levelbar": false}
 
 No file (a cabinet set up before the wizard) means all three, as before.
+It may also pin the light show's style for every song ("show_style":
+"arena"; show/styles.py), read at each new song.
 """
 
 import json
@@ -24,3 +26,13 @@ def read(path: Path = PATH) -> dict[str, bool]:
     if not isinstance(data, dict):
         data = {}
     return {name: data.get(name) is not False for name in CHAINS}
+
+
+def show_style(path: Path = PATH) -> str | None:
+    """The light show style the owner pinned, or None to pick by genre."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+    style = data.get("show_style") if isinstance(data, dict) else None
+    return style if isinstance(style, str) else None

@@ -17,6 +17,11 @@ What it decides, moment to moment (docs/Light Show Styles.md):
   black    a gap blacks the cabinet out (or dims it) until the hit
   flash    a big hit or a drop flashes white -- never more than
            MAX_FLASHES_PER_S (photosensitive safety: WCAG 2.3.1, Ofcom)
+  burst    for styles that draw their own flash (arena): the drop itself,
+           or a really big hit. Not a section lifting or the hit after a
+           gap: those come just before the drop, so the flash would lead
+           the beat (owner, 2026-10-30). At most one every BURST_MIN_S,
+           but a drop may come sooner (never closer than DROP_MIN_S)
   tension  a build rising: the upper panel holds back and the rhythm
            tightens; cool: a breakdown thins everything out
 
@@ -26,6 +31,7 @@ Pure: update() reads the feed's raw state under its lock and returns Cues.
 import math
 from dataclasses import dataclass
 
+from services.jb_lights import present
 from services.jb_lights.show import styles
 
 ROTATE_BARS = 16          # each part changes its movement this often, within a section...
@@ -37,6 +43,9 @@ PULSE_MIN_S = 1 / 3       # whole-area pulses at most 3 a second (flash safety)
 MAX_FLASHES_PER_S = 3
 FLASH_S = 0.45            # a white flash fades over this long
 BLACK_MAX_S = 1.5         # a blackout never lasts longer than this
+BURST_MIN_S = 1.0         # a burst (a drop, a big hit) at most once a second...
+DROP_MIN_S = 0.4          # ...but a drop may follow a big hit this soon (still under 3 a second)
+BURST_HIT = 0.8           # a hit this strong bursts on its own
 TENSION_S = 8.0           # a riser reaches full tension over this long
 LEVEL_TAU_S = 3.0         # "how loud is it lately", for the tier
 
@@ -60,10 +69,12 @@ class Cues:
     cool: float              # 0 .. 1, a breakdown
     since_section: float     # seconds
     seed: int
+    since_burst: float = 1e9  # seconds since a drop, a big hit or a lift (arena's white burst)
 
 
 class Director:
-    def __init__(self):
+    def __init__(self, pinned=present.show_style):
+        self.pinned = pinned          # () -> the owner's pinned style name, or None
         self.song = None
         self.style = styles.STYLES["pop"]
         self.seed = 0
@@ -85,11 +96,12 @@ class Director:
         self.loud = 0.5
         self.section_at = 0.0
         self.started = 0.0
+        self.burst_at = -1e9
 
     def _new_song(self, raw, now):
         self.song = (raw.title, raw.artist)
-        self.style = styles.pick(raw.genre, raw.tags, raw.arousal)
         self.seed = styles.seed(raw.title, raw.artist)
+        self.style = styles.pick(raw.genre, raw.tags, raw.arousal, self.pinned(), self.seed)
         self.palette_n = self.seed % len(self.style.palettes)
         self.peak_until = -1e9
         self.beat, self.prev_phase = 0.0, None
@@ -109,6 +121,10 @@ class Director:
         self.flashes.append(now)
         self.flash = max(self.flash, amount)
 
+    def _burst(self, now, spacing=BURST_MIN_S):
+        if now - self.burst_at >= spacing:
+            self.burst_at = now
+
     def update(self, now, raw) -> Cues:
         dt = 0.0 if self.last is None else max(0.0, min(0.1, now - self.last))
         self.last = now
@@ -117,7 +133,7 @@ class Director:
         if (raw.title, raw.artist) != self.song:
             self._new_song(raw, now)
         elif raw.genre_at is not None and self._fresh("genre", raw.genre_at):
-            style = styles.pick(raw.genre, raw.tags, raw.arousal)
+            style = styles.pick(raw.genre, raw.tags, raw.arousal, self.pinned(), self.seed)
             if style is not self.style:
                 self.style = style
                 self.palette_n = self.seed % len(style.palettes)
@@ -179,6 +195,7 @@ class Director:
             self.peak_until = now + PEAK_HOLD_S
             self.palette_n += 1
             self._flash(now, 1.0)
+            self._burst(now, DROP_MIN_S)
             self.black_since, self.black = None, 0.0     # the drop is the reveal: no fade up
         if self._fresh("gap", raw.gap_at) and st.gap:
             self.black_since = now
@@ -188,6 +205,8 @@ class Director:
                 self._flash(now, 1.0)
             elif raw.hit_strength >= 0.6 and st.strobe >= 1:
                 self._flash(now, raw.hit_strength)
+            if raw.hit_strength >= BURST_HIT and not raw.hit_after_gap and raw.build != "rising":
+                self._burst(now)
             self.black_since, self.black = None, 0.0
         if self.black_since is not None and (now - self.black_since > BLACK_MAX_S
                                              or (now - self.black_since > 0.2 and raw.level > 0.6)):
@@ -215,4 +234,5 @@ class Director:
         return Cues(style=st, palette=palette, tier=tier, scene=scene, beat=self.beat, bar_beat=bar_beat,
                     tempo=tempo, pulse={**self.pulse, "drive": drive}, level=raw.level, loud=self.loud,
                     bands=raw.bands, black=self.black, flash=self.flash, tension=self.tension,
-                    cool=self.cool, since_section=now - self.section_at, seed=self.seed)
+                    cool=self.cool, since_section=now - self.section_at, seed=self.seed,
+                    since_burst=now - self.burst_at)

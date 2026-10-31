@@ -162,6 +162,17 @@ STYLES = {s.name: s for s in [
           foot=_tiers(["glow"], ["offbeat"], ["offbeat", "pulse"]),
           bar=_tiers(["vu"], ["vu", "drumkit", "bounce", "tiles"], ["spectrum", "counter", "sparks"]),
           keys="sparkle"),
+    # Dark, then VERY bright: one look across the whole cabinet that flashes
+    # on its own, so strobe 0 keeps the director's white flashes off it
+    # (show/arena.py). In the rotation for heavy, drop-driven music
+    # (ROTATIONS), or pinned for every song (lights.json "show_style").
+    Style("arena",
+          palettes=(P("#081AFF", "#96AFFF"),), peak=P("#081AFF", "#96AFFF"),
+          light=(1.0, 1.0), strobe=0, gap="blackout", pace="beat", drive="kick", release=0.18,
+          upper=_tiers(["arena"], ["arena"], ["arena"]),
+          foot=_tiers(["arena"], ["arena"], ["arena"]),
+          bar=_tiers(["arena"], ["arena"], ["arena"]),
+          keys="arena"),
 ]}
 
 # Genre and tag words -> style. The first of a song's tags that matches wins.
@@ -191,12 +202,29 @@ GENRE_STYLE = {
 }
 
 
-def pick(genre, tags, arousal) -> Style:
-    """The style for a song: its genre, else the first tag we know, else its mood."""
-    for word in ([genre] if genre else []) + list(tags or []):
-        name = GENRE_STYLE.get(str(word).lower())
+# Styles that take turns with another: each song's seed picks one, so a song
+# always gets the same look and the genre's songs share them (owner,
+# 2026-10-30: arena for songs like this).
+ROTATIONS = {
+    "metal": ("metal", "arena"),
+    "edm": ("edm", "arena"),
+    "bass": ("bass", "arena"),
+}
+
+
+def pick(genre, tags, arousal, pinned=None, seed=0) -> Style:
+    """The style for a song: the owner's pinned style, else its genre, else
+    the first tag we know, else its mood; a genre with a rotation takes the
+    one the song's seed picks."""
+    if pinned in STYLES:
+        return STYLES[pinned]
+    words = [str(w).lower() for w in ([genre] if genre else []) + list(tags or [])]
+    # Exact words first; then a compound tag by its main word, last first
+    # ("doom metal", "sludge metal" -> metal).
+    for name in [GENRE_STYLE.get(w) for w in words] + [GENRE_STYLE.get(p) for w in words for p in reversed(w.split())]:
         if name:
-            return STYLES[name]
+            turns = ROTATIONS.get(name, (name,))
+            return STYLES[turns[seed % len(turns)]]
     if arousal is not None and arousal < 0.4:
         return STYLES["chill"]
     return STYLES["pop"]

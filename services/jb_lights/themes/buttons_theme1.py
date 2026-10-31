@@ -173,8 +173,9 @@ def main(feed=None):
 
     def music_frame():
         """Between events: the keypad's part of the light show, when it's
-        resting. The accent chain renders the shared controller ~40 times a
-        second, so this only sets the pixels (no show of its own)."""
+        resting. On a Pi 4 the accent chain renders the shared controller ~40
+        times a second, so this only sets the pixels; on a Pi 5 the keypad is
+        its own device and sends its own frames (pio_chains.Chain.own_show)."""
         nonlocal showing_music, last
         now = time.monotonic()
         dt, last = min(0.1, now - last), now
@@ -187,7 +188,7 @@ def main(feed=None):
                 showing_music = False
             return
         showing_music = True
-        theme.paint({i: Color(*c) for i, c in colours.items()}, show=False)
+        theme.paint({i: Color(*c) for i, c in colours.items()}, show=getattr(theme.strip, "own_show", False))
 
     def interacted():
         nonlocal showing_music

@@ -71,9 +71,14 @@ the cabinet fills much of a viewer's view up close. So:
 ## The styles
 
 `show/styles.py`. The genre comes from listeners' tags (Last.fm, via the
-analyzer's slow channel); without one, the mood picks pop (lively) or
-chill (calm). Each song's own seed picks among a style's palettes and
-scenes, so two songs of one genre still look different.
+analyzer's slow channel); a compound tag counts by its main word ("doom
+metal" is metal). Without one, the mood picks pop (lively) or chill (calm).
+Each song's own seed picks among a style's palettes and scenes, so two
+songs of one genre still look different. Some genres take turns between
+two styles (`ROTATIONS`): metal, EDM and bass/dubstep songs each get either
+their own style or **arena**, by the song's seed, so a song always gets the
+same one. The owner can also pin one style for every song
+(`"show_style"` in `/var/lib/juk3-box/lights.json`).
 
 | Style | For | Palette | Rhythm (footlights) | Upper panel | Flashes |
 |---|---|---|---|---|---|
@@ -89,13 +94,41 @@ scenes, so two songs of one genre still look different.
 | jazz | jazz, blues, swing | amber, steel blue, few tones | a low warm glow, the level only | almost still | never |
 | chill | classical, ambient, lo-fi, soundtracks | lavender, soft gold, teal | glow | slow breathing | never |
 | latin | reggae, ska, latin, reggaeton | rasta red/gold/green, coral, turquoise | the off-beat (the skank) | wash, sweep | on big hits |
+| arena | in turn with metal, EDM, bass | dark, blue sparkles; white | blue bands snapping on the beat: the outer sixths, then the middle third | dark with blue sparkles; fades to black in a build or breakdown | the drop: the whole cabinet white, breaking up into sparkles from the centre out |
+
+### Arena
+
+The owner's design (2026-10-30), after a concert clip: a dark cabinet,
+then VERY bright. The whole cabinet is one picture (`show/arena.py`):
+
+- **Dark:** blue sparkles all over the cabinet, quicker with the hi-hats
+  and the kick. The footlights and the keypad's letters and digits snap
+  between two blue bands on the beat. SINGLE, ALBUM and RESET pulse white
+  with the kick (their filters block blue).
+- **Hush:** a riser building, or the bass falling away before a drop, fades
+  everything toward black; a gap snaps it black.
+- **Burst:** on the drop itself, or a really big hit on its own (not the
+  section lifting or the hit after a gap: those come just before the drop,
+  so the flash led the beat), the whole cabinet flashes white and the white
+  breaks up into white and blue sparkles from the centre out, in about a
+  second, then settles back to the dark.
+- **Current:** each part has a budget well inside its branch's cap (the
+  upper panel and footlights 4 A of 6, the level bar 2.4 A of 4), a bigger
+  one for the flash (5 A and 3.2 A); a frame that would draw more is dimmed
+  to fit. Bursts come at most once a second (a drop may follow a big hit
+  0.4 s later).
+- The analyzer calls a drop on its first kick (a beat whose bass is back at
+  the song's groove), not when the smoothed bass catches up a third of a
+  second later, so the flash lands on the drop.
 
 Scenes, by part (`show/parts.py`):
 
 - **Upper:** breathe, wash, chase, sweep, rise, slab, wobble, marquee, tubes, eq, ribbon
 - **Footlights:** glow, pulse, rows, chase, checker, offbeat
 - **Level bar:** spectrum (in the palette), classic (the rainbow analyzer), vu, ribbon, and in chunky blocks: drumkit (hi-hat, snare, kick, tom and crash, each hit by its own drum), tiles, mirror, bounce, trace (a heart-monitor scroll), ripple, counter (1-2-3-4), comet, fire, rain, sparks
-- **Keypad:** sparkle, eq, pulse, glow
+- **Keypad:** sparkle, eq, pulse, glow, arena (on a Pi 5 the keypad sends
+  its own frames: its chain is its own device there)
+- **Arena:** one scene for every part, drawing the whole cabinet together
 
 ## Tuning without the cabinet
 

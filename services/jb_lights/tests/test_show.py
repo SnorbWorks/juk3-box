@@ -17,6 +17,12 @@ def test_genre_and_tags_pick_the_style_and_mood_is_the_fallback():
     assert styles.pick("hip-hop", [], 0.7).name == "hiphop"
     assert styles.pick(None, ["seen live", "Funk", "80s"], 0.7).name == "soul"
     assert styles.pick("dubstep", ["edm"], 0.9).name == "bass"
+    # A genre with a rotation: each song's seed picks one of its styles.
+    assert {styles.pick("metal", [], 0.8, seed=n).name for n in range(4)} == {"metal", "arena"}
+    assert styles.pick("rock", [], 0.8, seed=1).name == "rock"
+    # A compound tag counts by its main word.
+    assert styles.pick(None, ["sludge", "doom metal"], 0.4, seed=0).name == "metal"
+    assert styles.pick(None, ["seen live", "dream pop"], 0.4).name == "pop"
     assert styles.pick(None, [], 0.2).name == "chill"
     assert styles.pick(None, ["polka"], 0.8).name == "pop"
     assert styles.seed("Song", "Band") == styles.seed("Song", "Band") != styles.seed("Other", "Band")
@@ -24,13 +30,13 @@ def test_genre_and_tags_pick_the_style_and_mood_is_the_fallback():
 
 def test_every_style_names_scenes_the_parts_can_draw():
     for st in styles.STYLES.values():
-        assert st.palettes and st.peak and 0 <= st.light[0] < st.light[1] <= 1
+        assert st.palettes and st.peak and 0 <= st.light[0] <= st.light[1] <= 1
         for part, cls in (("upper", Upper), ("foot", Foot), ("bar", Bar)):
             tiers = getattr(st, part)
             assert set(tiers) == {"calm", "main", "peak"}, (st.name, part)
             for options in tiers.values():
                 assert options and all(callable(getattr(cls, s, None)) for s in options), (st.name, part, options)
-        assert st.keys in ("sparkle", "eq", "pulse", "glow")
+        assert st.keys in ("sparkle", "eq", "pulse", "glow", "arena")
         assert st.drive in ("kick", "snare", "offbeat", "level") and st.gap in ("blackout", "dim", "")
 
 
@@ -123,8 +129,8 @@ def test_a_new_song_restyles_and_the_genre_arriving_late_restyles_too():
     assert run(d, r, 0, 1)[0].style.name == "pop"
     r.genre, r.tags, r.genre_at = "country", ["country"], 1.0
     assert run(d, r, 1, 1)[0].style.name == "country"
-    r.title, r.genre, r.tags = "Two", "metal", ["metal"]
-    assert run(d, r, 2, 1)[0].style.name == "metal"
+    r.title, r.genre, r.tags = "Two", "rock", ["rock"]
+    assert run(d, r, 2, 1)[0].style.name == "rock"
 
 
 def stream(feed, t, genre="edm", kick=False):
@@ -142,9 +148,10 @@ def _valid(frame, n):
 
 def test_every_style_renders_on_every_part_through_the_feed():
     for name in styles.STYLES:
-        feed = AudioFeed(picker=LookPicker("show"))
+        # Pinned, so a genre's rotation can't pick another style for the test song.
+        feed = AudioFeed(picker=LookPicker("show"), director=Director(pinned=lambda: name))
         looks, bar, keys = Looks(accent.positions()), MusicLooks(Idle()), ButtonsMusic()
-        genre = next(g for g, s in styles.GENRE_STYLE.items() if s == name)
+        genre = next((g for g, s in styles.GENRE_STYLE.items() if s == name), "pop")
         t = 0.0
         for k in range(120):
             t += 0.025

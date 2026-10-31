@@ -14,6 +14,7 @@ the director's cues (director.py), in the scenes the style names
            tubes    bubble tubes filling with the music
            eq       the classic EQ look (themes/accent_eq.py)
            ribbon   the flowing ribbon (themes/accent_ribbon.py)
+           arena    the whole cabinet dark with blue sparkles, bursting white (show/arena.py), in every part
   Foot   (accent chain 189-348, 4 rows x 40) the rhythm section
            glow / pulse / rows (kick front, snare back) / chase / checker / offbeat
   Bar    (the 36 x 5 level bar) the secondary voice, as chunky blocks or lines:
@@ -29,7 +30,7 @@ the director's cues (director.py), in the scenes the style names
            fire     flames rising with the music
            rain     a raindrop for each hi-hat
            sparks   hits bursting into sparks, hi-hats throwing single ones
-  Keys   (the keypad) the sparkle: sparkle / eq / pulse / glow
+  Keys   (the keypad) the sparkle: sparkle / eq / pulse / glow / arena
 
 Every part renders 0..255 RGB floats; finish() applies the director's
 brightness, blackout and flash. Scene changes crossfade.
@@ -39,6 +40,7 @@ import math
 import random
 
 from services.jb_lights import accent, buttons, matrix
+from services.jb_lights.show import arena
 from services.jb_lights.themes import volume_bar_theme2 as bar_ribbon, volume_bar_theme3 as bar_spectrum
 from services.jb_lights.themes.accent_diner import CIRCLE, Diner
 from services.jb_lights.themes.accent_eq import EQ
@@ -147,6 +149,7 @@ class Upper(Scenes):
         self.slab_bar = None
         self.slab_colour = 0
         self.peaks = [0.0] * len(self.columns)
+        self.arena_look = arena.UpperArena(pos)
 
     def _record(self, out, cues, colour):
         """The circle as a spinning record: one highlight going round once a bar."""
@@ -284,6 +287,10 @@ class Upper(Scenes):
         return [tuple(map(float, c)) for c in frame[:accent.UPPER]]
 
 
+    def arena(self, cues, snap, t, dt):
+        return self.arena_look.frame(cues, dt)
+
+
 class Foot(Scenes):
     ROWS, COLS = accent.FOOT_ROWS, accent.FOOT_COLS
 
@@ -293,6 +300,7 @@ class Foot(Scenes):
         self.at = [[accent.foot_index(r, c) - accent.UPPER for c in range(self.COLS)] for r in range(self.ROWS)]
         self.colour_bar = None
         self.colour_n = 0
+        self.arena_look = arena.FootArena()
 
     def _grid(self, fn):
         out = [BLACK] * self.size
@@ -357,6 +365,9 @@ class Foot(Scenes):
         return self._grid(lambda r, c: scale(colour, 0.08 + 0.92 * skank) if r >= 1
                           else scale(cues.palette[-1], 0.1 + 0.6 * kick))
 
+    def arena(self, cues, snap, t, dt):
+        return self.arena_look.frame(cues, dt)
+
 
 class Bar(Scenes):
     def __init__(self):
@@ -372,6 +383,7 @@ class Bar(Scenes):
         self.ripples, self.drops, self.sparks_ = [], [], []
         self.burst_held = False
         self.heat = [0.0] * matrix.COLS
+        self.arena_look = arena.BarArena()
 
     def spectrum(self, cues, snap, t, dt):
         """The classic analyzer, in the song's palette: bass on the left,
@@ -612,6 +624,9 @@ class Bar(Scenes):
                 out[i] = lerp(out[i], colour, life)
         return out
 
+    def arena(self, cues, snap, t, dt):
+        return self.arena_look.frame(cues, dt)
+
 
 class Keys:
     """The keypad's part: RGBW per pixel. Not a Scenes: one look per style."""
@@ -619,6 +634,7 @@ class Keys:
     def __init__(self, seed=5):
         self.rnd = random.Random(seed)
         self.spark = {}
+        self.arena_state = {}
         self.cues = None
 
     def frame(self, cues, snap, dt):
@@ -626,6 +642,10 @@ class Keys:
         if cues is None:
             return {i: (0, 0, 0, 0) for i in range(buttons.NUM_PIXELS)}
         name = cues.scene["keys"]
+        if name == "arena":
+            k = 1 - cues.black
+            return {i: tuple(int(v * k) for v in c) for i, c in
+                    arena.keys(cues, self.arena_state, dt, ROW_X, WHITE_KEYS, buttons.NUM_PIXELS).items()}
         out = {}
         if name == "sparkle":
             for i in list(self.spark):

@@ -9,12 +9,18 @@ Everything is judged against the song's own "groove" bass: the level its bass
 sits at through the full sections over the last minute. A breakdown is the
 bass well under that for a while; the drop is the bass back at (or above) the
 groove -- not merely a stray note poking up out of the breakdown, which is
-what fools a detector that compares against the quietest moment. Breakdowns
+what fools a detector that compares against the quietest moment. Smoothed
+bass takes a third of a second to climb back, so the drop is also called on
+the kick itself: a beat whose own bass is right back at the groove
+(SLAM_DB). That lands it on the beat, not half a second late (owner,
+2026-10-30: the lights' flash came late); the smoothed check stays as the
+fallback. Breakdowns
 can run long (a whole thinned-out section, then a sneaky build), so they don't
 time out quickly. Head-fakes still happen; hitting the obvious ones is the
 goal.
 
-Pure: feed it each frame's loudness, bass (dB) and whether sound is present.
+Pure: feed it each frame's loudness, bass (dB), whether sound is present and
+whether the frame is a beat.
 """
 
 from collections import deque
@@ -27,6 +33,7 @@ GROOVE_PCT = 80
 BREAKDOWN_DB = 9.0       # bass this far under the groove, held BREAKDOWN_MIN_S = thinned out
 BREAKDOWN_MIN_S = 1.0
 DROP_DB = 5.0            # bass back within this of the groove = the drop
+SLAM_DB = 3.0            # ...or a beat whose own bass is this close to it: the drop, at once
 DROP_MIN_BREAKDOWN_S = 2.0
 BREAKDOWN_MAX_S = 60.0   # never resolved: it was just a quiet section
 DROP_HOLD_S = 2.5        # report "drop" this long, then settle
@@ -55,7 +62,7 @@ class Trajectory:
         x = np.arange(k) / self.fps
         return float(np.polyfit(x, y, 1)[0])
 
-    def step(self, level: float, bass_db: float, sounding: bool) -> str:
+    def step(self, level: float, bass_db: float, sounding: bool, beat: bool = False) -> str:
         self.dropped = False
         self.frame += 1
         self.state_frames += 1
@@ -75,7 +82,8 @@ class Trajectory:
                 return self._go("none")
             return self.state
         if self.state == "breakdown":
-            if bass >= self.groove - DROP_DB:
+            slam = beat and bass_db >= self.groove - SLAM_DB
+            if slam or bass >= self.groove - DROP_DB:
                 if self.state_frames >= DROP_MIN_BREAKDOWN_S * self.fps:
                     self.dropped = True
                     return self._go("drop")

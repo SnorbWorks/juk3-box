@@ -83,6 +83,10 @@ class Chain:
     # Not parked with pinctrl on close (buttons.close_strip): that would
     # take the pin away from PIO until the next reboot.
     parks_pin = False
+    # Each chain is its own device: nothing else writes this one's frames.
+    # (On a Pi 4 the buttons share the accent chain's controller, and its
+    # thread sends both, so the keypad's show only sets its pixels.)
+    own_show = True
 
     def __init__(self, path: Path, count: int, lock: threading.Lock):
         self.size = count

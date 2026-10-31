@@ -29,7 +29,7 @@ class Pipeline:
         f = self.fast.process(samples)
         events = [{"type": e} for e in self.levels.step(f["_loudness"], f["peak"])]
         sounding = self.levels.sounding
-        build = self.traj.step(f["_loudness"], f["_bass_db"], sounding)
+        build = self.traj.step(f["_loudness"], f["_bass_db"], sounding, f["beat"])
         if self.traj.dropped:
             events.append({"type": "drop"})
         self.slow.step(f)

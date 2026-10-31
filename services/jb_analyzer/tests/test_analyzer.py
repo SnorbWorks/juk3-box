@@ -114,6 +114,18 @@ def test_breakdown_then_drop():
     assert drops == 1
 
 
+def test_the_drop_lands_on_its_kick_not_a_third_of_a_second_later():
+    tr = Trajectory(FPS)
+    for _ in range(int(8 * FPS)):
+        tr.step(0.6, -20.0, True, False)               # steady groove
+    for i in range(int(5 * FPS)):
+        # a breakdown with stray kicks that don't reach the groove
+        tr.step(0.4, -24.0 if i % 20 == 0 else -38.0, True, i % 20 == 0)
+        assert not tr.dropped
+    tr.step(0.8, -12.0, True, True)                    # the drop's first kick
+    assert tr.dropped and tr.state == "drop"
+
+
 def test_mood_axes_separate_slow_dark_from_fast_bright():
     calm, wild = SlowAnalyzer(FPS), SlowAnalyzer(FPS)
     for _ in range(int(10 * FPS)):
