@@ -334,6 +334,25 @@ function watchSystem() {
     + '<div class="jb-sync-title">Connecting and updating library…</div>'
     + '<div class="jb-sync-message">Please wait. A song you pick now plays as soon as it\'s ready.</div></div>';
   document.body.append(overlay);
+  // The phone isn't offering its songs: it's giving the jukebox another app
+  // (wrong_app), or it never offered browsing (no_browse, after a minute of
+  // connecting). Playing a song in Music fixes both; say so as soon as it
+  // happens, once the screen is free (v0.1.9 fresh-card test, 2026-10-28).
+  let hintTimer = null;
+  const musicHint = () => {
+    clearTimeout(hintTimer);
+    const state = store.get('phoneSync')?.state;
+    if (state !== 'wrong_app' && state !== 'no_browse') return;
+    if (currentMode() !== 'select' || popupOpen()) {
+      hintTimer = setTimeout(musicHint, 3000);
+      return;
+    }
+    openPopup('notice', {
+      title: 'Open Music on your phone',
+      message: 'Play any song for a few seconds, so the jukebox can read your songs.',
+    });
+    setTimeout(() => closePopup('notice'), NOTICE_MS * 2);
+  };
   let syncWas = null;
   store.watch(html, 'phoneSync', s => {
     const state = s?.state;
@@ -347,6 +366,7 @@ function watchSystem() {
       setTimeout(() => closePopup('notice'), NOTICE_MS * 2);
     }
     syncWas = state;
+    if (state === 'wrong_app' || state === 'no_browse') musicHint();
   });
 
   // A USB drive was plugged in and read (jb-source-local): its songs are

@@ -52,6 +52,7 @@ CRAWL_TIMEOUT_S = 120
 # and answers "busy"; a sync started then fails (seen 2026-10-11). Wait for
 # the folder to report items first.
 BROWSE_READY_TIMEOUT_S = 15
+NO_BROWSE_S = 60          # a player but no browsing this long: stop "connecting", ask for a song in Music
 # A failed sync retries after these delays (the first try is immediate).
 SYNC_RETRY_DELAYS_S = (3, 10, 30)
 # Lost browsing (the phone's cursor somewhere Songs can't be reached from)
@@ -312,8 +313,10 @@ async def main() -> None:
     last_pick_reconnect_at = None
     # Where the phone's song list stands, for jb-core (picks wait until it's
     # "ready") and the screen (its "updating library" overlay): none,
-    # connecting, syncing, ready, failed, wrong_app. A pick sent before the
-    # list is read in this connection can't play (2026-10-19).
+    # connecting, syncing, ready, failed, wrong_app, no_browse (connecting
+    # gave up: a player but no browsing for NO_BROWSE_S; the screen says to
+    # play a song in Music, and it clears when browsing appears). A pick
+    # sent before the list is read in this connection can't play (2026-10-19).
     sync_state = {"state": None}
 
     def now() -> float:
@@ -326,6 +329,16 @@ async def main() -> None:
         log.info("song list: %s", state)
         await bus.publish(f"jukebox/{SERVICE_NAME}/sync",
                           {"state": state, "name": phone.name if phone else None}, retain=True)
+
+    async def stop_waiting_for_browse(bus: Bus, p):
+        """iOS may never offer browsing until Music plays (fresh v0.1.9 card,
+        2026-10-28): after NO_BROWSE_S of "connecting", stop the spinner and
+        say what to do. Browsing appearing reruns connect_current_phone,
+        which syncs as usual."""
+        await asyncio.sleep(NO_BROWSE_S)
+        if phone is p and sync_state["state"] == "connecting" and not p.can_browse:
+            log.info("still no browsing after %ds: asking for a song in Music", NO_BROWSE_S)
+            await publish_sync(bus, "no_browse")
 
     async def sync_library(bus: Bus, final: bool = True):
         """Read the phone's Songs list. final: a failure here is the last try
@@ -538,7 +551,9 @@ async def main() -> None:
                 await publish_sync(bus, "wrong_app")
             elif not phone.can_browse:
                 log.info("phone has no browsing yet -- library sync will run when it appears")
-                await publish_sync(bus, "connecting")
+                if sync_state["state"] != "no_browse":
+                    await publish_sync(bus, "connecting")
+                    asyncio.create_task(stop_waiting_for_browse(bus, phone))
             elif phone.player_path != synced_player_path:
                 await publish_sync(bus, "syncing")
                 asyncio.create_task(sync_library_logged(bus))

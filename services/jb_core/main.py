@@ -32,7 +32,7 @@ def selection_format(path: Path = SETTINGS_PATH) -> selection.Format:
 SHUFFLE_BUFFER_TARGET = 20
 SETTLE_S = 2.0            # retained messages at startup, before choosing a phone (phone_choice.py)
 # Song-list states that hold the phone's songs back (see Queue.phone_ready).
-SYNC_WAIT = ("connecting", "syncing", "wrong_app")
+SYNC_WAIT = ("connecting", "syncing", "wrong_app", "no_browse")
 
 
 class Queue:
