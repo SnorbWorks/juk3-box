@@ -16,7 +16,7 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 | 4 Phone source | Bluetooth and the Helper app, one phone in charge at a time (Oct 20). Open: a second phone with a library; Bluetooth reliability in the cabinet |
 | 5 Library | Done: exact artists and albums from the Helper app, borrowed by Bluetooth songs it also has (Oct 22); play counts and Most Played |
 | 6 Core | Done. Reset clears a half-typed pick (checked Oct 22); holding it cancels a song |
-| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20). Arena show, drop on its kick, keypad back in the show on a Pi 5 (Oct 30). Light platform (Phase 11) released in v0.2.0 (Oct 30) |
+| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20). Arena show, drop on its kick, keypad back in the show on a Pi 5 (Oct 30). Light platform (Phase 11) released in v0.2.0 (Oct 30). The song-aware show (Phase 12) released in v0.3.0 (Oct 30); next, tuning with real songs on the cabinet |
 | 7 UI platform | Done; Neon is the default (Oct 21) |
 | 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, Last.fm), Updates (Oct 22), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
 | 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Read-only system drive built for image cards (Oct 22; test on a fresh card with the image). Open, later: the live netwatch test, log rotation, cold boot under a minute, pull-the-plug tests |
@@ -24,6 +24,7 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 
 ### Next (Oct 22, 2026)
 
+0. **The song-aware light show: released as v0.3.0 (Oct 30).** See [Phase 12](#phase-12-song-aware-light-show-v030): listen, understand (the feel, the song map), plan (the choreographer), perform. Next: the cabinet takes v0.3.0; play real songs and tune.
 0. **The light platform, for v0.2.0 (started Oct 30; owner: all of it in one release).** See [Phase 11](#phase-11-light-platform-v020). Build order: fixtures, show files, the lights-input contract, the engine's layers and safety, the admin Light Show tab (with Preview), Weather as the first input, then release. Arena and the drop fixes (7183bd3) ship with it. Also in v0.2.0: the v0.1.9 Bluetooth-sync fix (item 1, Oct 28).
 1. **The card image: fresh-card test (in progress, Oct 22 evening).** v0.1.0 tried on a 1 GB Pi 4 (named juk3box2):
    - Worked: first start made the data partition; setup ran; the name held; SSH closed; the analyzer suggestion turned it off; the knob and the video ran smoothly while unprotected.
@@ -532,6 +533,37 @@ Not in v0.2.0: effects written as code by others (needs sandboxed per-pixel code
 - [x] Admin › Light Show (Now, Shows, Preview, Inputs, Safety, Hardware)
 - [x] Weather 1.4: lights signals, cues and an idle show
 - [x] Release v0.2.0 (with the Bluetooth-sync fix): released Oct 30 after the owner checked it on the cabinet
+
+## Phase 12: Song-aware light show (v0.3.0)
+
+Agreed with the owner Oct 30, 2026, after v0.2.0: the show "just cycles through the handful of themes" (a style per genre, scenes rotating every 16 bars, a new palette at every novelty). The owner wants a system that **truly analyzes a song and builds a show to fit it**: it knows the parts (verse, chorus, bridge, drop), keeps one choreographed feel for the whole song, and follows the rhythm (a slow song never gets fast lights). Their examples: moody = deep blue and smooth; rock = bright, with splashes on the cymbal crashes; alternative = dark, then bright on the silence and the bass drop; love song = flowing reds and pinks; 70s, 80s and alternative = stars flying from the centre out; vocals = the EQ look; big drum moments = a rock show. Decisions: learn every song (save its map after the first play); a **pinned show is the look** (its colours and moves) while the song still sets the speed, the sections and the big moments; Google's YAMNet sound model (Apache 2.0) runs in plain numpy on the cabinet; all of it in one release.
+
+**Listen → understand → plan → perform.** The analyzer describes, the lights decide (the split stays).
+
+1. **Listen (jb-analyzer).** Beside the fast layer: the stereo picture (the capture is stereo; today it's averaged away), the harmony (chroma, from a longer FFT, 10 a second), the timbre (MFCC), the crash cymbal and its ring (a big broadband high-band attack, decaying as the cymbal does), the key and mode. **Ears**: YAMNet (521 sound classes, 0.96 s windows, ~1 a second) hears singing, rapping and speech, drums and cymbals, guitars, synths, piano, strings, brass, music's moods (happy, sad, tender, exciting, angry, scary) and genres.
+2. **Understand.** **The feel**, once a song, settling over its first ~10 s: tags (mood words, decades, genres), the phone's genre, the tempo (and half-time feel), the key, the energy, the ears -> energy, valence, tenderness, aggression, groove, an era, a genre family and words for the owner ("moody, slow, vocals"). **The song map**: live, a section detector on the bar grid (harmony, timbre, loudness, voice) labels each new section and spots one coming back ("the chorus again"); after the song, the **study** (offline, numpy, low priority) runs the whole recording: beat and downbeat tracking, a self-similarity matrix, boundaries snapped to bars, sections clustered into labels, roles (intro, verse, pre-chorus, chorus, bridge, solo, breakdown, build, drop, outro), each section's energy, voice and drums, and every gap, hit, drop and crash. Saved per song in `/var/lib/juk3-box/songs/`. **Replays**: the map is loaded, the position comes from the source and is locked by matching the live sound to the recording, and the show can see ahead. USB-drive songs can be studied from the file before they play.
+3. **Plan (jb-lights' choreographer, replacing the rotation).** One plan per song: the show that fits the feel best (each show file says what it suits; a pin overrides only this), one colour family, one way of moving, one speed from the tempo and the feel. A look per section by its character (quiet, vocal, drive, big, build, break, solo): the same label always gets the same look, repeats grow, the song's biggest section gets the peak. Accents by feel: crash splashes, blackout-then-slam, swells instead of flashes for ballads. With a map: builds begin before the chorus, blackouts land on the gap, the drop on its beat.
+4. **Perform.** Every scene takes its pace and smoothness from the plan (the "slow songs at double" rule goes). New moves: starfield (stars from the centre out), flow, beams, splash. The safety pass stays last.
+
+**Show files, format 2:** what a show suits (`fits`), its palettes, motion, accents, and scenes per section character; format 1 files still load (converted). New built-ins: Moody, Love, Starfield, Rock Show; the 13 get `fits`.
+
+**Admin › Light Show:** Now shows the song's map as a timeline (where it is, what's coming), the feel it heard and why it chose the show; Songs lists the learned songs (re-learn, preview); Preview plays a demo song as different feels, or any learned song.
+
+- [x] YAMNet in numpy (ears): weights converted, inference checked
+- [x] Listening: stereo, chroma, timbre, crash and ring, key and mode
+- [x] Song memory: recorder, the study (beats, sections, labels, roles, moments), maps saved
+- [x] Live sections with labels; replays locked to the map
+- [x] The feel
+- [x] Contract: audio-analysis additions (fast, slow, events, map)
+- [x] Show format 2, the new built-ins, `fits` for the 13
+- [x] The choreographer and the scenes' pace; starfield, flow, beams, splash
+- [x] Admin: the map timeline, Songs, Preview feels. Not built: previewing a learned song (the previews use the demo song); re-learning a song is Forget, then a whole play
+- [ ] Tuned on real songs offline (Walking On a Dream, Boom Boom Pow: sections, labels, the map and its sync; 24 sketched songs choose the right show) and on the cabinet
+- [x] Release v0.3.0 (Oct 30, the owner's go-ahead; the real-song tuning on the cabinet follows, on the released version)
+
+Not in this release: studying USB-drive songs from the file before they play.
+
+**Built Oct 30 (on the Mac, not yet on the cabinet).** The analyzer: `ears.py`, `feel.py`, `sections.py`, `listening.py`, `memory.py`, `study.py`, `sync.py`, `songs.py`, and `tools/learn_song.py`. The lights: `show/plan.py` (the choreographer), the director rewritten around it, `show/moves.py`, show format 2 and four new shows (Moody, Love, Starfield, Rock Show), the EQ and ribbon drawn in the song's colours. The admin: Now (the plan, why, the look, the map as a timeline), Songs, Preview by kind of song. Docs: [Light Show Styles.md](docs/Light%20Show%20Styles.md) (rewritten), the lights contract (format 2), the audio-analysis contract, the analyzer architecture (Oct 30 status). Tests pass on the Mac. On the cabinet (Pi 5, a test install): the services ran clean; learning a 198 s song offline took 21 s (~11% of a core) and the study 0.2 s; a replay locked to the map put each section change within ~50 ms of its start. **Released as v0.3.0 Oct 30.** **Next:** the cabinet takes v0.3.0 (Admin › Updates, or the nightly update); play real songs (the first play live, the second from the map) and tune.
 
 ## Roadmap (agreed Oct 14, 2026)
 
