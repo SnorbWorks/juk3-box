@@ -33,6 +33,12 @@ off for one start and restart; jb-update-resume.service installs it then,
 turns the protection back on and restarts again. Checking for OS updates
 keeps apt's lists on the data partition, not in memory.
 
+The state's "phase" is the step under way (starting, to install,
+downloading, checking, installing, restarting, rolling back, protecting),
+with "phase_at", when it began: the admin shows it on the Update now
+button, and takes a step from before the last restart as over unless a
+restart to install is still to come (resume.json).
+
 A copy without /opt/juk3-box/VERSION is a developer's (deploy.sh): it's
 never updated from here. Runs as root: from the timer (jb-update.timer),
 or jb-setupctl's "update" requests (the admin's Updates card).
@@ -124,6 +130,15 @@ def state(**changes) -> dict:
     return s
 
 
+def set_phase(name, **changes) -> dict:
+    """The step under way (None: none), and since when, for the admin."""
+    return state(phase=name, phase_at=time.time(), **changes)
+
+
+def os_phase(name, **changes) -> dict:
+    return os_state(phase=name, phase_at=time.time(), **changes)
+
+
 def auto_on() -> bool:
     return read_json(SETTINGS, {}).get("auto", True) is not False
 
@@ -161,27 +176,62 @@ def apt_dirs() -> tuple:
 
 
 def restart_to_install(verbs: list[list[str]]) -> None:
-    """Note what to install, start once without protection, restart."""
+    """Note what to install, start once without protection, restart. The
+    steps say "to install" first (the restart can come at once); if it
+    can't restart, the protection stays as it was and they say why."""
+    os_verb = next((v for v in verbs if v[:1] == ["os-apply"]), None)
+    if ["apply"] in verbs:
+        set_phase("to install", error=None)
+    if os_verb:
+        os_phase("to install", what=os_verb[1], error=None, queue=[])
     write_json(RESUME, {"verbs": verbs, "at": time.time()})
-    run(ROOTFS, "off")
-    run("systemctl", "--no-block", "reboot")
+    off = False
+    try:
+        run(ROOTFS, "off")
+        off = True
+        run("systemctl", "--no-block", "reboot")
+    except (subprocess.SubprocessError, OSError) as e:
+        RESUME.unlink(missing_ok=True)
+        if off:
+            run(ROOTFS, "on", check=False)
+        error = f"Couldn't restart to install: {e}"
+        if ["apply"] in verbs:
+            set_phase(None, error=error)
+        if os_verb:
+            os_phase(None, error=error)
 
 
 def resume() -> dict:
     """The start without protection: install what was noted, protect the
     system again, restart. The note goes first, so a failure can't loop."""
     note = read_json(RESUME, {})
-    RESUME.unlink(missing_ok=True)
+    verbs = (note.get("verbs") if isinstance(note, dict) else None) or []
     s = {}
     try:
-        for verb in note.get("verbs") or []:
+        try:
+            # Under way again, from this start, before the note goes: in between, the
+            # admin would take the "to install" from before the restart as over.
+            if ["apply"] in verbs:
+                set_phase("starting", error=None)
+            if any(v[:1] == ["os-apply"] for v in verbs):
+                os_phase("starting", error=None)
+        finally:
+            RESUME.unlink(missing_ok=True)
+        for verb in verbs:
             if verb == ["apply"]:
-                s = apply()
+                s = apply(then="protecting")
             elif len(verb) == 2 and verb[0] == "os-apply" and verb[1] in ("security", "all"):
                 s = {"os": os_apply(verb[1])}
     finally:
-        run(ROOTFS, "on", check=False)
-        run("systemctl", "--no-block", "reboot", check=False)
+        try:
+            # Until the restart that protects the system again (the admin takes it as over after it).
+            if ["apply"] in verbs:
+                set_phase("protecting")
+            if any(v[:1] == ["os-apply"] for v in verbs):
+                os_phase("protecting")
+        finally:
+            run(ROOTFS, "on", check=False)
+            run("systemctl", "--no-block", "reboot", check=False)
     return s
 
 
@@ -260,15 +310,26 @@ def swap_back() -> None:
     os.rename(PREV, REPO)
 
 
-def apply() -> dict:
+def apply(then=None) -> dict:
+    """Install the newest version. then: the step to end on when installed
+    ("protecting": resume's restart is still to come)."""
+    set_phase("starting", error=None)
+    try:
+        return _apply(then)
+    except Exception as e:          # whatever it was, the admin mustn't show it as still going
+        set_phase(None, error=f"The update stopped: {e}")
+        raise
+
+
+def _apply(then=None) -> dict:
     s = check()
     if not s.get("available"):
-        return s
+        return set_phase(None)
     if protected():
         restart_to_install([["apply"]])
-        return state(phase="to install", error=None)
+        return read_json(STATE, {})
     current, latest, rel = s["current"], s["latest"], s["release"]
-    state(phase="downloading", started_at=time.time(), error=None)
+    set_phase("downloading", started_at=time.time(), error=None)
     work = DIR / "download"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -276,33 +337,33 @@ def apply() -> dict:
         bundle, sig = work / "code.tar.gz", work / "code.tar.gz.sig"
         fetch(rel["code"], bundle)
         fetch(rel["signature"], sig)
-        state(phase="checking")
+        set_phase("checking")
         verify(bundle, sig, rel.get("code_sha256", ""), REPO / KEY)
         unpack(bundle, NEW)
         if current_version(NEW) != latest:
             raise Failed(f"The download says it's {current_version(NEW)}, not {latest}.")
     except Failed as e:
         shutil.rmtree(NEW, ignore_errors=True)
-        return state(phase=None, error=str(e))
+        return set_phase(None, error=str(e))
     except Exception as e:
         shutil.rmtree(NEW, ignore_errors=True)
-        return state(phase=None, error=f"Couldn't download the update: {e}")
+        return set_phase(None, error=f"Couldn't download the update: {e}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-    state(phase="installing")
+    set_phase("installing")
     swap_in(NEW)
     try:
         install(REPO)
         run("systemctl", "daemon-reload")
-        state(phase="restarting")
+        set_phase("restarting")
         services("restart")
         time.sleep(SETTLE_S)
         bad = failed_units()
         if bad:
             raise Failed("These didn't start on the new version: " + ", ".join(bad))
     except (Failed, subprocess.SubprocessError, OSError) as e:
-        state(phase="rolling back")
+        set_phase("rolling back")
         swap_back()
         try:
             install(REPO)
@@ -310,10 +371,10 @@ def apply() -> dict:
             pass
         run("systemctl", "daemon-reload", check=False)
         services("restart")
-        return state(phase=None, current=current, available=True,
-                     error=f"{latest} didn't work here, so {current} is back. {e}")
-    return state(phase=None, current=latest, available=False, updated_at=time.time(),
-                 updated_from=current, error=None)
+        return set_phase(None, current=current, available=True,
+                         error=f"{latest} didn't work here, so {current} is back. {e}")
+    return set_phase(then, current=latest, available=False, updated_at=time.time(),
+                     updated_from=current, error=None)
 
 
 # Raspberry Pi OS ---------------------------------------------------------------
@@ -396,15 +457,23 @@ class Progress:
 
 
 def os_apply(which: str) -> dict:
+    try:
+        return _os_apply(which)
+    except Exception as e:          # as apply(): never left looking as if it's still going
+        os_phase(None, error=f"The update stopped: {e}")
+        raise
+
+
+def _os_apply(which: str) -> dict:
     security, other = upgradable()
     chosen = security if which == "security" else security + other
     if not chosen:
-        return os_state(security=security, other=other, phase=None)
+        return os_phase(None, security=security, other=other)
     if protected():
         restart_to_install([["os-apply", which]])
-        return os_state(phase="to install", what=which, error=None, queue=[])
+        return read_json(STATE, {}).get("os") or {}
     progress = Progress([p["name"] for p in chosen])
-    os_state(phase="installing", what=which, error=None, queue=progress.view(), download=0)
+    os_phase("installing", what=which, error=None, queue=progress.view(), download=0)
     env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive", "APT_LISTCHANGES_FRONTEND": "none"}
     status_r, status_w = os.pipe()
     opts = (*APT_OPTS, "-o", f"APT::Status-Fd={status_w}")
@@ -428,7 +497,7 @@ def os_apply(which: str) -> dict:
         for q in queue:
             if q["state"] == "running":
                 q["state"] = "failed"
-        return os_state(phase=None, security=security, other=other, queue=queue,
+        return os_phase(None, security=security, other=other, queue=queue,
                         error="The update stopped: " + output.strip()[-300:])
     left = {p["name"] for p in security + other}
     for q in queue:             # apt had nothing to do for some (pulled in by another): done
@@ -437,11 +506,11 @@ def os_apply(which: str) -> dict:
     # Everything (Chromium, PipeWire...) takes effect on a restart too.
     restart = which == "all" or Path("/run/reboot-required").exists() or \
         any(RESTART_RE.match(p["name"]) for p in chosen)
-    changes = {"phase": None, "security": security, "other": other, "updated_at": time.time(),
+    changes = {"security": security, "other": other, "updated_at": time.time(),
                "updated": [p["name"] for p in chosen], "error": None, "queue": queue}
     if restart:
         changes["restart_needed_at"] = time.time()
-    return os_state(**changes)
+    return os_phase(None, **changes)
 
 
 def main():
@@ -464,6 +533,7 @@ def main():
             verbs = ([["apply"]] if s.get("available") else []) + ([["os-apply", "security"]] if security else [])
             if verbs:
                 restart_to_install(verbs)
+                s = read_json(STATE, {})
         else:
             s = apply() if auto_on() else check()
             os_check()

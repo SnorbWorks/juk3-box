@@ -32,6 +32,8 @@ from services.jb_admin.files import read_json
 REPO = Path(__file__).resolve().parents[2]
 RESTART_HOURS = range(3, 5)          # local time
 RESTART_CHECK_S = 300
+STARTING_S = 120                     # an update asked for, not yet under way: "starting" this long at most
+STALE_S = 90 * 60                    # jb-update's own time limit: a step older than this didn't finish
 NOW_PLAYING = ("now_playing", "now_playing_local", "now_playing_helper")
 # The Raspberry Pi OS programs the jukebox leans on (THIRD-PARTY.md).
 SYSTEM = (("chromium", "Chromium", "Shows the song board"), ("pipewire", "PipeWire", "Sound"),
@@ -48,6 +50,34 @@ def boot_time() -> float:
     except OSError:
         pass
     return 0.0
+
+
+def live_phase(s: dict, folder: Path) -> str | None:
+    """The step an update is at (jb-update's "phase"), if it's still going.
+    One from before this start is over -- the restart it waited for has
+    happened -- unless a restart to install is still to come (resume.json);
+    so is one older than jb-update's time limit. An older jb-update didn't
+    date its steps: for those, the state's last write."""
+    phase, at = s.get("phase"), s.get("phase_at")
+    if not phase:
+        return None
+    if not isinstance(at, (int, float)):
+        try:
+            at = (folder / "state.json").stat().st_mtime
+        except OSError:
+            return phase
+    if at < boot_time() and not (folder / "resume.json").exists():
+        return None
+    return None if time.time() - at > STALE_S else phase
+
+
+def starting(asked: float | None, phase: str | None, s: dict) -> bool:
+    """Asked for a moment ago (the Update now button) and jb-update hasn't
+    taken it up yet: the root helper starts it in a second or two."""
+    if not asked or phase or time.time() - asked > STARTING_S:
+        return False
+    at = s.get("phase_at")
+    return not isinstance(at, (int, float)) or at < asked
 
 
 def rootfs_view(proc_cmdline: Path = Path("/proc/cmdline"), boot_cmdline: Path = Path("/boot/firmware/cmdline.txt"),
@@ -139,6 +169,7 @@ class Updates:
     def __init__(self, admin):
         self.admin = admin
         self._system = None          # dpkg's answer, once per start (it changes only with an update)
+        self.asked = {}              # "juk3box"/"os" -> when the owner asked to install (starting())
 
     def folder(self) -> Path:
         return Path(self.admin.cfg["update_dir"])
@@ -148,8 +179,10 @@ class Updates:
         o = s.get("os") if isinstance(s, dict) else None
         o = o if isinstance(o, dict) else {}
         restart = bool(o.get("restart_needed_at")) and o["restart_needed_at"] > boot_time()
+        phase = live_phase(o, self.folder())
         return {"checked_at": o.get("checked_at"), "security": o.get("security") or [], "other": o.get("other") or [],
-                "phase": o.get("phase"), "what": o.get("what"), "error": o.get("error"),
+                "phase": phase, "phase_at": o.get("phase_at"), "starting": starting(self.asked.get("os"), phase, o),
+                "what": o.get("what"), "error": o.get("error"),
                 # The install's queue (jb-update's Progress): while it runs, and for a while after.
                 "queue": o.get("queue") or [], "download": o.get("download") or 0,
                 "updated_at": o.get("updated_at"), "updated": o.get("updated") or [], "restart_needed": restart}

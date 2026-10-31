@@ -1,7 +1,7 @@
 #!/bin/sh
 # Makes a release:  deploy/release.sh v1.2.3
 # Tags the committed code and pushes the tag; GitHub then builds the card
-# image and the signed update (.github/workflows/release.yml, ~45 minutes)
+# image and the signed update (.github/workflows/release.yml, about 10 minutes)
 # and publishes them on the repo's Releases page. Jukeboxes find it there.
 set -eu
 cd "$(dirname "$0")/.."

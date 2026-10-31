@@ -7,8 +7,10 @@ import importlib.util
 import io
 import json
 import logging
+import os
 import subprocess
 import tarfile
+import time
 from pathlib import Path
 
 import pytest
@@ -222,3 +224,178 @@ def test_the_install_queue_follows_apt():
     p.line("pmstatus:chromium:85:Installed chromium (arm64): 155.0\n")       # a colon in the message
     assert states() == ["done"] * 3
     assert not p.line("garbage\n") and not p.line("pmstatus:chromium:x:y\n")
+
+
+# The Update now button: jb-update's steps, dated, and how the admin reads them ---
+
+@pytest.fixture
+def jb(tmp_path, monkeypatch):
+    """jb-update with its files in tmp_path, its commands recorded (and the
+    state's phase when each ran), never run."""
+    monkeypatch.setattr(up, "DIR", tmp_path)
+    monkeypatch.setattr(up, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(up, "RESUME", tmp_path / "resume.json")
+    ran, fail = [], set()
+
+    def run(*cmd, check=True, **kw):
+        ran.append((cmd, up.read_json(up.STATE, {}).get("phase")))
+        if cmd in fail and check:
+            raise subprocess.CalledProcessError(1, cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(up, "run", run)
+    up.ran, up.fail = ran, fail
+    return up
+
+
+OFF, ON, REBOOT = (up.ROOTFS, "off"), (up.ROOTFS, "on"), ("systemctl", "--no-block", "reboot")
+
+
+def test_each_step_is_dated_and_a_crash_never_looks_still_going(jb, monkeypatch):
+    before = time.time()
+    s = jb.set_phase("downloading", error=None)
+    assert s["phase"] == "downloading" and before <= s["phase_at"] <= time.time()
+
+    def broken():
+        raise RuntimeError("no disk")
+    monkeypatch.setattr(jb, "check", broken)
+    with pytest.raises(RuntimeError):
+        jb.apply()
+    s = jb.read_json(jb.STATE, {})
+    assert s["phase"] is None and s["error"] == "The update stopped: no disk" and s["phase_at"] >= before
+    monkeypatch.setattr(jb, "upgradable", broken)
+    with pytest.raises(RuntimeError):
+        jb.os_apply("security")
+    o = jb.read_json(jb.STATE, {})["os"]
+    assert o["phase"] is None and o["error"] == "The update stopped: no disk"
+
+
+def test_a_protected_jukebox_says_so_before_it_restarts(jb, monkeypatch):
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "check", lambda: jb.state(current="v1.0.0", latest="v1.1.0", available=True))
+    s = jb.apply()
+    assert s["phase"] == "to install" and s["error"] is None
+    assert jb.ran == [(OFF, "to install"), (REBOOT, "to install")]       # said first: the restart can come at once
+    assert jb.read_json(jb.RESUME, {})["verbs"] == [["apply"]]
+
+    # It can't turn the protection off: nothing changed, and it says why.
+    jb.ran.clear()
+    jb.fail.add(OFF)
+    s = jb.apply()
+    assert s["phase"] is None and s["error"].startswith("Couldn't restart to install")
+    assert not jb.RESUME.exists() and [c for c, _ in jb.ran] == [OFF]
+    # It can't restart: the protection goes back on.
+    jb.ran.clear()
+    jb.fail.clear()
+    jb.fail.add(REBOOT)
+    s = jb.apply()
+    assert s["phase"] is None and not jb.RESUME.exists() and [c for c, _ in jb.ran] == [OFF, REBOOT, ON]
+
+    # Raspberry Pi OS the same way, and the nightly run with both.
+    jb.ran.clear()
+    jb.fail.clear()
+    pkgs = [{"name": "openssl", "from": "1", "to": "2"}]
+    monkeypatch.setattr(jb, "upgradable", lambda: (pkgs, []))
+    o = jb.os_apply("security")
+    assert o["phase"] == "to install" and o["what"] == "security" and o["queue"] == []
+    jb.restart_to_install([["apply"], ["os-apply", "security"]])
+    s = jb.read_json(jb.STATE, {})
+    assert s["phase"] == "to install" and s["os"]["phase"] == "to install"
+
+
+def test_the_start_that_installs_says_so_until_the_last_restart(jb, monkeypatch):
+    jb.state(phase="to install", phase_at=1.0)
+    jb.write_json(jb.RESUME, {"verbs": [["apply"]]})
+    seen = []
+
+    def apply(then=None):
+        s = jb.read_json(jb.STATE, {})
+        seen.append((s["phase"], s["phase_at"] > 1.0, jb.RESUME.exists(), then))
+        return jb.set_phase(then, current="v1.1.0", updated_at=time.time())
+    monkeypatch.setattr(jb, "apply", apply)
+    jb.resume()
+    assert seen == [("starting", True, False, "protecting")]   # under way from this start before the note went
+    assert jb.read_json(jb.STATE, {})["phase"] == "protecting"
+    assert [c for c, _ in jb.ran] == [ON, REBOOT]
+
+    # Even when installing fails, the protection goes back on.
+    def broken(then=None):
+        jb.set_phase(None, error="The update stopped: no disk")
+        raise RuntimeError("no disk")
+    monkeypatch.setattr(jb, "apply", broken)
+    jb.write_json(jb.RESUME, {"verbs": [["apply"]]})
+    jb.ran.clear()
+    with pytest.raises(RuntimeError):
+        jb.resume()
+    s = jb.read_json(jb.STATE, {})
+    assert s["phase"] == "protecting" and s["error"] and [c for c, _ in jb.ran] == [ON, REBOOT]
+
+    # Even when the state can't be written: the note goes, the protection goes back on, it restarts.
+    def full(*a, **kw):
+        raise OSError("No space left on device")
+    monkeypatch.setattr(jb, "set_phase", full)
+    jb.write_json(jb.RESUME, {"verbs": [["apply"]]})
+    jb.ran.clear()
+    with pytest.raises(OSError):
+        jb.resume()
+    assert not jb.RESUME.exists() and [c for c, _ in jb.ran] == [ON, REBOOT]
+
+
+def test_a_step_from_before_the_last_restart_is_over(tmp_path, monkeypatch):
+    from services.jb_admin import updates
+    now = time.time()
+    monkeypatch.setattr(updates, "boot_time", lambda: now - 60)
+    (tmp_path / "state.json").write_text("{}")
+    live = lambda **s: updates.live_phase(s, tmp_path)
+    assert live(phase="downloading", phase_at=now - 5) == "downloading"
+    assert live(phase=None, phase_at=now - 5) is None
+    assert live(phase="restarting", phase_at=now - 120) is None             # the restart has happened
+    (tmp_path / "resume.json").write_text("{}")
+    assert live(phase="to install", phase_at=now - 120) == "to install"     # ...unless one to install is to come
+    (tmp_path / "resume.json").unlink()
+    monkeypatch.setattr(updates, "boot_time", lambda: 0.0)
+    assert live(phase="installing", phase_at=now - updates.STALE_S - 1) is None   # past jb-update's own limit
+    # An older jb-update's undated step: dated by the state's last write.
+    os.utime(tmp_path / "state.json", (now - 30, now - 30))
+    assert live(phase="installing") == "installing"
+    monkeypatch.setattr(updates, "boot_time", lambda: now - 10)
+    assert live(phase="installing") is None
+
+
+def test_update_now_is_starting_until_jb_update_takes_it_up(tmp_path, monkeypatch):
+    from services.jb_admin import updates
+    now = time.time()
+    assert not updates.starting(None, None, {})
+    assert updates.starting(now - 1, None, {"phase_at": now - 600})
+    assert updates.starting(now - 1, None, {})                                 # never dated (an older jb-update)
+    assert not updates.starting(now - 1, "downloading", {"phase_at": now})    # under way: its own step
+    assert not updates.starting(now - 2, None, {"phase_at": now - 1})         # over already (nothing to install)
+    assert not updates.starting(now - updates.STARTING_S - 1, None, {})       # never taken up
+    monkeypatch.setattr(updates, "ssh_view", lambda: {"on": False, "keys": 0})
+    monkeypatch.setattr(updates, "system_versions", lambda: [])
+
+    async def go():
+        folder = tmp_path / "update"
+        folder.mkdir()
+        state = {"current": "v1.0.0", "latest": "v1.1.0", "available": True, "phase": None, "phase_at": now - 600}
+        (folder / "state.json").write_text(json.dumps(state))
+        app = main.build_app({**config(tmp_path), "update_dir": str(folder)}, logging.getLogger("test"), bus_enabled=False)
+        admin = app[main.ADMIN_KEY]
+
+        async def ctl(verb, *args, timeout=60):
+            return "started"
+        admin.setup_ctl = ctl
+        async with TestClient(TestServer(app)) as c:
+            assert (await c.post("/api/setup", json={"password": "correct horse"}, headers=H)).status == 200
+            u = await (await c.get("/api/update")).json()
+            assert u["phase"] is None and u["starting"] is False
+            u = await (await c.post("/api/update/apply", json={}, headers=H)).json()
+            assert u["starting"] is True and u["phase"] is None
+            state.update(phase="downloading", phase_at=time.time())
+            (folder / "state.json").write_text(json.dumps(state))
+            u = await (await c.get("/api/updates")).json()
+            assert u["juk3box"]["phase"] == "downloading" and u["juk3box"]["starting"] is False
+            assert u["juk3box"]["phase_at"] == state["phase_at"]
+            assert (await c.post("/api/updates/os/security", json={}, headers=H)).status == 200
+            u = await (await c.get("/api/updates")).json()
+            assert u["os"]["starting"] is True and u["os"]["phase"] is None
+    asyncio.run(go())

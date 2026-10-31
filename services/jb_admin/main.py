@@ -521,8 +521,10 @@ class Admin:
         s = read_json(folder / "state.json", {})
         s = s if isinstance(s, dict) else {}
         auto = read_json(folder / "settings.json", {})
+        phase = updates.live_phase(s, folder)
         return {"current": s.get("current"), "latest": s.get("latest"), "available": bool(s.get("available")),
-                "checked_at": s.get("checked_at"), "updated_at": s.get("updated_at"), "phase": s.get("phase"),
+                "checked_at": s.get("checked_at"), "updated_at": s.get("updated_at"), "phase": phase,
+                "phase_at": s.get("phase_at"), "starting": updates.starting(self.updates.asked.get("juk3box"), phase, s),
                 "error": s.get("error"), "note": s.get("note"),
                 "auto": not (isinstance(auto, dict) and auto.get("auto") is False)}
 
@@ -534,10 +536,13 @@ class Admin:
         what = request.match_info["what"]
         if what not in ("check", "security", "all"):
             raise error(404, "Not found.")
+        asked = time.time()             # before: jb-update can be under way by the time it answers
         try:
             await self.setup_ctl("update", f"os-{what}", timeout=30)
         except WizardError as e:
             raise error(400, str(e))
+        if what != "check":
+            self.updates.asked["os"] = asked
         return web.json_response(self.updates.view())
 
     async def post_updates_rootfs(self, request):
@@ -576,10 +581,13 @@ class Admin:
         what = request.match_info["what"]
         if what not in ("check", "apply"):
             raise error(404, "Not found.")
+        asked = time.time()             # before: jb-update can be under way by the time it answers
         try:
             await self.setup_ctl("update", what, timeout=90)
         except WizardError as e:
             raise error(400, str(e))
+        if what == "apply":
+            self.updates.asked["juk3box"] = asked
         return web.json_response(self.update_view())
 
     async def put_update_auto(self, request):

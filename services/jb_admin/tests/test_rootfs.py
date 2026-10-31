@@ -126,12 +126,14 @@ def test_updates_restart_to_install_when_protected(tmp_path, monkeypatch):
 def test_resume_installs_then_protects_again_and_restarts(tmp_path, monkeypatch):
     calls, done = [], []
     monkeypatch.setattr(up, "RESUME", tmp_path / "resume.json")
+    monkeypatch.setattr(up, "STATE", tmp_path / "state.json")
     monkeypatch.setattr(up, "run", lambda *cmd, **kw: calls.append(cmd))
     monkeypatch.setattr(up, "os_apply", lambda which: done.append(which) or {"phase": None})
     up.write_json(up.RESUME, {"verbs": [["os-apply", "all"]], "at": 1})
     up.resume()
     assert done == ["all"] and not up.RESUME.exists()
     assert calls == [(up.ROOTFS, "on"), ("systemctl", "--no-block", "reboot")]
+    assert up.read_json(up.STATE, {})["os"]["phase"] == "protecting"     # until that restart
 
 
 def test_protected_reads_the_kernel_command_line():

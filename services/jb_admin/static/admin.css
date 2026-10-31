@@ -92,6 +92,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; pointer-events: none; }
+/* At work (pages/updates.js): it says what it's doing, so not faded; its spinner in the button's colour */
+.btn.working:disabled { opacity: 1; }
+.btn .spinner { width: 14px; height: 14px; border-color: currentColor; border-top-color: transparent; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-text); }
 .btn.danger { color: var(--danger); border-color: var(--danger); background: var(--surface); }
