@@ -13,6 +13,7 @@ every month (`.github/workflows/check-updates.yml`).
 | Adafruit CircuitPython HID | 6.1.10 | MIT | `firmware/pico-keypad/vendor/lib/adafruit_hid/` |
 | MQTT.js (the screen's link to the jukebox) | 5.16.0 | MIT | `services/jb_ui/engine/mqtt-5.16.0.min.js` |
 | Lucide icons (Iconify set) | set of Oct 9, 2026 | ISC | `services/jb_ui/icons/` |
+| YAMNet sound model (Google), its weights converted to numpy by `tools/yamnet_convert.py` (the batch norms folded into the convolutions), and its class map | as published, Oct 2026 | Apache-2.0 | `services/jb_analyzer/models/` |
 | Fonts: Bebas Neue, Courier Prime, Inter, Nunito, Oswald, Playfair Display, Righteous | Oct 2026 | SIL Open Font License 1.1 | `services/jb_ui/engine/fonts/` |
 | The Neon theme's concert video and pictures | | Made for this project; covered by its license | `themes/neon/assets/` |
 

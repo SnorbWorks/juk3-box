@@ -69,11 +69,16 @@ class SlowAnalyzer:
         shift = 0.5 * (a - c) / (a - 2 * b + c) if (a - 2 * b + c) else 0.0
         return 60 * self.fps / (k + float(np.clip(shift, -0.5, 0.5)))
 
-    def state(self, playing: bool) -> dict:
+    def update_tempo(self):
+        """A fresh read of the tempo (the pipeline asks every couple of seconds)."""
         t = self._estimate_tempo()
         if t:
             self.tempo_reads.append(t)
             self.tempo = float(np.median(self.tempo_reads))   # one stray read can't move it
+
+    def state(self, playing: bool, estimate: bool = True) -> dict:
+        if estimate:
+            self.update_tempo()
         energy = float(np.mean(self.levels)) if self.levels else 0.0
         brightness = float(np.mean(self.bright)) if self.bright else 0.0
         seconds = max(len(self.beats) / self.fps, 1e-6)

@@ -202,3 +202,39 @@ def test_the_beat_clock_counts_bars_and_follows_the_kicks():
     clock.downbeat()
     assert clock.step(120.0, False)[1] == 0
     assert BeatClock(FPS).step(None, True) == (None, None)
+
+
+def noise_burst(seconds, decay, lo, hi=None, amp=0.5, seed=3):
+    """Band-limited noise dying away: a cymbal, a hat, a snare's rattle."""
+    n = int(seconds * RATE)
+    X = np.fft.rfft(np.random.default_rng(seed).standard_normal(n))
+    fr = np.fft.rfftfreq(n, 1 / RATE)
+    X[(fr < lo) | (fr > (hi or RATE))] = 0
+    x = np.fft.irfft(X, n)
+    return amp * x / np.abs(x).max() * np.exp(-np.arange(n) / RATE / decay)
+
+
+def test_a_crash_cymbal_is_a_crash_and_rings_and_hats_or_a_snare_are_not():
+    period = int(RATE * 60 / 120)
+    beat = kicks(120, 8, amp=0.6)
+    hat = noise_burst(0.05, 0.015, 7000, amp=0.15)
+    for s in range(period // 2, beat.size - hat.size, period // 2):
+        beat[s:s + hat.size] += hat                                 # hats on the eighths
+    plain = run(beat.copy())
+    assert all(f["crash"] == 0 for f in plain) and max(f["ring"] for f in plain[60:]) < 0.15
+    crash = noise_burst(2.0, 0.8, 3000, amp=0.35, seed=4)
+    beat[4 * RATE:4 * RATE + crash.size] += crash
+    fr = run(beat)
+    hits = [((i + 1) * HOP / RATE, f) for i, f in enumerate(fr) if f["crash"] > 0]
+    assert len(hits) == 1
+    t, f = hits[0]
+    assert abs(t - f["crash_ago"] - 4.0) < 0.07                    # it says when it struck
+    assert max(x["ring"] for x in fr[int(4.2 * FPS):int(5 * FPS)]) > 0.8      # and it rings on
+
+    snares = kicks(120, 8, amp=0.6)
+    n = int(0.2 * RATE)
+    tt = np.arange(n) / RATE
+    snare = noise_burst(0.2, 0.06, 1000, 5000, amp=0.4) + 0.3 * np.sin(2 * np.pi * 200 * tt) * np.exp(-tt / 0.05)
+    for s in range(period, snares.size - n, 2 * period):
+        snares[s:s + n] += snare                                    # on 2 and 4
+    assert all(f["crash"] == 0 for f in run(snares))

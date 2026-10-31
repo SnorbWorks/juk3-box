@@ -4,9 +4,12 @@ Pure numpy, no I/O, so it can be tested with synthetic signals. Each call to
 FastAnalyzer.process() takes the newest `hop` mono samples (float, full scale
 = 1.0) and returns the fast-channel fields of the audio-analysis contract
 (docs/contracts/audio-analysis.md): level, peak, bands, brightness, beat,
-onset, and the drums (kick, snare, hat) -- plus a few internals the slower
-layers read (bass, flux, each band in dB).
+onset, the drums (kick, snare, hat), and the cymbals (crash: a big
+cymbal attack; ring: how loud the cymbals' wash is) -- plus a few internals
+the slower layers read (bass, flux, each band in dB, the power spectrum).
 """
+
+from collections import deque
 
 import numpy as np
 
@@ -20,6 +23,23 @@ BAND_FLOOR_DB = 45.0      # a band this far under the loudest (tilt-levelled) is
 # snare's crack, the hats' and cymbals' sizzle.
 DRUMS = {"kick": (40, 150), "snare": (1500, 5000), "hat": (7000, 16000)}
 DRUM_HIST_S = 1.5         # each part is judged against its own last second and a half
+# The cymbals. A crash is a big jump in the 7-16 kHz sizzle over the moment
+# before, also lifting 3-7 kHz (it's broadband) and brighter than a snare's
+# crack (1.5-3 kHz) -- and then it *rings*: a hat, a clap or a snare jumps as
+# far in a dense mix, but is gone in a tenth of a second, so a crash is only
+# called once the sizzle has stayed up for CRASH_HOLD_S (it carries how long
+# ago it struck). The ring is the sizzle's floor between hits (its quietest
+# moment lately) over the song's own floor: a cymbal wash lifts it, a busy
+# hat pattern doesn't.
+CYMBAL_HI, CYMBAL_MID, CRACK = (7000, 16000), (3000, 7000), (1500, 3000)
+CRASH_JUMP_DB = 6.0       # the sizzle this far over the last 0.3 s...
+CRASH_BEFORE_S = 0.3
+CRASH_HOLD_S = 0.17       # ...and still this far up (at its lowest) this long after
+CRASH_FULL_DB = 18.0      # a jump this big reads 1.0
+CRASH_GAP_S = 0.25        # one crash at most this often
+RING_FLOOR_S = 4.0        # the song's floor: a low percentile of the sizzle over this long
+RING_LOW_S = 0.17         # the sizzle's floor now: its lowest over this long
+RING_RANGE_DB = 12.0
 
 
 def a_weighting(freqs):
@@ -53,6 +73,12 @@ class FastAnalyzer:
         # The drum kit, roughly: where each part's attack lands in the spectrum.
         self.drum_bins = {name: np.nonzero((freqs >= lo) & (freqs < hi))[0] for name, (lo, hi) in DRUMS.items()}
         self.drum_hist = {name: [] for name in DRUMS}
+        self.cym_bins = {name: np.nonzero((freqs >= lo) & (freqs < hi))[0]
+                         for name, (lo, hi) in (("hi", CYMBAL_HI), ("mid", CYMBAL_MID), ("crack", CRACK))}
+        self.cym_hist = {name: deque(maxlen=int(RING_FLOOR_S * self.fps)) for name in self.cym_bins}
+        self.ring = 0.0
+        self.since_crash = 1e9
+        self.struck = None         # a possible crash: (frames ago, the sizzle before it, its jump)
         self.centroid_lo, self.centroid_hi = np.log(150.0), np.log(8000.0)
         # State
         self.bands = np.zeros(N_BANDS)
@@ -158,6 +184,39 @@ class FastAnalyzer:
             hit = (x - h.mean()) / (3 * h.std() + 0.05) if target > 0.08 else 0.0
             drums[name] = round(float(np.clip(hit, 0, 1)), 3)
 
+        # Cymbals.
+        db = {name: 10 * np.log10(np.mean(power[b]) + 1e-12) for name, b in self.cym_bins.items()}
+        k = max(1, int(CRASH_BEFORE_S * self.fps))
+        jump, before = {}, {}
+        for name, h in self.cym_hist.items():
+            prev = list(h)[-k:]
+            before[name] = float(np.median(prev)) if prev else db[name]
+            jump[name] = db[name] - before[name]
+            h.append(db[name])
+        self.since_crash += 1
+        crash, crash_ago = 0.0, None
+        hold = max(1, round(CRASH_HOLD_S * self.fps))
+        if self.struck is not None:
+            ago, base, size = self.struck
+            ago += 1
+            held = min(list(self.cym_hist["hi"])[-ago:]) - base
+            if held < CRASH_JUMP_DB:
+                self.struck = None                     # gone already: a hat, a clap, a snare
+            elif ago >= hold:
+                crash = float(np.clip((size - CRASH_JUMP_DB / 2) / (CRASH_FULL_DB - CRASH_JUMP_DB / 2), 0.2, 1))
+                crash_ago, self.struck, self.since_crash = round(ago / self.fps, 3), None, ago
+            else:
+                self.struck = (ago, base, size)
+        if (self.struck is None and target > 0.08 and jump["hi"] >= CRASH_JUMP_DB
+                and jump["mid"] >= CRASH_JUMP_DB / 2 and jump["hi"] >= jump["crack"]
+                and self.since_crash >= CRASH_GAP_S * self.fps):
+            self.struck = (0, before["hi"], jump["hi"])
+        hist = self.cym_hist["hi"]
+        low = min(list(hist)[-max(1, round(RING_LOW_S * self.fps)):])
+        floor = float(np.percentile(hist, 20))
+        ring = float(np.clip((low - floor - 3) / RING_RANGE_DB, 0, 1)) if target > 0.08 else 0.0
+        self.ring += (ring - self.ring) * (0.7 if ring > self.ring else 0.15)
+
         return {
             "level": round(self.level, 3),
             "peak": round(min(peak, 1.0), 3),
@@ -166,10 +225,14 @@ class FastAnalyzer:
             "beat": beat,
             "onset": round(onset, 3),
             **drums,
+            "crash": round(crash, 3),
+            **({"crash_ago": crash_ago} if crash_ago is not None else {}),
+            "ring": round(self.ring, 3),
             # internals for the slower layers (not published as-is)
             "_loudness": round(self.loudness, 3),
             "_bass_db": bass_db,
             "_rms_db": rms_db,
             "_flux": flux,
             "_band_db": band_db,
+            "_power": power,
         }

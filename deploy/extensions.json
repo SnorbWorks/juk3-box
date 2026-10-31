@@ -1,6 +1,6 @@
 {
   "about": "Everything Juk3box runs or ships that isn't its own code: the extensions. The admin's Extensions page reads this file and adds the version installed on this jukebox. Kept by hand: add an entry when a new package, library, font, asset or web service comes in. docs/extensions-inventory.md explains the license duties.",
-  "updated": "2026-10-14",
+  "updated": "2026-10-30",
   "kinds": {
     "system": "Raspberry Pi OS packages the jukebox relies on",
     "python": "Python libraries in Juk3box's own environment",
@@ -45,6 +45,7 @@
 
     {"id": "mqtt-js", "name": "MQTT.js 5.16.0", "kind": "bundled", "file": "services/jb_ui/engine/mqtt-5.16.0.min.js", "license": "MIT", "used_by": "the cabinet's screen", "purpose": "The screen's link to the message bus", "url": "https://github.com/mqttjs/MQTT.js", "duty": "notice", "license_file": "services/jb_ui/engine/MQTT.js-LICENSE.txt"},
     {"id": "lucide", "name": "Lucide icons", "kind": "bundled", "file": "services/jb_ui/icons/lucide.json", "license": "ISC", "used_by": "screen, admin", "purpose": "Icons", "url": "https://lucide.dev", "duty": "notice", "license_file": "services/jb_ui/icons/lucide-LICENSE.txt"},
+    {"id": "yamnet", "name": "YAMNet sound model", "kind": "bundled", "file": "services/jb_analyzer/models/yamnet.npz", "license": "Apache-2.0", "used_by": "jb-analyzer", "purpose": "Hears what's in the music (singing, drums, guitars, its moods) for the song-aware light show; converted to numpy by tools/yamnet_convert.py", "url": "https://github.com/tensorflow/models/tree/master/research/audioset/yamnet", "duty": "notice", "license_file": "services/jb_analyzer/models/LICENSE-yamnet"},
     {"id": "font-inter", "name": "Inter (font)", "kind": "bundled", "file": "services/jb_ui/engine/fonts/Inter.ttf", "license": "OFL-1.1", "used_by": "Customize fonts", "purpose": "A font owners can pick", "url": "https://rsms.me/inter/", "duty": "notice", "license_file": "services/jb_ui/engine/fonts/Inter-OFL.txt"},
     {"id": "font-nunito", "name": "Nunito (font)", "kind": "bundled", "file": "services/jb_ui/engine/fonts/Nunito.ttf", "license": "OFL-1.1", "used_by": "Customize fonts, the setup wizard", "purpose": "A font owners can pick; the setup pages' text", "url": "https://fonts.google.com/specimen/Nunito", "duty": "notice", "license_file": "services/jb_ui/engine/fonts/Nunito-OFL.txt"},
     {"id": "font-bebas", "name": "Bebas Neue (font)", "kind": "bundled", "file": "services/jb_ui/engine/fonts/BebasNeue.ttf", "license": "OFL-1.1", "used_by": "Customize fonts", "purpose": "A font owners can pick", "url": "https://fonts.google.com/specimen/Bebas+Neue", "duty": "notice", "license_file": "services/jb_ui/engine/fonts/BebasNeue-OFL.txt"},

@@ -24,9 +24,8 @@ TOPIC = "jukebox/analysis/audio"
 
 
 def decode(path):
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-f", "f32le", "-ac", "1", "-ar", str(RATE), "-"],
-                         capture_output=True, check=True).stdout
-    return np.frombuffer(raw, dtype=np.float32)
+    from tools.learn_song import decode as decode_stereo      # ffmpeg, or afconvert on a Mac
+    return decode_stereo(path)
 
 
 def main():
@@ -62,7 +61,7 @@ def main():
             if public["build"] != "none":
                 sec["build"] = public["build"]
         if (i + 1) % round(fps * 2) == 0:
-            slow = pipe.slow.state(pipe.levels.sounding)
+            slow = pipe.slow.state(pipe.levels.sounding, estimate=False)
             if out:
                 out.write(json.dumps({"t": round(t, 3), "topic": f"{TOPIC}/slow", "data": {"v": 1, **slow}}) + "\n")
         if (i + 1) % round(fps) == 0 and not args.quiet:

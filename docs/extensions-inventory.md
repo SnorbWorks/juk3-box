@@ -30,5 +30,6 @@ Inventory taken Oct 14, 2026, from the reference Pi 4 (Raspberry Pi OS, Debian 1
 
 - **Pi 5:** `rpi_ws281x` doesn't run on the Pi 5; its replacement (an SPI or PIO LED driver) gets an entry when chosen.
 - **Development only:** pytest and grim are listed as *dev*; nothing in the running jukebox needs them.
+- **YAMNet** (Apache-2.0, from tensorflow/models): the analyzer's sound model ships converted (`tools/yamnet_convert.py` folds its batch norms into the convolutions), so its notice says the weights were changed. Its 521 class names come from Google's AudioSet ontology: confirm the ontology's terms before selling.
 - **Keypad firmware:** CircuitPython and Adafruit's HID library (MIT) run on the keypad's Pico; the same notice duty applies if the keypad ships.
 - **Not listed:** Raspberry Pi OS packages Juk3box doesn't use directly (the inventory lists what it relies on). An SD image would ship the whole OS: the "offer source" duty then covers every GPL package in it, which the Raspberry Pi OS source archive answers.
