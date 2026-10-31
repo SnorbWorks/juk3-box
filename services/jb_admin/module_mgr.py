@@ -20,6 +20,9 @@ from pathlib import Path, PurePosixPath
 
 from services.jb_admin import places
 from services.jb_admin.files import read_json, write_json
+from services.jb_lights.show import inputs as light_inputs
+from services.jb_lights.show import library as light_library
+from services.jb_lights.show import styles as light_styles
 from services.jb_ui import module_blocks, themes
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -93,6 +96,29 @@ def check_manifest(m, root: Path, taken: set[str]) -> list[str]:
                 p.append(f"setting {k!r}: type must be one of {', '.join(sorted(SETTING_TYPES))}")
     for b in m.get("blocks", []) or []:
         p.extend(module_blocks.check_block(mid, root, b))
+    p.extend(light_inputs.check_manifest_lights(m.get("lights")))
+    p.extend(check_shows(mid, root, m.get("shows")))
+    return p
+
+
+def check_shows(mid: str, root: Path, shows) -> list[str]:
+    """A module's light shows (docs/contracts/lights.md, Shows): files in the
+    module, each a good show named after the module."""
+    if shows is None:
+        return []
+    if not isinstance(shows, list) or len(shows) > 20:
+        return ['"shows" must list up to 20 show files']
+    p = []
+    for rel in shows:
+        path = (root / str(rel)).resolve() if isinstance(rel, str) else None
+        if path is None or root.resolve() not in path.parents or not path.is_file():
+            p.append(f"show {rel!r} isn't a file in the module")
+            continue
+        style, problems = light_styles.load(path, mid)
+        if problems:
+            p.append(f"show {rel}: {'; '.join(problems)}")
+        elif not light_library.module_show_ok(mid, style.name):
+            p.append(f"show {rel}: its id must be {light_library.module_prefix(mid)!r} or start with it")
     return p
 
 
@@ -110,6 +136,10 @@ def review(m: dict) -> list[dict]:
     out.append({"icon": "cpu", "text": f"At most {res.get('cpu', 25)}% of one processor core and {res.get('memory_mb', 128)} MB of memory"})
     for b in m.get("blocks", []) or []:
         out.append({"icon": "puzzle", "text": f"Adds a \"{b.get('label')}\" block to the page builder"})
+    for text in light_inputs.review_lights(m.get("lights")):
+        out.append({"icon": "lightbulb", "text": text})
+    if m.get("shows"):
+        out.append({"icon": "sparkles", "text": f"Adds {len(m['shows'])} light show{'s' if len(m['shows']) != 1 else ''}"})
     if m.get("owner_settings"):
         out.append({"icon": "settings", "text": "Has settings: " + ", ".join(s.get("label", k) for k, s in m["owner_settings"].items())})
     return out

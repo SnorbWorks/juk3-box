@@ -12,8 +12,9 @@ Looks crossfade; in eq and ribbon a drop flashes the whole chain white for a
 moment (the show flashes on its own cues). Without
 the analyzer (or a feed) the city simply stays on.
 
-The chain shares its controller with the buttons (chains.py), and the
-accent branch's 6A cap is applied every frame (accent_diner.limit).
+The modules' lights and the safety pass go on top (stack.py). The chain
+shares its controller with the buttons (chains.py), and the accent
+branch's 6A cap is applied every frame (accent_diner.limit).
 """
 
 import threading
@@ -22,6 +23,7 @@ import time
 from rpi_ws281x import Color
 
 from services.jb_lights import accent, chains
+from services.jb_lights.stack import Stack
 from services.jb_lights.show.parts import AccentShow
 from services.jb_lights.themes.accent_city import BRIGHTNESS, City
 from services.jb_lights.themes.accent_diner import limit
@@ -83,18 +85,21 @@ class Looks:
         return out
 
 
-def run(stop=None, feed=None):
+def run(stop=None, feed=None, inputs=None):
     stop = stop or threading.Event()
     chain = chains.get().accent
     looks = Looks(accent.positions())
     city_only = feed is None
+    stack = Stack("accent", accent.positions(), inputs, feed.director if feed else None)
     start = last = time.monotonic()
     try:
         while not stop.is_set():
             now = time.monotonic()
             t, dt = now - start, now - last
             last = now
-            frame = looks.city.frame(t, dt) if city_only else looks.frame(t, dt, feed.snapshot(now))
+            snap = None if city_only else feed.snapshot(now)
+            frame = looks.city.frame(t, dt) if city_only else looks.frame(t, dt, snap)
+            frame = stack(frame, now, dt, snap)
             for i, (r, g, b) in enumerate(limit(frame, BRIGHTNESS)):
                 chain.setPixelColor(i, Color(r, g, b))
             chain.show()

@@ -17,6 +17,12 @@ The user's design, tested 2026-10-10:
 (blink changes 2026-10-11)
 SINGLE/ALBUM stay white and sit out the chase.
 
+While it's resting (nothing typed, Reset up, no power menu), the keypad
+plays its part of the light show and modules' lights (stack.py: signals,
+cues, overlays on "keys"); none of that ever covers the feedback above.
+The owner's brightness (quiet hours too) dims every paint, down to
+safety.FLOOR_KEYS so the keys can always be read.
+
 The lights show jb-core's selection state rather than reading keys
 themselves, so they always agree with what jb-core will actually play:
 jukebox/jb-core/entry (retained: idle / partial + what's typed, and why it
@@ -38,13 +44,17 @@ import paho.mqtt.client as mqtt
 from rpi_ws281x import Color
 
 from services.jb_lights import buttons
+from services.jb_lights.safety import FLOOR_KEYS
+from services.jb_lights.show.parts import ROW_X
+from services.jb_lights.stack import Stack
 from services.jb_lights.themes.buttons_music import ButtonsMusic
 
 TOPICS = ("jukebox/jb-core/entry", "jukebox/jb-core/selection", "jukebox/jb-core/rejected",
           "jukebox/jb-core/skipped", "jukebox/jb-core/power", "jukebox/jb-input/raw",
           "jukebox/jb-core/pick-problem")
 
-WHITE = Color(0, 0, 0, int(255 * 0.70))
+RESTING = (0, 0, 0, int(255 * 0.70))
+WHITE = Color(*RESTING)
 GREEN = Color(0, 200, 0, 0)
 RED = Color(200, 0, 0, 0)
 OFF = Color(0, 0, 0, 0)
@@ -70,11 +80,18 @@ class Theme1:
     def __init__(self, strip):
         self.strip = strip
         self.reset_held = False
+        self.dim = 1.0          # the owner's brightness (safety.py)
+
+    @staticmethod
+    def dimmed(c: int, k: float) -> int:
+        w, r, g, b = (c >> 24) & 255, (c >> 16) & 255, (c >> 8) & 255, c & 255
+        return Color(int(r * k), int(g * k), int(b * k), int(w * k))
 
     def paint(self, colors=None, show=True):
         colors = colors or {}
         for i in range(buttons.NUM_PIXELS):
-            self.strip.setPixelColor(i, colors.get(i, WHITE))
+            c = colors.get(i, WHITE)
+            self.strip.setPixelColor(i, c if self.dim >= 1 else self.dimmed(c, self.dim))
         if show:
             self.strip.show()
 
@@ -148,9 +165,10 @@ class Theme1:
             time.sleep(CHASE_STEP_S)
 
 
-def main(feed=None):
+def main(feed=None, inputs=None):
     """Runs until Ctrl-C. With a feed (AudioFeed), the keypad joins the music
-    show (buttons_music) whenever nothing is waiting on it."""
+    show (buttons_music) whenever nothing is waiting on it, and modules'
+    lights (inputs) when they're on the keys."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="localhost")
     args = ap.parse_args()
@@ -168,6 +186,8 @@ def main(feed=None):
     typed = None    # what's entered so far (jb-core's retained entry topic)
     menu = False    # the power menu is open (jukebox/jb-core/power)
     music = ButtonsMusic() if feed else None
+    stack = Stack("buttons", [ROW_X.get(i, 0.5) for i in range(buttons.NUM_PIXELS)], inputs,
+                  feed.director if feed else None, rgbw=True, floor=FLOOR_KEYS) if feed else None
     showing_music = False
     last = time.monotonic()
 
@@ -179,16 +199,23 @@ def main(feed=None):
         nonlocal showing_music, last
         now = time.monotonic()
         dt, last = min(0.1, now - last), now
-        if not music or typed or theme.reset_held or menu:
+        if not music:
             return
-        colours = music.frame(dt, feed.snapshot(now))
-        if colours is None:
-            if showing_music:
+        dim = stack.safety.brightness(stack.settings(now))
+        dim_changed, theme.dim = dim != theme.dim, dim
+        if typed or theme.reset_held or menu:
+            return                                      # the keypad's own feedback: nothing covers it
+        snap = feed.snapshot(now)
+        colours = music.frame(dt, snap)
+        base = [colours.get(i, RESTING) if colours else RESTING for i in range(buttons.NUM_PIXELS)]
+        out = stack.modules(base, now, snap)
+        if colours is None and out == base:
+            if showing_music or dim_changed:
                 theme.paint()                           # the show is over: plain white
                 showing_music = False
             return
         showing_music = True
-        theme.paint({i: Color(*c) for i, c in colours.items()}, show=getattr(theme.strip, "own_show", False))
+        theme.paint({i: Color(*c) for i, c in enumerate(out)}, show=getattr(theme.strip, "own_show", False))
 
     def interacted():
         nonlocal showing_music

@@ -11,6 +11,8 @@ song and cues each part (show/, docs/Light Show Styles.md).
 The buttons and the accent chain share one rpi_ws281x controller on a
 Pi 4 (pwm_chains) and use the kernel's PIO driver on a Pi 5 (pio_chains);
 the level bar is on SPI on both.
+Modules add to every chain over the bus (show/inputs.py), and each chain's
+last step is the safety pass (stack.py, docs/contracts/lights.md).
 
 Lights are optional (the setup wizard's Lights step): only the chains
 lights.json says are wired in run (present.py), and with none the service
@@ -32,6 +34,7 @@ import traceback
 
 from services.jb_lights import accent_lights, levelbar, pio_chains, present
 from services.jb_lights.audio_feed import AudioFeed
+from services.jb_lights.show.inputs import Inputs
 from services.jb_lights.themes import buttons_theme1
 from shared import hardware
 
@@ -71,6 +74,7 @@ def main():
 
     stop = threading.Event()
     feed = AudioFeed().start()       # the music, from jb-analyzer; shared so the chains agree
+    inputs = Inputs().start()        # modules' lights (docs/contracts/lights.md); shared too
 
     def supervised(name, target):
         def body():
@@ -84,14 +88,14 @@ def main():
 
     workers = []
     if "levelbar" in run:
-        workers.append(supervised("levelbar", lambda: levelbar.run(BAR_THEME, stop=stop, feed=feed)))
+        workers.append(supervised("levelbar", lambda: levelbar.run(BAR_THEME, stop=stop, feed=feed, inputs=inputs)))
     if "accent" in run:
-        workers.append(supervised("accent", lambda: accent_lights.run(stop=stop, feed=feed)))
+        workers.append(supervised("accent", lambda: accent_lights.run(stop=stop, feed=feed, inputs=inputs)))
     for w in workers:
         w.start()
     try:
         if "buttons" in run:
-            buttons_theme1.main(feed=feed)
+            buttons_theme1.main(feed=feed, inputs=inputs)
         else:
             threading.Event().wait()     # until SIGTERM
     finally:
@@ -99,6 +103,7 @@ def main():
         for w in workers:
             w.join(timeout=5)
         feed.stop()
+        inputs.stop()
 
 
 if __name__ == "__main__":

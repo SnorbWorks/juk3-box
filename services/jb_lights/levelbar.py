@@ -29,6 +29,7 @@ import paho.mqtt.client as mqtt
 
 from services.jb_lights import matrix
 from services.jb_lights.show.parts import BarShow
+from services.jb_lights.stack import Stack
 from services.jb_lights.themes import (
     volume_bar_theme1 as theme1,
     volume_bar_theme2 as theme2,
@@ -162,7 +163,7 @@ class VolumeWatcher:
             return self.volume, self.muted, self.last_change
 
 
-def run(theme_num=0, host="localhost", stop=None, feed=None):
+def run(theme_num=0, host="localhost", stop=None, feed=None, inputs=None):
     """Drives the bar until stop (a threading.Event) is set, or Ctrl-C. With
     a feed (AudioFeed), theme_num is the idle look and the music picks the rest."""
     stop = stop or threading.Event()
@@ -178,6 +179,7 @@ def run(theme_num=0, host="localhost", stop=None, feed=None):
     volume_fill = VolumeFill(*watcher.snapshot()[:2])
     # Themes and the fill scale their own brightness; the driver only enforces the cap.
     bar = WS2812SPI(matrix.NUM_PIXELS, brightness=1.0, max_amps=matrix.MAX_AMPS)
+    stack = Stack("levelbar", matrix.positions(), inputs, feed.director if feed else None)
     alpha = 0.0  # 0 = default theme, 1 = volume fill
     start = last = time.monotonic()
     try:
@@ -190,9 +192,11 @@ def run(theme_num=0, host="localhost", stop=None, feed=None):
             step = dt / FADE_S
             alpha = min(want, alpha + step) if want > alpha else max(want, alpha - step)
 
-            base = music.frame(t, dt, feed.snapshot(now)) if music else theme.frame(t, dt)
+            snap = feed.snapshot(now) if music else None
+            base = music.frame(t, dt, snap) if music else theme.frame(t, dt)
+            base = stack.modules(base, now, snap)     # the volume fill is feedback: over the modules
             fill = volume_fill.frame(volume, muted)
-            bar.show(base if alpha == 0 else fill if alpha == 1 else _mix(base, fill, alpha))
+            bar.show(stack.safe(base if alpha == 0 else fill if alpha == 1 else _mix(base, fill, alpha), now, dt))
             time.sleep(1 / FPS)
     except KeyboardInterrupt:
         pass

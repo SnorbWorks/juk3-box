@@ -243,3 +243,20 @@ def test_module_blocks_can_have_page_builder_settings(tmp_path):
         schema = await (await c.get("/api/blocks")).json()
         assert "show-weather" not in schema["blocks"].get("weathermix", {}).get("settings", {})   # not installed here
     run(tmp_path, check)
+
+
+def test_a_modules_lights_and_shows_are_checked_and_reviewed(tmp_path):
+    root = tmp_path / "jb-weather"
+    shutil.copytree(WEATHER, root)
+    show = json.loads((REPO / "services" / "jb_lights" / "shows" / "chill.json").read_text())
+    (root / "shows").mkdir()
+    (root / "shows" / "weather.json").write_text(json.dumps({**show, "id": "weather", "name": "Weather"}))
+    (root / "shows" / "bad.json").write_text(json.dumps({**show, "id": "disco"}))
+    m = {**json.loads((root / "module.json").read_text()),
+         "lights": {"signal": True, "cues": ["lightning"], "overlays": ["keys"]}, "shows": ["shows/weather.json"]}
+    assert module_mgr.check_manifest(m, root, set()) == []
+    text = " / ".join(r["text"] for r in module_mgr.review(m))
+    assert "lightning" in text and "keypad" in text and "Adds 1 light show" in text
+    bad = {**m, "lights": {"overlays": ["roof"]}, "shows": ["shows/bad.json", "../escape.json"]}
+    probs = " / ".join(module_mgr.check_manifest(bad, root, set()))
+    assert "lights.overlays" in probs and "'weather'" in probs and "isn't a file in the module" in probs
