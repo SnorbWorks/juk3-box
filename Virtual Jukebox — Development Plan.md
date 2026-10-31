@@ -525,8 +525,8 @@ Not in v0.2.0: effects written as code by others (needs sandboxed per-pixel code
 
 **Weather, first input (module update):** its palette follows the conditions; rain and storm cues; a Weather idle show.
 
-- [ ] Fixture file format, this cabinet described, the engine reads it (`docs/contracts/lights.md`)
-- [ ] Show file format; the 13 styles as built-in show files; owner settings (rotations, pin, idle look)
+- [x] Fixture file format, this cabinet described, the engine reads it (`docs/contracts/lights.md`)
+- [x] Show file format; the 13 styles as built-in show files; owner settings (rotations, pin, idle look)
 - [ ] Lights-input contract (signals, cues, overlays); manifest `lights` permission and `shows`; review text
 - [ ] Engine layers and safety in all three chains (accent, level bar, keypad)
 - [ ] Admin › Light Show (Now, Shows, Preview, Inputs, Safety, Hardware)

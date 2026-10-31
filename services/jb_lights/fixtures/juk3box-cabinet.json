@@ -1,0 +1,27 @@
+{
+ "format": 1,
+ "id": "juk3box-cabinet",
+ "name": "Juk3box cabinet",
+ "about": "What's wired in the Juk3box cabinet (measured 2026-10-13). Inches from the top-left of the upper panel's LEDs; see docs/contracts/lights.md, Fixtures.",
+ "picture": {"width_in": 22.0, "aspect": 2.3813},
+ "chains": [
+  {"id": "accent", "name": "Accent chain", "driver": "pio", "gpio": 13, "pixels": 349, "order": "GRB", "max_amps": 6.0,
+   "fixtures": [
+    {"id": "upper-panel", "name": "Upper panel", "role": "storyteller", "start": 0, "count": 189,
+     "layout": {"kind": "map", "file": "upper_panel_map.json", "at_in": [0, 0], "width_in": 22.0}},
+    {"id": "footlights", "name": "Footlights", "role": "rhythm", "start": 189, "count": 160,
+     "layout": {"kind": "grid", "rows": 4, "cols": 40, "order": "rows", "serpentine": true, "first": "top-left",
+                "at_in": [0.275, 27.0], "pitch_in": [0.55, 0.3695]}}
+   ]},
+  {"id": "levelbar", "name": "Level bar", "driver": "spi", "pixels": 180, "order": "GRB", "max_amps": 4.0,
+   "fixtures": [
+    {"id": "level-bar", "name": "Level bar", "role": "meter", "start": 0, "count": 180,
+     "layout": {"kind": "grid", "rows": 5, "cols": 36, "order": "columns", "serpentine": false, "first": "bottom-left",
+                "at_in": [0.125, 21.0], "pitch_in": [0.25, 0.5]}}
+   ]},
+  {"id": "buttons", "name": "Keypad", "driver": "pio", "gpio": 12, "pixels": 23, "order": "GRBW", "max_amps": 2.0,
+   "fixtures": [
+    {"id": "keypad", "name": "Keypad", "role": "keys", "start": 0, "count": 23, "layout": {"kind": "keypad"}}
+   ]}
+ ]
+}

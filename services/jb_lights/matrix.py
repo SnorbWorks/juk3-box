@@ -10,7 +10,9 @@ and all strips run the same direction (no serpentine wiring), so
 COLS = 36
 ROWS = 5
 NUM_PIXELS = COLS * ROWS  # 180
-MAX_AMPS = 4.0  # level-bar branch software cap (F4 is a 5A PTC)
+from services.jb_lights.fixtures import CABINET
+
+MAX_AMPS = CABINET.max_amps("levelbar")  # 4 A software cap (F4 is a 5A PTC)
 
 # Physical pitch (user, 2026-10-13): strips 1/4" apart, pixels ~1/2" apart up
 # a strip -- each pixel is twice as tall as it is wide, so a round shape needs
@@ -32,12 +34,6 @@ def blank() -> list:
 
 def positions() -> list:
     """(x, y) for every bar pixel in the cabinet picture shared with the accent
-    chain (accent.positions), so effects can run across the whole cabinet."""
-    from services.jb_lights.accent import IN_X, IN_Y
-    pos = [None] * NUM_PIXELS
-    for col in range(COLS):
-        for row in range(ROWS):
-            x = (col + 0.5) * COL_PITCH_IN * IN_X
-            y = (CENTRE_IN + ((ROWS - 1) / 2 - row) * ROW_PITCH_IN) * IN_Y
-            pos[index(col, row)] = (x, y)
-    return pos
+    chain (accent.positions), so effects can run across the whole cabinet.
+    From the fixtures file (fixtures.py)."""
+    return CABINET.positions("levelbar")
