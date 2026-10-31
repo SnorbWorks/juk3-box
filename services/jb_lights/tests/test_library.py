@@ -83,3 +83,19 @@ def test_the_settings_are_cleaned_whatever_the_file_says():
     assert s["inputs"] == {"jb-weather": {"enabled": False, "strength": 1.0}}
     assert owner.input_gain(s, "jb-weather") == 0.0 and owner.input_gain(s, "jb-other") == 1.0
     assert owner.quiet_now(s, 23 * 60) and owner.quiet_now(s, 6 * 60) and not owner.quiet_now(s, 12 * 60)
+
+
+def test_the_owner_can_choose_an_idle_show(tmp_path):
+    from services.jb_lights.audio_feed import AudioFeed
+    from services.jb_lights.show.director import Director
+    path = tmp_path / "settings.json"
+    lib = Library(settings_path=path, shows_dir=tmp_path / "none", modules_dir=tmp_path / "none")
+    feed = AudioFeed(director=Director(library=lib))
+    assert feed.snapshot(now=100.0).look in ("ribbon", "idle")              # the waves and the city
+    path.write_text(json.dumps({"idle": "chill"}))
+    lib.refresh(force=True)
+    snap = feed.snapshot(now=101.0)
+    assert snap.look == "idle-show" and snap.cues.style.name == "chill" and snap.cues.tier == "calm"
+    path.write_text(json.dumps({"idle": "oldies"}))
+    lib.refresh(force=True)
+    assert feed.snapshot(now=102.0).cues.style.name == "oldies"

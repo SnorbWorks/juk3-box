@@ -54,12 +54,13 @@ class Looks:
         self.eq = EQ(pos)
         self.ribbon = AccentRibbon(pos)
         self.show = AccentShow(pos)
+        self.idle_show = AccentShow(pos)         # the owner's idle show (audio_feed.idle_raw)
         self.ribbon_clock = 0.0
         self.current, self.previous, self.fade = "idle", None, 1.0
 
     def _render(self, look, t, dt, snap):
-        if look == "show":
-            return self.show.frame(t, dt, snap)
+        if look in ("show", "idle-show"):
+            return (self.show if look == "show" else self.idle_show).frame(t, dt, snap)
         if look == "eq":
             bands = snap.resample(16)
             gain = 0.5 + 0.5 * snap.level

@@ -55,6 +55,7 @@ class ButtonsMusic:
         self.current, self.previous, self.fade = "idle", None, 1.0
         self.clock = 0.0
         self.keys = Keys()
+        self.idle_keys = Keys()
 
     def resume(self):
         """Back from an interaction (the keypad showed plain white): fade
@@ -65,8 +66,8 @@ class ButtonsMusic:
     def _render(self, look, dt, snap):
         out = {}
         beat = snap.beat()
-        if look == "show":
-            return self.keys.frame(snap.cues, snap, dt)
+        if look in ("show", "idle-show"):
+            return (self.keys if look == "show" else self.idle_keys).frame(snap.cues, snap, dt)
         if look == "eq":
             bands = snap.resample(10)
             gain = 0.5 + 0.5 * snap.level

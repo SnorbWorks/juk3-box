@@ -95,19 +95,28 @@ class ChainLayers:
             if "palette" in s and g > 0:
                 palette, k = s["palette"], tint * g          # the latest palette wins
         if palette and k > 0:
-            n = len(palette)
-            out = []
-            for i, px in enumerate(frame):
-                lum = max(px) / 255
-                if lum <= 0:
-                    out.append(px)
-                    continue
-                c = palette[min(n - 1, int(self.x[i] * n))]
-                out.append(_mix(px, _scaled(c, lum), k))
-            frame = out
+            frame = self._tint(frame, palette, min(1.0, k))
         if dim < 1:
             frame = [tuple(int(v * dim) for v in px) for px in frame]
         return frame
+
+    def _tint(self, frame, palette, k):
+        """Each pixel toward its palette colour (by x) at its own brightness.
+        A signal is usually up all the time (the weather), so this is kept
+        cheap: each pixel's colour, pre-scaled by k / 255, is worked out once
+        per palette."""
+        key = (tuple(palette), k)
+        if getattr(self, "_tint_key", None) != key:
+            n, f = len(palette), k / 255
+            cols = [palette[min(n - 1, int(x * n))] for x in self.x]
+            self._tint_key = key
+            self._tint_cols = [(r * f, g * f, b * f) for r, g, b in cols]
+        j = 1 - k
+        if self.rgbw:
+            return [(int(p[0] * j + c[0] * m), int(p[1] * j + c[1] * m), int(p[2] * j + c[2] * m), int(p[3] * j))
+                    for p, c in zip(frame, self._tint_cols) for m in (max(p),)]
+        return [(int(p[0] * j + c[0] * m), int(p[1] * j + c[1] * m), int(p[2] * j + c[2] * m))
+                for p, c in zip(frame, self._tint_cols) for m in (max(p),)]
 
     def _cues(self, frame, now, state, settings, cue_map):
         for cue in state["cues"]:

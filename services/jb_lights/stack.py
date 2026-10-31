@@ -28,7 +28,7 @@ class Stack:
         """The modules' layers on the look (signals, cues, overlays)."""
         if self.director is None or self.inputs is None:
             return frame
-        show = self.director.style if snap is not None and snap.look == "show" else None
+        show = snap.cues.style if snap is not None and snap.cues is not None else None
         return self.layers.apply(frame, now, self.inputs.state(now), self.settings(now), show)
 
     def safe(self, frame, now: float, dt: float):

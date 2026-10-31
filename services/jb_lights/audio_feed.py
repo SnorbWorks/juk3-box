@@ -22,11 +22,13 @@ everything stays idle.
 """
 
 import json
+import math
 import threading
 import time
 
 import paho.mqtt.client as mqtt
 
+from services.jb_lights.show import styles
 from services.jb_lights.show.director import DRUM_ON, Director
 
 TOPIC = "jukebox/analysis/audio"
@@ -57,7 +59,7 @@ class LookPicker:
         self.playing = False
         self.quiet_since = None
 
-    def update(self, now: float, sounding: bool, arousal: float | None) -> str:
+    def update(self, now: float, sounding: bool, arousal: float | None, idle_show: bool = False) -> str:
         if sounding:
             self.last_sound = now
         playing = now - self.last_sound < IDLE_AFTER_S
@@ -66,7 +68,9 @@ class LookPicker:
             self.quiet_since = None
         elif self.quiet_since is None:
             self.quiet_since = now
-        if not playing:
+        if not playing and idle_show:
+            want = "idle-show"                  # the owner's idle show, instead of the waves and the city
+        elif not playing:
             phase = (now - self.quiet_since) % (IDLE_WAVES_S + IDLE_CITY_S)
             want = WAVES_LOOK if phase < IDLE_WAVES_S else "idle"
         elif self.mode in ("show", "eq", "ribbon"):
@@ -143,10 +147,31 @@ class Raw:
         self.section_energy = "same"
 
 
+class IdlePick:
+    """The idle director's library: always the owner's idle show."""
+
+    def __init__(self, library):
+        self.library = library
+
+    def pick(self, *args, **kw):
+        return self.library.idle_show() or styles.STYLES["chill"]
+
+
+def idle_raw(now: float) -> "Raw":
+    """No music: a slow, quiet, steady song for an idle show to play to
+    (the calm tier, gently breathing)."""
+    raw = Raw()
+    raw.title, raw.tempo, raw.arousal = "(idle)", 60.0, 0.2
+    raw.level = 0.2 + 0.08 * math.sin(now / 4)
+    raw.bands = [raw.level * 0.8] * N_BANDS
+    return raw
+
+
 class AudioFeed:
     def __init__(self, host="localhost", picker=None, director=None):
         self.picker = picker or LookPicker()
         self.director = director or Director()
+        self.idle_director = Director(library=IdlePick(self.director.library))
         self.raw = Raw()
         self._lock = threading.Lock()
         self._last_fast = -1e9
@@ -228,10 +253,18 @@ class AudioFeed:
         now = time.monotonic() if now is None else now
         with self._lock:
             sounding = now - self._last_fast < 0.5          # fast frames only flow while there's sound
-            look = self.picker.update(now, sounding, self.raw.arousal)
+            idle = self.director.library.idle_show()
+            look = self.picker.update(now, sounding, self.raw.arousal, idle_show=idle is not None)
             if not sounding:
                 self.raw.level, self.raw.bands = 0.0, [0.0] * N_BANDS
-            cues = self.director.update(now, self.raw) if look == "show" else None
+            if look == "show":
+                cues = self.director.update(now, self.raw)
+            elif look == "idle-show":
+                if self.idle_director.style is not idle:
+                    self.idle_director.song = None      # the owner chose another: start it afresh
+                cues = self.idle_director.update(now, idle_raw(now))
+            else:
+                cues = None
             return Snapshot(
                 bands=list(self.raw.bands),
                 level=self.raw.level,

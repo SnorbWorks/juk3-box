@@ -131,6 +131,14 @@ class Library:
         ids = [i for i in ids if i in self.shows and i not in off]
         return ids or ([group] if group in styles.STYLES else [styles.LIVELY])
 
+    def idle_show(self):
+        """The show the owner chose for no music (settings "idle"), or None
+        for the city and the waves."""
+        sid = self.settings["idle"]
+        if sid != "city" and sid in self.shows and sid not in self.settings["disabled"]:
+            return self.shows[sid]
+        return None
+
     def pick(self, genre, tags, arousal, seed=0) -> styles.Style:
         self.refresh()
         pin = self.settings["pin"]
