@@ -16,7 +16,7 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 | 4 Phone source | Bluetooth and the Helper app, one phone in charge at a time (Oct 20). Open: a second phone with a library; Bluetooth reliability in the cabinet |
 | 5 Library | Done: exact artists and albums from the Helper app, borrowed by Bluetooth songs it also has (Oct 22); play counts and Most Played |
 | 6 Core | Done. Reset clears a half-typed pick (checked Oct 22); holding it cancels a song |
-| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20) |
+| 6b Lights | Done, on the Pi 5's PIO driver (Oct 20). Arena show, drop on its kick, keypad back in the show on a Pi 5 (Oct 30). Next: the light platform (Phase 11) |
 | 7 UI platform | Done; Neon is the default (Oct 21) |
 | 7b Admin, 7c Page builder | Done: setup wizard, Setup (name, Last.fm), Updates (Oct 22), Menus (was Settings), the cabinet's one name moving its address (Oct 21) |
 | 8 Appliance | Services ride out the bus restarting, and the bus can always restart (Oct 22). Read-only system drive built for image cards (Oct 22; test on a fresh card with the image). Open, later: the live netwatch test, log rotation, cold boot under a minute, pull-the-plug tests |
@@ -24,6 +24,7 @@ The jukebox runs as an appliance on the Pi 5: an iPhone plays through it with th
 
 ### Next (Oct 22, 2026)
 
+0. **The light platform, for v0.2.0 (started Oct 30; owner: all of it in one release).** See [Phase 11](#phase-11-light-platform-v020). Build order: fixtures, show files, the lights-input contract, the engine's layers and safety, the admin Light Show tab (with Preview), Weather as the first input, then release. Arena and the drop fixes (7183bd3) ship with it. Also in v0.2.0: the v0.1.9 Bluetooth-sync fix (item 1, Oct 28).
 1. **The card image: fresh-card test (in progress, Oct 22 evening).** v0.1.0 tried on a 1 GB Pi 4 (named juk3box2):
    - Worked: first start made the data partition; setup ran; the name held; SSH closed; the analyzer suggestion turned it off; the knob and the video ran smoothly while unprotected.
    - **Bug (open): with protection on, /data isn't mounted.** Admin › Updates said data: false, and the log from the protected start was gone after a power cut. Without /data the overflow swap is missing too, and the 1 GB Pi 4 starved (glitchy video, dead knob, admin unreachable). overlayroot's fstab rewrite (recurse=0) should keep our lines as they are, so the cause isn't known yet. Protection was turned off again on that card.
@@ -506,6 +507,31 @@ A second adapter: local files on USB or SD with tags and embedded art, played th
 - Credit/coin logic
 - Playlist views
 - Admin settings screen
+
+## Phase 11: Light platform (v0.2.0)
+
+Agreed with the owner Oct 30, 2026. The lights become a platform inside the platform, on the same split as the screen: **the engine owns the hardware, shows are data, modules talk over the bus**. Like WordPress: cues are its actions (something happened; whoever listens reacts), signals its filters (they adjust what's shown), overlays a plugin's own widget; the core keeps the order and the rules.
+
+**Four layers, one owner of the LEDs (jb-lights):**
+
+1. **Fixtures**: what's wired. A fixture file lists the chains (driver, pin, length, colour order, current cap) and the fixtures on them (a strip, a grid, or a camera-mapped shape), each pixel's place in the shared cabinet picture, and each fixture's **role**: `storyteller` (the upper panel), `rhythm` (the footlights), `meter` (the level bar), `keys` (the keypad). Shows target roles and positions, never pixel numbers. v0.2.0 writes the format and describes this cabinet in it; the admin's LED wizard that edits it comes later.
+2. **Shows** are files (`show.json`): palettes, the effect each role plays per tier (calm / main / peak), triggers, timing, flash policy, which module signals and cues it uses. Recipes from the engine's effect library, no code, so uploading one is safe (checked like a theme). The 13 styles, arena included, become built-in show files; genre rotations, a pinned show and the idle look become owner settings. Uploaded shows live in `/var/lib/juk3-box/lights/shows/`; a module can bring shows in its zip.
+3. **Inputs from modules**, under the module's own topics (`jukebox/<id>/lights/…`, so the broker proves who sent it): **signals** (palette, mood, intensity: continuous), **cues** (named one-offs with a strength: `lightning`, `doorbell`), **overlays** (take part of the cabinet for a while, with a priority: a doorbell flash, a timer bar). The manifest asks for them (`"lights": {...}`), the owner approves at install, and can turn each module's input off or down in the Light Show tab.
+4. **Layers and safety** in the engine, every frame: the base look (idle or the music show), then signals, then cues, then overlays, then system feedback (keypad selection, the setup checks) which always wins; then the safety pass: current budgets, at most 3 flashes a second, the owner's brightness cap, low-flash mode, quiet hours. Nothing gets past it. **The keypad** can be lit by modules, but never stops its own functions: a pick in progress, Reset and the power menu always show as they do now.
+
+Not in v0.2.0: effects written as code by others (needs sandboxed per-pixel code); the LED wizard's UI.
+
+**Admin › Light Show:** Now (the look running, its tier and moments, the modules feeding it), Shows (library: built-in, uploaded, from modules; rotations per genre; idle look; pin; upload, delete), Preview (the engine's own code renders a show against a built-in demo song with a build and a drop, drawn on a picture of the cabinet), Inputs (each module: on/off, strength), Safety (brightness, low-flash, quiet hours), Hardware (the chains; the wizard later).
+
+**Weather, first input (module update):** its palette follows the conditions; rain and storm cues; a Weather idle show.
+
+- [ ] Fixture file format, this cabinet described, the engine reads it (`docs/contracts/lights.md`)
+- [ ] Show file format; the 13 styles as built-in show files; owner settings (rotations, pin, idle look)
+- [ ] Lights-input contract (signals, cues, overlays); manifest `lights` permission and `shows`; review text
+- [ ] Engine layers and safety in all three chains (accent, level bar, keypad)
+- [ ] Admin › Light Show (Now, Shows, Preview, Inputs, Safety, Hardware)
+- [ ] Weather 1.4: lights signals, cues and an idle show
+- [ ] Release v0.2.0 (with the Bluetooth-sync fix)
 
 ## Roadmap (agreed Oct 14, 2026)
 
