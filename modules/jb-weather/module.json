@@ -2,14 +2,16 @@
   "contract": 1,
   "id": "jb-weather",
   "name": "Weather",
-  "description": "The weather where the jukebox is, for a Weather block on the screen. From Open-Meteo (no account needed).",
-  "version": "1.3.0",
+  "description": "The weather where the jukebox is, for a Weather block on the screen, and in the cabinet's lights. From Open-Meteo (no account needed).",
+  "version": "1.4.0",
   "roles": [
     "source"
   ],
   "run": "main.py",
   "publishes": [
     "jukebox/jb-weather/current",
+    "jukebox/jb-weather/lights/signal",
+    "jukebox/jb-weather/lights/cue",
     "jukebox/jb-weather/heartbeat"
   ],
   "subscribes": [],
@@ -86,5 +88,16 @@
       ],
       "nav": true
     }
+  ],
+  "lights": {
+    "signal": true,
+    "cues": [
+      "lightning",
+      "rain",
+      "snow"
+    ]
+  },
+  "shows": [
+    "shows/weather.json"
   ]
 }

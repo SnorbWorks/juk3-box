@@ -530,7 +530,7 @@ Not in v0.2.0: effects written as code by others (needs sandboxed per-pixel code
 - [x] Lights-input contract (signals, cues, overlays); manifest `lights` permission and `shows`; review text
 - [x] Engine layers and safety in all three chains (accent, level bar, keypad)
 - [x] Admin › Light Show (Now, Shows, Preview, Inputs, Safety, Hardware)
-- [ ] Weather 1.4: lights signals, cues and an idle show
+- [x] Weather 1.4: lights signals, cues and an idle show
 - [ ] Release v0.2.0 (with the Bluetooth-sync fix)
 
 ## Roadmap (agreed Oct 14, 2026)

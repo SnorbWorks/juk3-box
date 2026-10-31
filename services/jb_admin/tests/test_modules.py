@@ -249,7 +249,7 @@ def test_a_modules_lights_and_shows_are_checked_and_reviewed(tmp_path):
     root = tmp_path / "jb-weather"
     shutil.copytree(WEATHER, root)
     show = json.loads((REPO / "services" / "jb_lights" / "shows" / "chill.json").read_text())
-    (root / "shows").mkdir()
+    (root / "shows").mkdir(exist_ok=True)
     (root / "shows" / "weather.json").write_text(json.dumps({**show, "id": "weather", "name": "Weather"}))
     (root / "shows" / "bad.json").write_text(json.dumps({**show, "id": "disco"}))
     m = {**json.loads((root / "module.json").read_text()),
@@ -260,3 +260,14 @@ def test_a_modules_lights_and_shows_are_checked_and_reviewed(tmp_path):
     bad = {**m, "lights": {"overlays": ["roof"]}, "shows": ["shows/bad.json", "../escape.json"]}
     probs = " / ".join(module_mgr.check_manifest(bad, root, set()))
     assert "lights.overlays" in probs and "'weather'" in probs and "isn't a file in the module" in probs
+
+
+def test_weather_brings_its_lights_and_idle_show(tmp_path):
+    from services.jb_lights.show.library import Library
+    mods = tmp_path / "modules"
+    shutil.copytree(WEATHER, mods / "jb-weather")
+    lib = Library(settings_path=tmp_path / "s.json", shows_dir=tmp_path / "none", modules_dir=mods)
+    assert lib.shows["weather"].source == "jb-weather" and lib.notes == []
+    assert all("weather" not in lib.rotation(g) for g in ("pop", "chill"))    # an idle look, not for songs
+    text = " ".join(r["text"] for r in module_mgr.review(json.loads((WEATHER / "module.json").read_text())))
+    assert "lightning" in text and "Adds 1 light show" in text

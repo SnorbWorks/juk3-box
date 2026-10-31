@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "weather",
+  "name": "Weather",
+  "description": "For no music: the cabinet breathes in the colours of the weather outside. Lightning flickers in a storm; rain and snow sparkle.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [],
+  "palettes": [
+    ["#8090B0", "#C0C8D8"]
+  ],
+  "peak": ["#C0C8D8", "#FFFFFF"],
+  "light": [0.15, 0.5],
+  "strobe": 0,
+  "gap": "",
+  "pace": "half",
+  "drive": "level",
+  "release": 0.8,
+  "beat_locked": false,
+  "roles": {
+    "storyteller": {"calm": ["breathe"], "main": ["breathe"], "peak": ["wash"]},
+    "rhythm": {"calm": ["glow"], "main": ["glow"], "peak": ["glow"]},
+    "meter": {"calm": ["ribbon"], "main": ["ribbon"], "peak": ["ribbon"]},
+    "keys": "glow"
+  },
+  "inputs": {"palette": 0.85, "cues": {"lightning": "flicker", "rain": "sparkle", "snow": "sparkle"}}
+}
