@@ -14,8 +14,13 @@ DB_PATH = "/var/lib/juk3-box/library.db"
 
 # Free, keyless API -- be polite about request rate. Enrichment is a one-time
 # background cost per track (cached forever after), so slow-and-steady is fine.
-ENRICH_DELAY_S = 1.5
-ENRICH_RETRY_DELAY_S = 30  # after a failed lookup (e.g. no internet yet at boot)
+# Apple's iTunes Search API allows "approximately 20 calls per minute": one
+# every 3 s. (It was 1.5 s, and Apple answers too many calls with 403/429.)
+ENRICH_DELAY_S = 3.0
+# After a failed lookup (no internet yet at boot, or Apple saying slow
+# down): wait, longer each time it fails again in a row.
+ENRICH_RETRY_DELAY_S = 30
+ENRICH_RETRY_MAX_S = 600
 ENRICH_PUBLISH_INTERVAL_S = 60
 # Last.fm asks API clients to stay under 5 requests/second.
 LASTFM_DELAY_S = 0.25
@@ -43,6 +48,9 @@ MIGRATIONS = {
     "album_track": "INTEGER",   # 1-based position in phone_album
     # A USB drive song: when the jukebox first found it (the Drives page's New).
     "first_seen": "REAL",
+    # When the iTunes lookup last answered for this song (NULL: never). An
+    # app song with its own cover still needs one for its genre (below).
+    "looked_up": "REAL",
 }
 
 # Deep-crawl tables (jb-crawl). Stored by title, never by play path: play
@@ -501,6 +509,8 @@ def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: li
     album, genre and track number are exact (phone_*), and its dateAdded is
     the real Recently Added. Its covers are the app's own uploads, served
     by jb-ui at /covers/<key>.jpg; songs without one get an iTunes lookup.
+    So do songs the app sends with no genre (most of them: iOS's library
+    rarely fills it in), for the genre alone -- the app's cover stays.
     Playlists by title, as the deep crawl stores them. Returns how many
     songs were removed."""
     tracks = [t for t in tracks if t.get("title") and t.get("item_path")]
@@ -511,12 +521,14 @@ def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: li
         UPDATE tracks SET phone_artist = ?, phone_album = ?, phone_genre = ?, album_track = ?,
                added_at = COALESCE(?, added_at),
                artwork_url = COALESCE(?, artwork_url),
-               enriched = CASE WHEN ? IS NOT NULL THEN 1 ELSE enriched END
+               enriched = CASE WHEN ? IS NULL THEN enriched
+                               WHEN ? IS NOT NULL OR looked_up IS NOT NULL THEN 1
+                               ELSE 0 END
         WHERE phone_mac = ? AND title = ? AND dup = ?
         """,
         [(t.get("artist"), t.get("album"), t.get("genre"), t.get("album_track"), t.get("added_at"),
           f"/covers/{t['artwork_key']}.jpg" if t.get("artwork_key") else None, t.get("artwork_key"),
-          mac, title, dup) for t, (title, dup, _) in zip(tracks, numbered)],
+          t.get("genre"), mac, title, dup) for t, (title, dup, _) in zip(tracks, numbered)],
     )
     conn.execute("DELETE FROM playlists WHERE phone_mac=?", (mac,))
     conn.executemany(
@@ -527,13 +539,64 @@ def store_helper(conn: sqlite3.Connection, mac: str, tracks: list, playlists: li
     return removed
 
 
+def queue_genre_lookups(conn: sqlite3.Connection) -> int:
+    """App songs stored before their genre was looked up (they were marked
+    done because the app sent a cover; 924 of 926 had no genre, so Browse
+    by Genre showed Rock and Pop): queue them for the lookup. Once each:
+    after it, looked_up is set. Returns how many were queued."""
+    n = conn.execute(
+        """
+        UPDATE tracks SET enriched = 0
+        WHERE phone_mac LIKE 'helper:%' AND enriched = 1 AND looked_up IS NULL
+          AND phone_genre IS NULL AND genre IS NULL
+        """).rowcount
+    conn.commit()
+    return n
+
+
+def store_phone_tags(conn: sqlite3.Connection, mac: str, tracks: list) -> int:
+    """A Bluetooth sync's own details for each song. BlueZ 5.82 asks for
+    each song's artist, album and track number with its title (the Pi 4's
+    BlueZ 5.66 asked for titles alone). An iPhone sends none of them (every
+    sync on 2026-11-01: titles only); a phone that does gives exact ones,
+    like a drive's tags: they go where the deep crawl's do (phone_*), and
+    win over the iTunes guesses. A song whose artist this changes is looked
+    up again, by artist and title (a title alone often found a different
+    song: the wrong genre, the wrong cover). Details the phone left out
+    keep what's stored. Returns how many songs got an artist they didn't
+    have."""
+    numbered = number_duplicates(tracks)
+    rows = [(t["artist"], t.get("album"), t.get("track_number"), t["artist"], mac, title, dup)
+            for t, (title, dup, _) in zip(tracks, numbered) if t.get("artist")]
+    before = conn.total_changes
+    conn.executemany(
+        """
+        UPDATE tracks SET phone_artist = ?, phone_album = COALESCE(?, phone_album),
+               album_track = COALESCE(?, album_track), enriched = 0, popularity_checked = 0
+        WHERE COALESCE(phone_artist, '') != ? AND phone_mac = ? AND title = ? AND dup = ?
+        """, rows)
+    changed = conn.total_changes - before
+    # Album and track number on their own (the artist was already right).
+    conn.executemany(
+        """
+        UPDATE tracks SET phone_album = COALESCE(?, phone_album), album_track = COALESCE(?, album_track)
+        WHERE phone_mac = ? AND title = ? AND dup = ?
+          AND (COALESCE(phone_album, '') != COALESCE(?, phone_album, '')
+               OR COALESCE(album_track, -1) != COALESCE(?, album_track, -1))
+        """, [(album, track, m, title, dup, album, track) for _, album, track, _, m, title, dup in rows])
+    conn.commit()
+    return changed
+
+
 def helper_tags(conn: sqlite3.Connection) -> dict:
     """The Juk3box Helper app's exact artist, album, genre and track number
     for each title, from every phone's app (several copies of a title stay
-    apart)."""
+    apart). The genre is the app's own, else its lookup's: the app's songs
+    are looked up by artist and title, a Bluetooth song by its title alone
+    (an iPhone sends nothing else), so the app's is the better guess."""
     out: dict[str, list[dict]] = {}
     for title, artist, album, genre, track in conn.execute(
-            "SELECT title, phone_artist, phone_album, phone_genre, album_track FROM tracks"
+            "SELECT title, phone_artist, phone_album, COALESCE(phone_genre, genre), album_track FROM tracks"
             " WHERE phone_mac LIKE 'helper:%' AND phone_artist IS NOT NULL"):
         out.setdefault(title, []).append({"artist": artist, "album": album, "genre": genre, "album_track": track})
     return out
@@ -616,6 +679,11 @@ def forget_drive(conn: sqlite3.Connection, drive_id: str) -> int:
     return n
 
 
+class LookupRefused(RuntimeError):
+    """iTunes answered with an error (403/429: too many calls; 5xx): try
+    again later. Not "no such song", which comes back as 200 with no results."""
+
+
 async def lookup_itunes(session: aiohttp.ClientSession, title: str, artist: str | None = None) -> dict | None:
     """Best iTunes match for a song. With the phone's real artist known,
     searches title + artist and prefers a result by that artist (title-only
@@ -626,7 +694,9 @@ async def lookup_itunes(session: aiohttp.ClientSession, title: str, artist: str 
         "https://itunes.apple.com/search", params=params, timeout=aiohttp.ClientTimeout(total=10)
     ) as resp:
         if resp.status != 200:
-            return None
+            # Was "no match", for good: a song looked up while Apple was
+            # refusing calls never got a cover or genre.
+            raise LookupRefused(f"iTunes answered {resp.status}")
         # itunes.apple.com returns Content-Type: text/javascript (a JSONP-era
         # leftover), not application/json -- aiohttp's strict check rejects
         # that by default.
@@ -784,6 +854,7 @@ async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key:
     conn = get_db()
     dirty = False
     last_publish = time.monotonic()
+    failures = 0
     if not lastfm_key:
         log.warning("no lastfm_api_key configured -- popularity (Top 100) lookups disabled")
     async with aiohttp.ClientSession() as session:
@@ -795,12 +866,22 @@ async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key:
                 dirty = False
                 last_publish = time.monotonic()
 
+            # The songs on the board first (the phone that has the jukebox),
+            # newest first: those are the ones being looked at.
             row = conn.execute(
-                "SELECT phone_mac, title, dup, phone_artist FROM tracks WHERE enriched = 0 LIMIT 1"
+                "SELECT phone_mac, title, dup, phone_artist FROM tracks WHERE enriched = 0"
+                " ORDER BY phone_mac = ? DESC, COALESCE(added_at, 0) DESC LIMIT 1", (snapshots.mac,)
             ).fetchone()
             if row is not None:
                 mac, title, dup, phone_artist = row
-                dirty |= await _enrich_itunes(conn, session, mac, title, log, dup, phone_artist)
+                found = await _enrich_itunes(conn, session, mac, title, log, dup, phone_artist)
+                if found is None:
+                    # Refused or unreachable: wait, longer each time in a row.
+                    failures += 1
+                    await asyncio.sleep(min(ENRICH_RETRY_DELAY_S * 2 ** (failures - 1), ENRICH_RETRY_MAX_S))
+                    continue
+                failures = 0
+                dirty |= found
                 await asyncio.sleep(ENRICH_DELAY_S)
                 continue
 
@@ -823,32 +904,39 @@ async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key:
 
 
 async def _enrich_itunes(conn, session, mac: str, title: str, log, dup: int = 0,
-                         phone_artist: str | None = None) -> bool:
-    """Returns whether any displayed data changed. Without the phone's
+                         phone_artist: str | None = None) -> bool | None:
+    """Returns whether any displayed data changed, or None if the lookup
+    failed (the caller waits before the next). Without the phone's
     artist, every copy of the title gets the same title-only match (as
-    before); with it, just this copy, matched by artist + title."""
+    before); with it, just this copy, matched by artist + title. A cover
+    of the app's own (/covers/) is kept: the lookup only adds the genre."""
     where = "phone_mac=:mac AND title=:title" + (" AND dup=:dup" if phone_artist else "")
     try:
         info = await lookup_itunes(session, title, phone_artist)
+    except LookupRefused as e:
+        # Apple asking us to slow down (or a hiccup on their side) -- leave
+        # enriched=0 so it gets retried, instead of giving up on the song.
+        log.warning("iTunes lookup for %r refused (%s), will retry later", title, e)
+        return None
     except Exception:
         # A real failure (network, API hiccup) -- leave enriched=0
         # so it gets retried later instead of permanently giving up.
         log.exception("iTunes lookup failed for %r, will retry later", title)
-        await asyncio.sleep(ENRICH_RETRY_DELAY_S)
-        return False
-    keys = {"mac": mac, "title": title, "dup": dup}
+        return None
+    keys = {"mac": mac, "title": title, "dup": dup, "now": time.time()}
     if info:
         conn.execute(
             f"""
             UPDATE tracks SET artist=:artist, album=:album, genre=:genre,
-                artwork_url=:artwork_url, enriched=1
+                artwork_url=CASE WHEN artwork_url LIKE '/covers/%' THEN artwork_url ELSE :artwork_url END,
+                enriched=1, looked_up=:now
             WHERE {where}
             """,
             {**info, **keys},
         )
     else:
         # Successful lookup, genuinely no match -- done, not a retry case.
-        conn.execute(f"UPDATE tracks SET enriched=1 WHERE {where}", keys)
+        conn.execute(f"UPDATE tracks SET enriched=1, looked_up=:now WHERE {where}", keys)
     conn.commit()
     return bool(info)
 
@@ -985,6 +1073,9 @@ async def main() -> None:
         # jb-source-phone (the connection manager) syncs when a phone connects.
         snapshots = Snapshots(bus, conn, log)
         await snapshots.publish()
+        queued = queue_genre_lookups(conn)
+        if queued:
+            log.info("%d app songs have no genre: looking them up", queued)
 
         wake = asyncio.Event()
         wake.set()  # pick up any enrichment left over from before a restart
@@ -1115,11 +1206,12 @@ async def main() -> None:
             if not mac or tracks is None:
                 continue
             removed = upsert_tracks(conn, mac, tracks, log)
+            tagged = store_phone_tags(conn, mac, tracks)
             total = conn.execute(
                 "SELECT COUNT(*) FROM tracks WHERE phone_mac=?", (mac,)
             ).fetchone()[0]
-            log.info("stored %d tracks for %s (sync returned %d, removed %d no longer on the phone)",
-                     total, mac, len(tracks), removed)
+            log.info("stored %d tracks for %s (sync returned %d, removed %d no longer on the phone,"
+                     " %d got the phone's own artist)", total, mac, len(tracks), removed, tagged)
             await snapshots.publish()
             wake.set()
 

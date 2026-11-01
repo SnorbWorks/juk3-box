@@ -407,3 +407,109 @@ def test_bluetooth_songs_borrow_the_helper_apps_exact_tags(db):
     assert ("Reaper", "Blue Oyster Cult", "Agents of Fortune", 2) in shown    # the copy whose artist matches
     assert ("Reaper", "Someone", "Guess", None) in shown                      # no match: the guess stays
     assert ("Nowhere", "Nobody", "Guess", None) in shown                      # not in the app
+
+
+def bt_songs(*songs):
+    """A Bluetooth sync with the details BlueZ 5.82 lists songs with."""
+    return [{"title": t, "item_path": f"/p/item{i}", **d} for i, (t, d) in enumerate(songs)]
+
+
+def tags(db):
+    return db.execute("SELECT title, phone_artist, phone_album, album_track, enriched, popularity_checked"
+                      " FROM tracks ORDER BY title").fetchall()
+
+
+def test_a_bluetooth_syncs_own_artists_are_stored_and_looked_up_again(db):
+    songs = bt_songs(("Animal", {"artist": "Neon Trees", "album": "Habits", "track_number": 3}),
+                     ("Plain", {}))
+    lib.upsert_tracks(db, MAC, songs)
+    db.execute("UPDATE tracks SET enriched = 1, popularity_checked = 1")
+    assert lib.store_phone_tags(db, MAC, songs) == 1
+    assert tags(db) == [("Animal", "Neon Trees", "Habits", 3, 0, 0),     # looked up again, by artist
+                        ("Plain", None, None, None, 1, 1)]               # nothing sent: as it was
+    db.execute("UPDATE tracks SET enriched = 1, popularity_checked = 1")
+    assert lib.store_phone_tags(db, MAC, songs) == 0                     # the next sync: no change
+    assert tags(db)[0] == ("Animal", "Neon Trees", "Habits", 3, 1, 1)
+
+
+def test_an_album_change_alone_isnt_looked_up_again_and_left_out_details_stay(db):
+    songs = bt_songs(("Animal", {"artist": "Neon Trees", "album": "Habits", "track_number": 3}))
+    lib.upsert_tracks(db, MAC, songs)
+    lib.store_phone_tags(db, MAC, songs)
+    db.execute("UPDATE tracks SET enriched = 1, popularity_checked = 1")
+    moved = bt_songs(("Animal", {"artist": "Neon Trees", "album": "Habits (Deluxe)", "track_number": 4}))
+    assert lib.store_phone_tags(db, MAC, moved) == 0
+    assert tags(db) == [("Animal", "Neon Trees", "Habits (Deluxe)", 4, 1, 1)]
+    lib.store_phone_tags(db, MAC, bt_songs(("Animal", {"artist": "Neon Trees"})))
+    assert tags(db) == [("Animal", "Neon Trees", "Habits (Deluxe)", 4, 1, 1)]
+
+
+def test_bluetooth_tags_go_to_the_right_copy_of_a_shared_title(db):
+    songs = bt_songs(("Reaper", {"artist": "Blue Oyster Cult"}), ("Reaper", {"artist": "Cover Band"}))
+    lib.upsert_tracks(db, MAC, songs)
+    assert lib.store_phone_tags(db, MAC, songs) == 2
+    assert db.execute("SELECT dup, phone_artist FROM tracks ORDER BY dup").fetchall() == [
+        (0, "Blue Oyster Cult"), (1, "Cover Band")]
+
+
+def helper_song(title, **extra):
+    return {"title": title, "artist": "Andy Williams", "item_path": f"helper:dev-1/{title}", **extra}
+
+
+def test_app_songs_with_a_cover_but_no_genre_are_looked_up_for_the_genre(db):
+    mac = "helper:dev-1"
+    lib.store_helper(db, mac, [helper_song("Moon River", artwork_key="a" * 40, genre="Pop"),
+                               helper_song("Days of Wine", artwork_key="b" * 40)], [])
+    enriched = dict(db.execute("SELECT title, enriched FROM tracks"))
+    assert enriched == {"Moon River": 1, "Days of Wine": 0}
+    db.execute("UPDATE tracks SET enriched = 1, looked_up = 1000 WHERE title = 'Days of Wine'")
+    lib.store_helper(db, mac, [helper_song("Moon River", artwork_key="a" * 40, genre="Pop"),
+                               helper_song("Days of Wine", artwork_key="b" * 40)], [])
+    assert db.execute("SELECT enriched FROM tracks WHERE title = 'Days of Wine'").fetchone()[0] == 1  # once
+
+
+def test_app_songs_marked_done_without_a_genre_are_queued_once(db):
+    mac = "helper:dev-1"
+    lib.store_helper(db, mac, [helper_song("Moon River", artwork_key="a" * 40, genre="Pop"),
+                               helper_song("Days of Wine", artwork_key="b" * 40)], [])
+    db.execute("UPDATE tracks SET enriched = 1")             # as the old rule left them
+    lib.upsert_tracks(db, MAC, crawl("Bluetooth song"))
+    db.execute("UPDATE tracks SET enriched = 1 WHERE phone_mac = ?", (MAC,))
+    assert lib.queue_genre_lookups(db) == 1
+    assert dict(db.execute("SELECT title, enriched FROM tracks")) == {
+        "Moon River": 1, "Days of Wine": 0, "Bluetooth song": 1}
+    db.execute("UPDATE tracks SET enriched = 1, looked_up = 1000 WHERE title = 'Days of Wine'")
+    assert lib.queue_genre_lookups(db) == 0
+
+
+def test_a_lookup_keeps_the_apps_cover_and_a_refusal_is_retried(db, monkeypatch):
+    import asyncio
+    mac = "helper:dev-1"
+    lib.store_helper(db, mac, [helper_song("Days of Wine", artwork_key="b" * 40)], [])
+    found = {"artist": "Andy Williams", "album": "Moon River", "genre": "Vocal", "artwork_url": "https://x/600.jpg"}
+
+    async def refused(session, title, artist=None):
+        raise lib.LookupRefused("iTunes answered 403")
+
+    async def answer(session, title, artist=None):
+        return found
+    monkeypatch.setattr(lib, "lookup_itunes", refused)
+    assert asyncio.run(lib._enrich_itunes(db, None, mac, "Days of Wine", Log(), 0, "Andy Williams")) is None
+    assert db.execute("SELECT enriched, looked_up FROM tracks").fetchone() == (0, None)
+    monkeypatch.setattr(lib, "lookup_itunes", answer)
+    assert asyncio.run(lib._enrich_itunes(db, None, mac, "Days of Wine", Log(), 0, "Andy Williams")) is True
+    row = db.execute("SELECT genre, artwork_url, enriched, looked_up IS NOT NULL FROM tracks").fetchone()
+    assert row == ("Vocal", f"/covers/{'b' * 40}.jpg", 1, 1)
+
+
+def test_bluetooth_songs_borrow_the_apps_looked_up_genre_too(db):
+    import asyncio
+    lib.upsert_tracks(db, MAC, crawl("Days of Wine"))
+    db.execute("UPDATE tracks SET artist = 'Andy Williams', genre = 'Rock'")      # a title-only guess
+    lib.store_helper(db, "helper:dev-1", [helper_song("Days of Wine")], [])
+    db.execute("UPDATE tracks SET genre = 'Vocal' WHERE phone_mac = 'helper:dev-1'")  # its lookup
+    snaps = lib.Snapshots(FakeBus(), db, Log())
+    snaps.mac = MAC
+    asyncio.run(snaps.publish())
+    shown = snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]
+    assert [(t["title"], t["genre"]) for t in shown] == [("Days of Wine", "Vocal")]
