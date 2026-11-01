@@ -572,10 +572,25 @@ async def main() -> None:
                 # reports then doesn't matter.
                 if q.active != PHONE:
                     continue
-                guard.update(payload, time.monotonic())
-                q.playing = payload.get("status") == "playing"
+                now_m = time.monotonic()
                 title = payload.get("title")
-                q.doctor.heard(title, payload.get("status"), time.monotonic())
+                # The song that was playing stopped at its very end, and
+                # it's no song of ours on its way in (a pick or a skip):
+                # the phone reached the end of its own list and stopped
+                # there, so no title change will come to take over from.
+                # What's waiting plays now (2026-11-01: a pick waited six
+                # minutes behind a song the owner had played in Music).
+                stopped_at_end = (q.playing and payload.get("status") in ("paused", "stopped")
+                                  and guard.near_end(now_m) and title in (None, q.last_seen_title)
+                                  and q.expected_title in (None, q.last_seen_title))
+                guard.update(payload, now_m)
+                q.playing = payload.get("status") == "playing"
+                q.doctor.heard(title, payload.get("status"), now_m)
+                if stopped_at_end and not q.held and q.upcoming():
+                    log.info("the phone stopped at the end of %r: playing what's next", q.last_seen_title)
+                    q.expected_title = None
+                    await try_autoplay(bus, q, log)
+                    continue
                 if not title:
                     continue
                 if q.last_seen_title is None:

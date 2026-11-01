@@ -14,6 +14,7 @@ Pure: feed it now-playing updates and the time; ask it whether to stop.
 END_MARGIN_S = 0.5        # stop this long before the end (the tail of a song is near silent)
 STALE_S = 5.0             # a position report older than this isn't trusted to time the end
 MIN_DURATION_S = 10.0     # don't guard anything this short (bad metadata)
+NEAR_END_S = 4.0          # a song that stops this close to its end has ended (reports come every 2 s)
 
 
 class EndGuard:
@@ -36,6 +37,15 @@ class EndGuard:
         self.title = title
         self.reported_at = now
         self.deadline = now + (duration - position) / 1000 - END_MARGIN_S
+
+    def near_end(self, now: float) -> bool:
+        """Whether the playing song is at its end now, by the last report's
+        timing. Asked before update() with the report that says it stopped:
+        a phone that reaches the end of its own list stops there instead of
+        moving on, and a pick waiting behind that song never started (it
+        waited 6 minutes on 2026-11-01, until something else came along)."""
+        return self.deadline is not None and now >= self.deadline + END_MARGIN_S - NEAR_END_S \
+            and now - self.reported_at <= STALE_S + max(0.0, self.deadline - self.reported_at)
 
     def due(self, now: float, queue_empty: bool) -> str | None:
         """The title to stop, once, when the last song reaches its end."""

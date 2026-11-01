@@ -45,3 +45,20 @@ def test_ignores_timing_when_the_reports_stopped_long_ago():
     g = EndGuard()
     g.update(np(position=199_000), now=0.0)
     assert g.due(60.0, queue_empty=True) is None
+
+
+def test_a_song_that_stops_at_its_end_has_ended():
+    g = EndGuard()
+    g.update(np(position=190_000), now=0.0)                       # 10 s left
+    assert not g.near_end(1.0)                                    # paused with 9 s to go: a pause
+    assert g.near_end(7.0)                                        # stopped 3 s before the end: the end
+    assert g.near_end(10.5)                                       # or just after it
+
+
+def test_a_pause_mid_song_or_on_old_timing_isnt_the_end():
+    g = EndGuard()
+    g.update(np(position=100_000), now=0.0)
+    assert not g.near_end(10.0)                                   # 90 s left
+    assert not g.near_end(200.0)                                  # the reports stopped long ago
+    g.update(np(status="paused", position=199_000), now=0.0)      # nothing playing: no timing
+    assert not g.near_end(1.0)
