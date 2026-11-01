@@ -78,6 +78,14 @@ def test_idle_rules():
     assert policy.is_idle(now, now - 400, False, 0, 300, 120) == (True, "idle")
 
 
+def test_not_idle_while_picks_wait():
+    # A song picked behind the phone's own: the crawl mustn't take the phone
+    # in the gap (2026-11-01, the pick waited a minute behind a crawl).
+    now = 10_000
+    assert policy.is_idle(now, now - 400, False, 0, 300, 120, True) == (False, "songs waiting to play")
+    assert policy.is_idle(now, now - 400, False, 0, 300, 120, False) == (True, "idle")
+
+
 def test_state_round_trip(tmp_path):
     st = {}
     policy.on_connect(st, MAC, ts("2026-10-11 09:00"))

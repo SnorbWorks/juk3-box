@@ -84,14 +84,19 @@ def settle(state: dict, mac: str, now: float, enabled=BRANCHES) -> bool:
 
 
 def is_idle(now: float, last_activity: float | None, playing: bool, connected_since: float | None,
-            idle_s: float, settle_s: float) -> tuple[bool, str]:
-    """The jukebox is idle when nothing plays, nobody has used the keypad or
-    knob for idle_s, and the phone has been connected for settle_s (so the
-    core sync is long done)."""
+            idle_s: float, settle_s: float, waiting: bool = False) -> tuple[bool, str]:
+    """The jukebox is idle when nothing plays, no picked song is waiting to
+    play, nobody has used the keypad or knob for idle_s, and the phone has
+    been connected for settle_s (so the core sync is long done). A pick
+    waiting is the jukebox about to play: on 2026-11-01 a crawl took the
+    phone the moment the song in front of one ended, and the pick waited
+    another minute behind it."""
     if connected_since is None:
         return False, "no phone connected"
     if playing:
         return False, "music is playing"
+    if waiting:
+        return False, "songs waiting to play"
     if now - connected_since < settle_s:
         return False, "phone just connected"
     if last_activity is not None and now - last_activity < idle_s:

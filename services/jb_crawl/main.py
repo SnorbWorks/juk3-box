@@ -21,6 +21,7 @@ systemd unit caps memory and CPU on top of that. The supervisor:
 Topics:
   in : jukebox/jb-source-phone/connected, /now-playing, /lease
        jukebox/jb-input/key, /gesture  (activity, for idleness)
+       jukebox/jb-core/queue           (songs waiting to play: not idle)
        jukebox/jb-library/deep-ack     {mac, branch, cycle, ok}
        jukebox/jb-crawl/cmd            {"action": "crawl_now"} skips the idle wait
   out: jukebox/jb-crawl/result         {mac, branch, cycle, data}
@@ -67,6 +68,7 @@ class Supervisor:
         self.mac = None
         self.connected_since = None
         self.playing = False
+        self.waiting = False         # songs in jb-core's queue
         self.last_activity = None
         self.lease = {}
         self.acks = {}               # (mac, branch, cycle) -> asyncio.Future
@@ -101,6 +103,8 @@ class Supervisor:
                 self.connected_since = None
         elif topic.endswith("/now-playing"):
             self.playing = p.get("status") == "playing"
+        elif topic == "jukebox/jb-core/queue":
+            self.waiting = bool(p.get("upcoming"))
         elif topic.endswith("/lease"):
             self.lease = p
             if self.worker and p.get("revoked") and p.get("holder") == HOLDER:
@@ -184,7 +188,7 @@ class Supervisor:
             await self.set_status(state="waiting", reason="backing off after a failure")
             return
         idle, why = policy.is_idle(time.time(), self.last_activity, self.playing,
-                                   self.connected_since, IDLE_S, SETTLE_S)
+                                   self.connected_since, IDLE_S, SETTLE_S, self.waiting)
         if not idle and not self.force:
             await self.set_status(state="waiting", reason=why)
             return
@@ -324,7 +328,7 @@ async def main() -> None:
         sup = Supervisor(bus, cfg, log)
         messages = await bus.subscribe("jukebox/jb-source-phone/connected")
         for t in ("jukebox/jb-source-phone/now-playing", "jukebox/jb-source-phone/lease",
-                  "jukebox/jb-input/key", "jukebox/jb-input/gesture",
+                  "jukebox/jb-input/key", "jukebox/jb-input/gesture", "jukebox/jb-core/queue",
                   "jukebox/jb-library/deep-ack", f"jukebox/{SERVICE_NAME}/cmd"):
             await bus.subscribe(t)
         # A crash or restart mid-crawl kills the worker with us (same cgroup)
