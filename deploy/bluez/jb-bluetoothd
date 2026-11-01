@@ -1,0 +1,43 @@
+#!/bin/sh
+# bluetoothd, as bluetooth.service starts it (deploy/systemd/bluetooth.service.d):
+# BlueZ with the jukebox's AVRCP fixes (deploy/bluez) when there's a build of
+# it for the BlueZ installed, otherwise the system's own. A newer BlueZ may
+# carry fixes the jukebox's build lacks; without the fixes, Bluetooth only
+# browses the phone's songs slower.
+#
+#   jb-bluetoothd [bluetoothd options]   start it (ExecStart)
+#   jb-bluetoothd --stopped              after it stopped (ExecStopPost, as root
+#                                        outside the service's sandbox): when it
+#                                        failed, the system's own runs until
+#                                        the next start of the Pi
+#
+# /etc/juk3-box/bluez-stock (jb-setupctl bluez stock) asks for the system's own.
+# Installed root-owned in /usr/local/sbin (deploy/install/install.sh), with the
+# builds in /usr/local/lib/juk3-box/bluez.
+
+BUILDS=/usr/local/lib/juk3-box/bluez
+STOCK=/usr/libexec/bluetooth/bluetoothd
+CHOSEN_STOCK=/etc/juk3-box/bluez-stock
+FAILED=/run/jb-bluetoothd.failed
+
+if [ "${1:-}" = --stopped ]; then
+  # systemd's account of the stop: "success" unless it crashed or failed.
+  if [ -n "${SERVICE_RESULT:-}" ] && [ "$SERVICE_RESULT" != success ]; then
+    echo "$SERVICE_RESULT" > "$FAILED"
+  fi
+  exit 0
+fi
+
+version=$(/usr/bin/dpkg-query -W -f '${Version}' bluez 2>/dev/null) || version=
+ours=$BUILDS/bluetoothd-$version
+if [ -z "$version" ] || [ ! -x "$ours" ]; then
+  echo "jb-bluetoothd: no build of ours for BlueZ ${version:-(not installed)}: the system's own" >&2
+elif [ -e "$CHOSEN_STOCK" ]; then
+  echo "jb-bluetoothd: the system's own, as chosen ($CHOSEN_STOCK)" >&2
+elif [ -e "$FAILED" ]; then
+  echo "jb-bluetoothd: the system's own: bluetoothd stopped with \"$(cat "$FAILED")\" since the Pi started" >&2
+else
+  echo "jb-bluetoothd: BlueZ $version with the jukebox's AVRCP fixes" >&2
+  exec "$ours" "$@"
+fi
+exec "$STOCK" "$@"

@@ -27,6 +27,9 @@ it only ever does these:
                                           its name): is another device already using it; use it
     jb-setupctl rootfs on|off             protect the system drive from the next start, or stop
                                           (deploy/jb-rootfs)
+    jb-setupctl bluez fixed|stock         which bluetoothd runs (deploy/bluez): the jukebox's
+                                          build with its AVRCP fixes, or Raspberry Pi OS's own
+                                          (restarts Bluetooth and what registers with it)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -75,6 +78,12 @@ PICO_VERSION_RE = re.compile(r'^VERSION = "([0-9][0-9.]*)"', re.M)
 CIRCUITPY_WAIT_S = 45
 HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 HOSTS = Path("/etc/hosts")
+# deploy/bluez/jb-bluetoothd's choice, and its note that the jukebox's build failed.
+BLUEZ_STOCK = ETC / "bluez-stock"
+BLUEZ_FAILED = Path("/run/jb-bluetoothd.failed")
+# They register with bluetoothd as they start (the pairing agent, the app's
+# Bluetooth LE service), and a restarted bluetoothd has forgotten them.
+BLUEZ_USERS = ("jb-source-phone", "jb-source-helper")
 AVAHI = ("busctl", "call", "org.freedesktop.Avahi", "/", "org.freedesktop.Avahi.Server")
 
 BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
@@ -487,6 +496,21 @@ def cmd_ssh(what: str) -> str:
     return what
 
 
+def cmd_bluez(which: str) -> str:
+    """Which bluetoothd runs: the jukebox's build (deploy/bluez), or the
+    system's own if the build misbehaves. Takes effect now: Bluetooth
+    restarts, and the phone reconnects."""
+    if which == "stock":
+        ETC.mkdir(mode=0o755, exist_ok=True)
+        write(BLUEZ_STOCK, "the system's own bluetoothd (jb-setupctl bluez stock)\n")
+    else:
+        BLUEZ_STOCK.unlink(missing_ok=True)
+        BLUEZ_FAILED.unlink(missing_ok=True)    # try ours again
+    run("systemctl", "restart", "bluetooth.service")
+    run("systemctl", "try-restart", *BLUEZ_USERS)
+    return which
+
+
 def name_taken(name: str) -> bool:
     """Does another device on the network answer to NAME.local? (Avahi gives up after about 5 s.)"""
     try:
@@ -523,7 +547,8 @@ PERSIST = {"timezone": ["/etc/localtime", "/etc/timezone"],
            "wifi-country": ["/etc/default/crda", "/etc/wpa_supplicant/wpa_supplicant.conf"],
            "lastfm": ["/etc/juk3-box"],
            "hostname": ["/etc/hostname", "/etc/hosts", "/etc/machine-info"],
-           "ssh": ["/etc/ssh", "/etc/systemd/system"]}
+           "ssh": ["/etc/ssh", "/etc/systemd/system"],
+           "bluez": ["/etc/juk3-box"]}
 ROOTFS = "/usr/local/sbin/jb-rootfs"
 
 
@@ -559,6 +584,8 @@ def act(a: list[str]) -> str:
         return cmd_hostname(a[1], a[2])
     if len(a) == 2 and a[0] == "ssh" and a[1] in ("on", "off"):
         return cmd_ssh(a[1])
+    if len(a) == 2 and a[0] == "bluez" and a[1] in ("fixed", "stock"):
+        return cmd_bluez(a[1])
     if len(a) == 2 and a[0] == "rootfs" and a[1] in ("on", "off"):
         r = run(ROOTFS, a[1], check=False)
         if r.returncode:

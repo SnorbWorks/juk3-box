@@ -1,0 +1,26 @@
+Subject: [PATCH 2/2] audio/avrcp: Don't ask a filesystem folder's item count again
+
+SetBrowsedPlayer and ChangePath responses already carry the number of
+items in the folder they lead to, so GetTotalNumberOfItems after them
+only delays the next browsing command by a round trip, or by the whole
+browsing timeout when the target doesn't answer it. Keep it for the
+Now Playing list and search results, which nothing else counts.
+---
+--- a/profiles/audio/avrcp.c
++++ b/profiles/audio/avrcp.c
+@@ -3545,6 +3545,15 @@
+ 	else
+ 		player->scope = 0x01;
+ 
++	/*
++	 * SetBrowsedPlayer and ChangePath responses already carry the number
++	 * of items in a filesystem folder: asking again costs a round trip
++	 * before the next browsing command, and the whole browsing timeout
++	 * when the target doesn't answer.
++	 */
++	if (player->scope == 0x01)
++		return 0;
++
+ 	avrcp_get_total_numberofitems(session);
+ 
+ 	return 0;

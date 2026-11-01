@@ -78,6 +78,15 @@ install -D -o root -g root -m 0644 "$REPO/deploy/systemd/systemd-remount-fs.serv
   /etc/systemd/system/systemd-remount-fs.service.d/50-juk3box-protected.conf
 install -D -o root -g root -m 0644 "$REPO/deploy/install/nm-wifi.conf" /etc/NetworkManager/conf.d/50-juk3box-wifi.conf
 
+say "Bluetooth: BlueZ with the jukebox's AVRCP fixes (deploy/bluez)"
+# Only this release's builds: jb-bluetoothd runs one only for the BlueZ it was built from.
+install -d -m 0755 /usr/local/lib/juk3-box/bluez
+rm -f /usr/local/lib/juk3-box/bluez/bluetoothd-*
+install -o root -g root -m 0755 "$REPO"/deploy/bluez/bluetoothd-* /usr/local/lib/juk3-box/bluez/
+install -o root -g root -m 0755 "$REPO/deploy/bluez/jb-bluetoothd" /usr/local/sbin/
+install -D -o root -g root -m 0644 "$REPO/deploy/systemd/bluetooth.service.d/50-juk3box-bluez.conf" \
+  /etc/systemd/system/bluetooth.service.d/50-juk3box-bluez.conf
+
 say "Overflow swap"
 # A card that has made its data partition keeps the swap there
 # (data-swapoverflow.swap, jb-rootfs make-data): an update mustn't bring
@@ -141,6 +150,9 @@ say "Clock from the internet"
 say "Turning it all on"
 systemctl daemon-reload
 [ -n "$IMAGE" ] || udevadm control --reload
+# The bluetoothd deploy/bluez chooses, now rather than at the next start. Not
+# a reason to stop the update: if ours fails, the system's own takes over.
+[ -n "$IMAGE" ] || systemctl try-restart bluetooth.service || echo "install.sh: Bluetooth didn't restart" >&2
 systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer jb-update-resume.service \
   jb-rootfs-data.service $SWAP_UNIT >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done

@@ -16,6 +16,7 @@ every month (`.github/workflows/check-updates.yml`).
 | YAMNet sound model (Google), its weights converted to numpy by `tools/yamnet_convert.py` (the batch norms folded into the convolutions), and its class map | as published, Oct 2026 | Apache-2.0 | `services/jb_analyzer/models/` |
 | Fonts: Bebas Neue, Courier Prime, Inter, Nunito, Oswald, Playfair Display, Righteous | Oct 2026 | SIL Open Font License 1.1 | `services/jb_ui/engine/fonts/` |
 | The Neon theme's concert video and pictures | | Made for this project; covered by its license | `themes/neon/assets/` |
+| BlueZ's bluetoothd, rebuilt from Raspberry Pi OS's bluez source package with the jukebox's AVRCP fixes; its source, the fixes and how it's built are next to it | 5.82-1.1+rpt2 | GPL-2.0-or-later | `deploy/bluez/` |
 
 Each one's license text is next to it.
 

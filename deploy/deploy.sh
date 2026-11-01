@@ -56,6 +56,10 @@ ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-modctl /usr/l
 # arrangement as jb-modctl, with its own folder.
 ssh_pi_sudo "install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-setupctl /usr/local/sbin/jb-setupctl && install -o root -g root -m 0755 $REMOTE_DIR/deploy/jb-update $REMOTE_DIR/deploy/jb-rootfs /usr/local/sbin/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-update.service $REMOTE_DIR/deploy/systemd/jb-update.timer $REMOTE_DIR/deploy/systemd/jb-update-resume.service $REMOTE_DIR/deploy/systemd/jb-rootfs-data.service /etc/systemd/system/ && install -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/jb-setupctl.service $REMOTE_DIR/deploy/systemd/jb-setupctl.path /etc/systemd/system/ && install -d -o $PI_USER -g $PI_USER -m 0700 $DATA_DIR/setupctl $DATA_DIR/setupctl/requests && systemctl daemon-reload && systemctl enable --now jb-setupctl.path jb-update.timer >/dev/null 2>&1 && systemctl enable jb-update-resume.service jb-rootfs-data.service >/dev/null 2>&1"
 
+# bluetoothd with the jukebox's AVRCP fixes (deploy/bluez), from Bluetooth's
+# next start.
+ssh_pi_sudo "install -d -m 0755 /usr/local/lib/juk3-box/bluez && rm -f /usr/local/lib/juk3-box/bluez/bluetoothd-* && install -o root -g root -m 0755 $REMOTE_DIR/deploy/bluez/bluetoothd-* /usr/local/lib/juk3-box/bluez/ && install -o root -g root -m 0755 $REMOTE_DIR/deploy/bluez/jb-bluetoothd /usr/local/sbin/ && install -D -o root -g root -m 0644 $REMOTE_DIR/deploy/systemd/bluetooth.service.d/50-juk3box-bluez.conf /etc/systemd/system/bluetooth.service.d/50-juk3box-bluez.conf && systemctl daemon-reload"
+
 # Setup mode's folder (shared/setup_net.py): jb-admin and jb-core ask, jb-netwatch
 # (root) runs the hotspot and answers. admin's own, so a Wi-Fi password on its
 # way through is seen by nobody else.
@@ -85,6 +89,6 @@ ssh_pi_sudo "systemctl daemon-reload && systemctl enable --now ${UNIT_NAME}.serv
 
 # A protected system drive (deploy/jb-rootfs): write all of this through to
 # the drive underneath, or it's gone at the next start. Nothing to do otherwise.
-ssh_pi_sudo "/usr/local/sbin/jb-rootfs persist $REMOTE_DIR /usr/local/sbin /etc/systemd/system /etc/udev/rules.d /etc/polkit-1/rules.d >/dev/null"
+ssh_pi_sudo "/usr/local/sbin/jb-rootfs persist $REMOTE_DIR /usr/local/sbin /usr/local/lib/juk3-box /etc/systemd/system /etc/udev/rules.d /etc/polkit-1/rules.d >/dev/null"
 
 echo "Deployed and (re)started ${UNIT_NAME}.service"

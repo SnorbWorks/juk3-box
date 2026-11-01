@@ -106,3 +106,25 @@ def test_the_keypad_boards_drives_are_read():
     assert ctl.our_program("print('hello')") == (False, None)
     with pytest.raises(ctl.Refused):
         ctl.dispatch(["keypad", "flash"])
+
+
+def test_bluez_takes_fixed_or_stock_only():
+    for bad in (["bluez"], ["bluez", "maybe"], ["bluez", "fixed", "now"]):
+        with pytest.raises(ctl.Refused):
+            ctl.dispatch(bad)
+
+
+def test_bluez_switches_bluetoothd_and_restarts_what_registers_with_it(monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(ctl, "run", lambda *cmd, **kw: ran.append(cmd))
+    monkeypatch.setattr(ctl, "ETC", tmp_path / "etc")
+    monkeypatch.setattr(ctl, "BLUEZ_STOCK", tmp_path / "etc" / "bluez-stock")
+    monkeypatch.setattr(ctl, "BLUEZ_FAILED", tmp_path / "failed")
+    assert ctl.cmd_bluez("stock") == "stock"
+    assert ctl.BLUEZ_STOCK.exists()
+    assert ran == [("systemctl", "restart", "bluetooth.service"),
+                   ("systemctl", "try-restart", "jb-source-phone", "jb-source-helper")]
+    ctl.BLUEZ_FAILED.write_text("core-dump\n")
+    assert ctl.cmd_bluez("fixed") == "fixed"
+    assert not ctl.BLUEZ_STOCK.exists() and not ctl.BLUEZ_FAILED.exists()   # ours gets another go
+    assert ctl.PERSIST["bluez"] == ["/etc/juk3-box"]     # the choice outlives a restart

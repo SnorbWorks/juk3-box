@@ -1,0 +1,63 @@
+Subject: [PATCH 1/2] audio/avrcp: Fix GetTotalNumberOfItems command length
+
+The command was built in a buffer sized for the response and said it
+carried 11 bytes of parameters while sending 7. The specification gives
+it one, the scope, and BlueZ's own target rejects anything else
+(avrcp_handle_get_total_number_of_items wants param_len == 1). An
+iPhone never answers it, so after every folder change the browsing
+channel waits out its 10 second timeout before the next command.
+
+The response handler returned negative errno values from a gboolean
+function (which keeps the request pending), checked the status before
+the Out of Bounds case it means to accept, and read fields from
+responses too short to hold them.
+---
+--- a/profiles/audio/avrcp.c
++++ b/profiles/audio/avrcp.c
+@@ -3482,19 +3482,24 @@
+ 	uint32_t num_of_items = 0;
+ 
+ 	if (pdu == NULL)
+-		return -ETIMEDOUT;
++		return FALSE;
+ 
+-	if (pdu->params[0] != AVRCP_STATUS_SUCCESS || operand_count < 7)
+-		return -EINVAL;
++	if (operand_count < AVRCP_BROWSING_HEADER_LENGTH + 1)
++		return FALSE;
+ 
+ 	if (pdu->params[0] == AVRCP_STATUS_OUT_OF_BOUNDS)
+ 		goto done;
+ 
++	/* Status (1), UID counter (2), number of items (4) */
++	if (pdu->params[0] != AVRCP_STATUS_SUCCESS ||
++			operand_count < AVRCP_BROWSING_HEADER_LENGTH + 7)
++		return FALSE;
++
+ 	player->uid_counter = get_be16(&pdu->params[1]);
+ 	num_of_items = get_be32(&pdu->params[3]);
+ 
+ 	if (!num_of_items)
+-		return -EINVAL;
++		return FALSE;
+ 
+ done:
+ 	media_player_total_items_complete(mp, num_of_items);
+@@ -3503,14 +3508,15 @@
+ 
+ static void avrcp_get_total_numberofitems(struct avrcp *session)
+ {
+-	uint8_t buf[AVRCP_BROWSING_HEADER_LENGTH + 7];
++	/* The command has one parameter: the scope */
++	uint8_t buf[AVRCP_BROWSING_HEADER_LENGTH + 1];
+ 	struct avrcp_player *player = session->controller->player;
+ 	struct avrcp_browsing_header *pdu = (void *) buf;
+ 
+ 	memset(buf, 0, sizeof(buf));
+ 
+ 	pdu->pdu_id = AVRCP_GET_TOTAL_NUMBER_OF_ITEMS;
+-	pdu->param_len = cpu_to_be16(7 + sizeof(uint32_t));
++	pdu->param_len = cpu_to_be16(1);
+ 
+ 	pdu->params[0] = player->scope;
+ 

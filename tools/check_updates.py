@@ -5,8 +5,10 @@ Compares what this repo pins or bundles with the newest release of each:
   - the Python packages (deploy/requirements.txt, pinned in deploy/install/constraints.txt), on PyPI
   - CircuitPython and the Adafruit HID library bundled for the keypad board
   - MQTT.js and the Lucide icons bundled for the screen and the admin
+  - BlueZ: deploy/bluez's bluetoothd only runs on the Raspberry Pi OS bluez
+    it was rebuilt from, so a newer one there needs a new build
 
-The system packages (Chromium, PipeWire, BlueZ, mosquitto...) come from
+The other system packages (Chromium, PipeWire, mosquitto...) come from
 Raspberry Pi OS and are updated by it, not pinned here. The fonts are
 checked by hand (google/fonts has no releases).
 
@@ -15,6 +17,7 @@ Run monthly by .github/workflows/check-updates.yml, which opens an issue.
 Standard library only.
 """
 
+import gzip
 import json
 import re
 import sys
@@ -86,7 +89,21 @@ def lucide():
     yield "Lucide icons (@iconify-json/lucide)", f"set of {have_date:%Y-%m-%d}", latest if behind else f"set of {have_date:%Y-%m-%d}"
 
 
-CHECKS = (python_packages, circuitpython, adafruit_hid, mqtt_js, lucide)
+def bluez():
+    have = re.search(r"^VERSION=(\S+)", (REPO / "deploy/bluez/build.sh").read_text(), re.M).group(1)
+    req = urllib.request.Request("http://archive.raspberrypi.com/debian/dists/trixie/main/binary-arm64/Packages.gz",
+                                 headers={"User-Agent": "juk3box-check-updates"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        index = gzip.decompress(r.read()).decode("utf-8", "replace")
+    versions = re.findall(r"^Package: bluez\n(?:.+\n)*?Version: (\S+)", index, re.M)
+    if not versions:
+        raise LookupError("no bluez in Raspberry Pi OS's package list")
+    # Debian versions, near enough: numbers as numbers, the rest as text.
+    order = lambda v: [(0, int(p)) if p.isdigit() else (1, p) for p in re.findall(r"\d+|\D+", v)]
+    yield "BlueZ (deploy/bluez: rebuild it)", have, max(versions, key=order)
+
+
+CHECKS = (python_packages, circuitpython, adafruit_hid, mqtt_js, lucide, bluez)
 
 
 def main() -> int:
