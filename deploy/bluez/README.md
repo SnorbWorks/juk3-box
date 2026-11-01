@@ -15,7 +15,8 @@ An iPhone never answers it, so the next browsing command waits out BlueZ's
 10-second browsing timeout. Measured on the cabinet, 2026-11-01: 10.15 s
 and 9.92 s for a step that otherwise takes 0.03 s. Getting into Songs took
 over 20 s on every connect. The bug is the same in 5.66 and in upstream
-master.
+master. Reported upstream on 2026-11-01, with the evidence and both
+patches: https://github.com/bluez/bluez/issues/2745
 
 - `0001` sends the command with its one parameter, and makes the response
   handler accept what it should and reject what it should.
