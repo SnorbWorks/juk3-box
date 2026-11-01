@@ -12,6 +12,7 @@ from shared.bus import Bus
 from shared.files import write_atomic
 from services.jb_source_phone import phones as ph
 from services.jb_source_phone import reconnect as rc
+from services.jb_source_phone import songs as sg
 from services.jb_source_phone.pairing import Pairing
 
 SERVICE_NAME = "jb-source-phone"
@@ -47,12 +48,25 @@ PLAY_BUSY_WAIT_S = 60     # a pick waits this long for a busy BlueZ (a library s
 # apps mid-way held the sync lock forever, so no later sync ever ran (seen
 # 2026-10-09). Give up and let the next player change try again.
 CRAWL_TIMEOUT_S = 120
+# A full read lists Songs this many at a time (one BlueZ call each, ~1.5 s
+# for 100 songs), so the screen can say how far along it is.
+READ_CHUNK = 100
+# How much of a folder is looked at to find our way to Songs: the root and
+# My Music hold a handful of folders.
+PEEK = 30
 
 # Right after a connect the phone's browse root reports 0 items for a moment
 # and answers "busy"; a sync started then fails (seen 2026-10-11). Wait for
-# the folder to report items first.
-BROWSE_READY_TIMEOUT_S = 15
-NO_BROWSE_S = 60          # a player but no browsing this long: stop "connecting", ask for a song in Music
+# the folder to report items first. A root still empty after this is reset
+# (a reconnect) at once: on 2026-10-29 it stayed empty for two minutes of
+# retries, and the reset fixed it in 6 s.
+BROWSE_READY_TIMEOUT_S = 8
+# A player but no browsing this long: stop "connecting" and ask for a song
+# in Music. Browsing normally comes within ~1 s of the player (every
+# connect since Oct 28). When it doesn't, iOS is holding it back (the app
+# that last played isn't Music) and only playing a song in Music brings
+# it: waiting a minute before saying so only kept the overlay up.
+NO_BROWSE_S = 6
 # A failed sync retries after these delays (the first try is immediate).
 SYNC_RETRY_DELAYS_S = (3, 10, 30)
 # Lost browsing (the phone's cursor somewhere Songs can't be reached from)
@@ -79,6 +93,14 @@ MUSIC_APP = "Music"
 class BrowseLost(RuntimeError):
     """The phone's browse cursor is somewhere the Songs list can't be reached
     from (Playlists, NowPlaying, deep in another branch)."""
+
+
+class BrowseEmpty(BrowseLost):
+    """The browse root reports no items: a fresh session (a reset) fixes it."""
+
+
+class NotListed(RuntimeError):
+    """A play path BlueZ has no song for: not listed in this connection."""
 
 
 async def _dbus_retry(coro_fn):
@@ -166,7 +188,7 @@ class Phone:
             if count > 0:
                 return
             if asyncio.get_running_loop().time() >= deadline:
-                raise RuntimeError(f"phone browsing still empty after {timeout}s")
+                raise BrowseEmpty(f"phone browsing still empty after {timeout}s")
             await asyncio.sleep(0.5)
 
     async def now_playing(self) -> dict:
@@ -184,9 +206,22 @@ class Phone:
             "number_of_tracks": track.get("NumberOfTracks").value if "NumberOfTracks" in track else None,
         }
 
-    async def crawl_songs(self) -> list:
-        """Navigate Filesystem > My Music > Songs and list every track (title
-        only, per AVRCP limits).
+    async def list_range(self, start: int, end: int) -> list:
+        """Songs start..end (inclusive, by place) of the current folder:
+        one BlueZ call. BlueZ fetches just that range from the phone, about
+        four songs per round trip, and replies once it has them all."""
+        items = await _dbus_retry(lambda: self.folder_iface.call_list_items(
+            {"Start": Variant("u", start), "End": Variant("u", end)}))
+        out = []
+        for path, props in items.items():
+            if sg.is_folder(props):
+                raise BrowseLost(f"found a folder at {start}-{end} of what should be Songs")
+            out.append(sg.track_from_item(path, props))
+        return out
+
+    async def goto_songs(self) -> int:
+        """Moves the browse cursor into Songs (Filesystem > My Music >
+        Songs), without listing it. Returns how many songs it holds.
 
         The AVRCP browse position lives on the phone, and ChangeFolder can only
         move one level down at a time (BlueZ rejects a jump back to root with
@@ -197,37 +232,71 @@ class Phone:
         recreates the player and its Name resets to "/Filesystem" while the
         phone is still sitting in Songs (seen 2026-10-09; the crawl then looked
         for "My Music" in a list of 910 songs and failed). So decide from what
-        the current folder actually holds: folders mean go deeper (Songs if
-        it's listed, else My Music), playable tracks mean we're in Songs.
+        the current folder actually holds (its first few items): folders mean
+        go deeper (Songs if it's listed, else My Music), songs mean we're in
+        Songs.
 
-        Tracks are only trusted in Songs, or under BlueZ's stale "/Filesystem"
+        Songs are only trusted in Songs, or under BlueZ's stale "/Filesystem"
         name (the app-switch case above): a playlist or the NowPlaying list
-        also holds tracks, and must never be taken for the library. Anywhere
+        also holds songs, and must never be taken for the library. Anywhere
         Songs can't be reached from raises BrowseLost."""
-        name, _ = await self.browse_state()
+        name, count = await self.browse_state()
         if name.startswith("/NowPlaying"):
             raise BrowseLost(f"browse cursor is in {name}")
         for _ in range(3):
-            items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
-            folders, tracks = {}, []
+            if name.endswith("/Songs"):
+                return count
+            items = await _dbus_retry(lambda: self.folder_iface.call_list_items(
+                {"Start": Variant("u", 0), "End": Variant("u", PEEK - 1)}))
+            folders, songs_here = {}, 0
             for path, props in items.items():
-                name = props["Name"].value if "Name" in props else ""
-                kind = props["Type"].value if "Type" in props else None
-                if kind == "folder":
-                    folders[name] = path
+                if sg.is_folder(props):
+                    folders[props["Name"].value if "Name" in props else ""] = path
                 else:
-                    tracks.append({"item_path": path, "title": name or None})
+                    songs_here += 1
             if not folders:
-                name, _ = await self.browse_state()
-                if not (name.endswith("/Songs") or name == "/Filesystem"):
-                    raise BrowseLost(f"found tracks in {name}, not Songs")
-                return tracks
-            target = next((path for name, path in folders.items() if name.endswith("Songs")), None) \
-                or next((path for name, path in folders.items() if name.endswith("My Music")), None)
+                if songs_here and name == "/Filesystem":
+                    return count          # in Songs under the stale name
+                raise BrowseLost(f"found {songs_here} songs and no folders in {name}, not Songs")
+            target = next((path for n, path in folders.items() if n.endswith("Songs")), None) \
+                or next((path for n, path in folders.items() if n.endswith("My Music")), None)
             if target is None:
                 raise BrowseLost(f"can't find My Music or Songs among {sorted(folders)}")
             await _dbus_retry(lambda: self.folder_iface.call_change_folder(target))
+            name, count = await self.browse_state()
         raise RuntimeError("still not in a list of songs after navigating three levels")
+
+    async def check_songs(self, stored: list, count: int) -> list | None:
+        """The stored list (songs.py), with this connection's play paths, if
+        the phone still holds the same songs: the same number, and the same
+        song at each spot check (one round trip each). None: read them all."""
+        if not stored or count != len(stored):
+            return None
+        folder = None
+        for i in sg.spot_indices(count):
+            listed = await self.list_range(i, i)
+            if not listed or not sg.same_song(stored[i], listed[0]):
+                return None
+            folder = sg.folder_of(listed[0]["item_path"])
+        return sg.rebased(stored, folder)
+
+    async def read_songs(self, count: int, progress=None) -> list:
+        """Every song in Songs, READ_CHUNK at a time, calling progress(done,
+        total) after each chunk. A count of 0 means BlueZ doesn't know it:
+        one unbounded listing then, as before."""
+        if count <= 0:
+            items = await _dbus_retry(lambda: self.folder_iface.call_list_items({}))
+            return [sg.track_from_item(path, props) for path, props in items.items() if not sg.is_folder(props)]
+        tracks: list = []
+        while len(tracks) < count:
+            start = len(tracks)
+            listed = await self.list_range(start, min(start + READ_CHUNK, count) - 1)
+            if not listed:
+                break             # the phone has fewer than it said (out of range)
+            tracks += listed
+            if progress:
+                await progress(len(tracks), count)
+        return tracks
 
     async def reconnect(self):
         """Drop and re-make the Bluetooth connection: a fresh AVRCP session
@@ -237,7 +306,10 @@ class Phone:
     async def play_item(self, item_path: str):
         item_intro = await self.system_bus.introspect(BLUEZ, item_path)
         item_obj = self.system_bus.get_proxy_object(BLUEZ, item_path, item_intro)
-        item_iface = item_obj.get_interface("org.bluez.MediaItem1")
+        try:
+            item_iface = item_obj.get_interface("org.bluez.MediaItem1")
+        except InterfaceNotFoundError:
+            raise NotListed(item_path) from None
         # "Busy" means BlueZ is still fetching a folder listing from the phone
         # (a library sync running): wait it out, it isn't a stale path. A pick
         # made during a sync got "busy", was taken for stale, and the re-sync
@@ -317,33 +389,128 @@ async def main() -> None:
     # gave up: a player but no browsing for NO_BROWSE_S; the screen says to
     # play a song in Music, and it clears when browsing appears). A pick
     # sent before the list is read in this connection can't play (2026-10-19).
-    sync_state = {"state": None}
+    # A full read also says how far along it is (done, total).
+    sync_state = {"state": None, "sent": None}
+    # While jb-crawl holds the browse lease, and through the re-sync after
+    # it, the song list stays "ready" on the bus: the crawl's own reconnects
+    # and the re-sync are background work, and a pick revokes the lease and
+    # plays a few seconds late (handle_command). Before, they put the
+    # "updating library" overlay up for a minute and more, and a waiting
+    # pick behind it (2026-11-01).
+    quiet = {"on": False, "why": None}
+    # Song ID -> (place in last_tracks, play path), for picks (play_pick).
+    by_uid: dict = {}
+    # The sync running now, so a burst of player events (a connect raises
+    # three or four) starts one sync, not one each (2026-10-29: two retry
+    # loops ran side by side for two minutes).
+    sync_task: dict = {"task": None, "player": None}
 
     def now() -> float:
         return asyncio.get_running_loop().time()
 
-    async def publish_sync(bus: Bus, state: str):
-        if sync_state["state"] == state:
+    async def publish_sync(bus: Bus, state: str, **extra):
+        # Done, failed or the phone gone: shown, and the quiet is over.
+        if quiet["on"] and state not in ("ready", "failed", "none"):
+            if sync_state["state"] != state:
+                log.info("song list: %s (not shown: %s)", state, quiet["why"])
+            sync_state["state"] = state
             return
-        sync_state["state"] = state
-        log.info("song list: %s", state)
-        await bus.publish(f"jukebox/{SERVICE_NAME}/sync",
-                          {"state": state, "name": phone.name if phone else None}, retain=True)
+        quiet["on"] = False
+        payload = {"state": state, "name": phone.name if phone else None,
+                   "mac": getattr(phone, "mac", None), **extra}
+        if sync_state["sent"] == payload:
+            sync_state["state"] = state
+            return
+        if (sync_state["sent"] or {}).get("state") != state:
+            log.info("song list: %s", state)
+        sync_state["state"], sync_state["sent"] = state, payload
+        await bus.publish(f"jukebox/{SERVICE_NAME}/sync", payload, retain=True)
 
     async def stop_waiting_for_browse(bus: Bus, p):
         """iOS may never offer browsing until Music plays (fresh v0.1.9 card,
         2026-10-28): after NO_BROWSE_S of "connecting", stop the spinner and
         say what to do. Browsing appearing reruns connect_current_phone,
-        which syncs as usual."""
+        which syncs as usual. (By the phone, not the Phone object: a burst of
+        player events makes a new one each time.)"""
         await asyncio.sleep(NO_BROWSE_S)
-        if phone is p and sync_state["state"] == "connecting" and not p.can_browse:
-            log.info("still no browsing after %ds: asking for a song in Music", NO_BROWSE_S)
+        if phone is not None and phone.mac == p.mac and sync_state["state"] == "connecting" \
+                and not phone.can_browse:
+            log.info("still no browsing after %ds (the phone presents %r): asking for a song in Music",
+                     NO_BROWSE_S, phone.app)
             await publish_sync(bus, "no_browse")
 
-    async def sync_library(bus: Bus, final: bool = True):
-        """Read the phone's Songs list. final: a failure here is the last try
-        (sync_library_logged retries quietly first)."""
-        nonlocal synced_player_path, last_tracks
+    def same_player(p) -> bool:
+        """Whether p is still the phone's player. By path, not object: every
+        event of a connect's burst sets up a new Phone for the same player,
+        and a read compared by object was thrown away for the next one's
+        (2-35 s more of the overlay: Oct 30 x2, Oct 31)."""
+        return phone is not None and phone.player_path == p.player_path
+
+    def sync_running() -> bool:
+        task = sync_task["task"]
+        return task is not None and not task.done() and phone is not None \
+            and sync_task["player"] == phone.player_path
+
+    def start_sync(bus: Bus, saved: bool = False):
+        """Sync the current phone in the background, unless that's already
+        under way. saved: show the list kept from last time first (show_saved)."""
+        if sync_running():
+            return
+        sync_task["player"] = phone.player_path
+        sync_task["task"] = asyncio.create_task(sync_library_logged(bus, saved))
+
+    async def show_saved(bus: Bus, p) -> bool:
+        """A reconnect with a list kept from last time (songs.py): the board
+        gets it, and the song list is "ready", at once -- the overlay comes
+        down a second after the phone connects. Getting to Songs to check
+        the list takes ~20 s on BlueZ 5.82 (two folder changes, each
+        stalling 10 s), so the check runs after, out of sight (quiet), and
+        a pick made meanwhile waits for it (play_at; jb-core's pick doctor
+        says "One moment"). Returns whether there was a list to show."""
+        nonlocal last_tracks, by_uid
+        saved = sg.load(p.mac)
+        if not saved["songs"]:
+            return False
+        tracks = sg.rebased(saved["songs"], p.player_path + saved["under_player"])
+        await bus.publish(f"jukebox/{SERVICE_NAME}/crawl-result", {"mac": p.mac, "tracks": tracks}, retain=True)
+        last_tracks = tracks
+        by_uid = {uid: (i, tracks[i]["item_path"]) for uid, i in sg.positions(tracks).items()}
+        log.info("showing the %d songs kept from last time; checking them now", len(tracks))
+        await publish_sync(bus, "ready")
+        quiet["on"], quiet["why"] = True, "checking the kept song list"
+        return True
+
+    async def read_or_check(p, full: bool, bus: Bus) -> tuple[list, str]:
+        """Into Songs, then the stored list if a spot check says it's still
+        right (songs.py), else a full read. Returns (tracks, how)."""
+        start_name, start_count = await p.browse_state()
+        started = now()
+        count = await p.goto_songs()
+        log.info("browsing: into Songs (%d songs) in %.1fs, from %s (%d items)",
+                 count, now() - started, start_name, start_count)
+        if not full:
+            started = now()
+            tracks = await p.check_songs(sg.load(p.mac)["songs"], count)
+            log.info("spot check of the kept list: %s in %.1fs",
+                     "same songs" if tracks is not None else "changed (or none kept)", now() - started)
+            if tracks is not None:
+                return tracks, "checked"
+
+        async def progress(done: int, total: int):
+            if same_player(p):
+                await publish_sync(bus, "syncing", done=done, total=total)
+        tracks = await p.read_songs(count, progress)
+        return tracks, "read"
+
+    async def sync_library(bus: Bus, final: bool = True, full: bool = False, saved: bool = False):
+        """Read the phone's Songs list: a spot check of the stored one when
+        it's there (a couple of seconds), else every song (20-45 s). full:
+        read every song whatever the check says (a pick's song wasn't where
+        the list said, or a re-sync asked for from the admin). final: a
+        failure here is the last try (sync_library_logged retries quietly
+        first). saved: a connect -- show the list kept from last time while
+        it's checked (show_saved)."""
+        nonlocal synced_player_path, last_tracks, by_uid
         async with sync_lock:
             p = phone
             if p is None:
@@ -355,20 +522,36 @@ async def main() -> None:
             if lease:
                 log.info("library sync skipped: %s holds the browse lease", lease["holder"])
                 return
-            await publish_sync(bus, "syncing")
+            if not (saved and await show_saved(bus, p)):
+                await publish_sync(bus, "syncing")
+            started = now()
             try:
                 await p.wait_until_browsable()
-                tracks = await asyncio.wait_for(p.crawl_songs(), CRAWL_TIMEOUT_S)
-            except BaseException:
-                if final and phone is p:
+                tracks, how = await asyncio.wait_for(read_or_check(p, full, bus), CRAWL_TIMEOUT_S)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                if not same_player(p):
+                    # The player went away mid-read (a connect's burst, a
+                    # drop): the new one's own sync covers it. Not a failure
+                    # to retry -- a retry was a second sync after it.
+                    log.info("sync of superseded player %s stopped (%s)", p.player_path, e)
+                    return
+                if final:
                     await publish_sync(bus, "failed")
                 raise
-            if phone is not p:
+            if not same_player(p):
                 # Superseded mid-crawl by a reconnect/renegotiation -- these
                 # item_paths are already dead. The new player's own sync
                 # (triggered from connect_current_phone) replaces them.
                 log.info("discarding crawl from superseded player %s", p.player_path)
                 return
+            if how == "read":
+                try:
+                    if sg.save(p.mac, tracks, p.player_path):
+                        log.info("kept the song list for %s's next connect", p.name)
+                except OSError:
+                    log.exception("couldn't keep the song list")
             # Retained so jb-library gets it no matter which service started
             # first (e.g. phone already connected at boot).
             await bus.publish(
@@ -378,7 +561,9 @@ async def main() -> None:
             )
             synced_player_path = p.player_path
             last_tracks = tracks
-            log.info("library sync complete: %d tracks from %s", len(tracks), p.name)
+            by_uid = {uid: (i, tracks[i]["item_path"]) for uid, i in sg.positions(tracks).items()}
+            log.info("library sync complete: %d tracks from %s (%s in %.1fs)", len(tracks), p.name,
+                     "spot-checked the stored list" if how == "checked" else "read every song", now() - started)
             await publish_sync(bus, "ready")
         if waiting_pick:
             asyncio.create_task(play_waiting_pick(bus))
@@ -435,19 +620,27 @@ async def main() -> None:
         await asyncio.sleep(3)
         start_reconnect(bus, "pick")
 
-    async def sync_library_logged(bus: Bus):
+    async def sync_library_logged(bus: Bus, saved: bool = False):
         # Fired as a background task -- log failures instead of letting them
         # vanish with the unawaited task. Retries a failed sync a few times;
         # lost browsing goes straight to a browse reset instead.
         delays = (0, *SYNC_RETRY_DELAYS_S)
+        me = asyncio.current_task()
         for attempt, delay in enumerate(delays, start=1):
             await asyncio.sleep(delay)
+            newer = sync_task["task"]
+            if attempt > 1 and newer is not None and newer is not me and not newer.done():
+                log.info("library sync retry dropped: a newer sync is under way")
+                return
             try:
-                await sync_library(bus, final=attempt == len(delays))
+                await sync_library(bus, final=attempt == len(delays), saved=saved and attempt == 1)
                 return
             except BrowseLost as e:
                 log.warning("library sync: browsing is lost (%s); resetting the browse session", e)
-                await publish_sync(bus, "failed")
+                # An empty root with a reset free to run now: the reset is the
+                # fix, a few seconds away, so the screen keeps saying "updating".
+                if not (isinstance(e, BrowseEmpty) and reset_can_run_now()):
+                    await publish_sync(bus, "failed")
                 request_browse_reset(bus)
                 return
             except Exception:
@@ -462,6 +655,11 @@ async def main() -> None:
         if not reset_pending:
             reset_pending = True
             asyncio.create_task(browse_reset(bus))
+
+    def reset_can_run_now() -> bool:
+        """A browse reset wouldn't have to wait (browse_reset's rules)."""
+        return not playing and not lease and phone is not None and (
+            last_reset_at is None or now() - last_reset_at >= RESET_MIN_INTERVAL_S)
 
     async def browse_reset(bus: Bus):
         """Reconnect the phone to get a fresh browse session at the root;
@@ -491,6 +689,10 @@ async def main() -> None:
             await phone.reconnect()
         except Exception:
             log.exception("browse reset failed")
+            # An empty root keeps "syncing" up through its reset (sync_library_logged):
+            # with no reset coming, say it failed rather than spin on.
+            if sync_state["state"] == "syncing" and not sync_running():
+                await publish_sync(bus, "failed")
         finally:
             reset_pending = False
 
@@ -550,13 +752,18 @@ async def main() -> None:
                 log.info("phone is presenting %r, not Music: no song list until Music plays", phone.app)
                 await publish_sync(bus, "wrong_app")
             elif not phone.can_browse:
-                log.info("phone has no browsing yet -- library sync will run when it appears")
+                log.info("phone has no browsing yet (presenting %r) -- library sync will run when it appears",
+                         phone.app)
                 if sync_state["state"] != "no_browse":
                     await publish_sync(bus, "connecting")
                     asyncio.create_task(stop_waiting_for_browse(bus, phone))
             elif phone.player_path != synced_player_path:
-                await publish_sync(bus, "syncing")
-                asyncio.create_task(sync_library_logged(bus))
+                if not sync_running():
+                    # With a list kept from last time, the sync shows it
+                    # at once (show_saved): no "syncing" in between.
+                    if not sg.load(phone.mac)["songs"]:
+                        await publish_sync(bus, "syncing")
+                    start_sync(bus, saved=True)
             else:
                 await publish_sync(bus, "ready")
             return
@@ -593,11 +800,13 @@ async def main() -> None:
         ttl = min(float(cmd.get("ttl_s", LEASE_MAX_S)), LEASE_MAX_S)
         lease = {"holder": holder, "until": now() + ttl, "revoked_at": None}
         log.info("browse lease granted to %s for %.0fs", holder, ttl)
+        quiet["on"], quiet["why"] = True, f"{holder} is browsing"
         await publish_lease(bus)
 
     async def end_lease(bus: Bus, why: str):
         """The lease is over (released, revoked and handed back, or timed
-        out): take browsing back -- re-sync Songs, then play any pick that
+        out): take browsing back -- re-sync Songs (quietly: the spot check
+        takes seconds, and the list stays "ready"), then play any pick that
         came in meanwhile."""
         nonlocal lease, pending_pick
         if not lease:
@@ -605,7 +814,12 @@ async def main() -> None:
         log.info("browse lease from %s ended (%s); re-syncing", lease["holder"], why)
         lease = None
         await publish_lease(bus)
-        await sync_library_logged(bus)
+        if phone is None or not phone.can_browse:
+            # Gone, or back without browsing: what the crawl hid is true now.
+            quiet["on"] = False
+            await connect_current_phone(bus)
+        else:
+            await sync_library_logged(bus)
         pick, pending_pick = pending_pick, None
         if pick:
             await handle_command(bus, pick)
@@ -696,29 +910,97 @@ async def main() -> None:
                 # (Phone.play_item), and the screen says so.
                 await pick_problem(bus, cmd, "busy", retrying=True)
             try:
-                await phone.play_item(cmd["item_path"])
+                await play_pick(cmd)
             except Exception as e:
-                log.exception("play_item failed: %r", cmd["item_path"])
+                if isinstance(e, NotListed):
+                    log.info("%r isn't where the song list says: reading every song again", cmd.get("title"))
+                else:
+                    log.exception("play_item failed: %r", cmd["item_path"])
                 reason = "no_answer" if "timed out" in str(e).lower() or isinstance(e, asyncio.TimeoutError) else None
-                if not phone.wrong_app:
+                if phone is None or not phone.wrong_app:
                     await pick_problem(bus, cmd, reason, retrying=True)
-                if not await replay_after_resync(bus, cmd, reason or "no_answer"):
+                if not await replay_after_resync(bus, cmd, reason or "no_answer", full=isinstance(e, NotListed)):
                     await bus.publish(f"jukebox/{SERVICE_NAME}/play-error", {**cmd, "reason": reason or "not_found"})
         elif action == "crawl":
             # Manual re-sync (e.g. from the phone manager UI, after adding
-            # music on the phone). Automatic syncs happen on connect.
-            await sync_library(bus)
+            # music on the phone): every song, whatever a spot check says.
+            # Automatic syncs happen on connect.
+            await sync_library(bus, full=True)
         else:
             log.warning("unknown command action: %r", action)
 
-    async def replay_after_resync(bus: Bus, cmd: dict, reason: str = "no_answer") -> bool:
+    def find_in_list(uid: str | None, title: str | None, copy: int = 0) -> int | None:
+        """A song's place in the current list: by its ID, else by title and
+        which copy of that title."""
+        if uid and uid in by_uid:
+            return by_uid[uid][0]
+        places = [i for i, t in enumerate(last_tracks) if title and t["title"] == title]
+        return places[min(copy, len(places) - 1)] if places else None
+
+    async def play_at(index: int, again: bool = True):
+        """Plays song `index` of the current list. After a spot check
+        (songs.py) BlueZ has listed only a handful of songs: one it hasn't
+        is listed on its own first (one round trip, never in the middle of
+        a sync's listing) and must come back as the same song. Raises
+        NotListed if it doesn't: the stored list is out of date. A sync
+        that replaced the list meanwhile (a pick made during the re-sync
+        after a reconnect or a crawl) is looked in again, once."""
+        p, want = phone, last_tracks[index]
+        if p is None:
+            raise NotListed(want["item_path"])
+        try:
+            await p.play_item(want["item_path"])
+            return
+        except NotListed:
+            pass
+        listed = None
+        async with sync_lock:
+            replaced = not same_player(p) or index >= len(last_tracks) or last_tracks[index] is not want
+            if not replaced:
+                listed = await p.list_range(index, index)
+        if replaced:
+            moved = find_in_list(sg.uid_of(want["item_path"]), want["title"]) if again and phone else None
+            if moved is None:
+                raise NotListed(want["item_path"])
+            await play_at(moved, again=False)
+            return
+        if not listed or sg.uid_of(listed[0]["item_path"]) != sg.uid_of(want["item_path"]) \
+                or listed[0]["title"] != want["title"]:
+            raise NotListed(want["item_path"])
+        await p.play_item(listed[0]["item_path"])
+
+    async def play_pick(cmd: dict):
+        """Plays a pick: its song in this connection's list, found by its
+        ID (a play path from before a reconnect names a player that's
+        gone, but the ID at its end still holds), else the path as sent."""
+        uid = sg.uid_of(cmd["item_path"])
+        index = find_in_list(uid, None)
+        if index is None and sync_running():
+            # The list being read now may have it (a pick in the moment
+            # between a connect and its sync taking the lock, too).
+            await asyncio.wait({sync_task["task"]}, timeout=CRAWL_TIMEOUT_S)
+            index = find_in_list(uid, None)
+        elif index is None and sync_lock.locked():
+            async with sync_lock:
+                pass
+            index = find_in_list(uid, None)
+        if index is not None:
+            await play_at(index)
+        elif phone is None:
+            raise NotListed(cmd["item_path"])
+        else:
+            await phone.play_item(cmd["item_path"])
+
+    async def replay_after_resync(bus: Bus, cmd: dict, reason: str = "no_answer", full: bool = False) -> bool:
         """A pick failed, most likely because its play path belongs to a
         player BlueZ has since replaced (the phone switched apps and the
         re-sync hasn't happened or was missed). Re-sync now, find the same
         song in the fresh crawl, and play that -- the pick plays a few
-        seconds late instead of being dropped. Returns whether it played."""
+        seconds late instead of being dropped. full: read every song (the
+        song wasn't where the list said). Returns whether it played."""
         stale = cmd["item_path"]
-        old = [t for t in last_tracks if t["item_path"] == stale]
+        uid = sg.uid_of(stale)
+        old = [t for t in last_tracks if uid and sg.uid_of(t["item_path"]) == uid]
         title = old[0]["title"] if old else cmd.get("title")
         if not title:
             return False
@@ -738,7 +1020,7 @@ async def main() -> None:
             return True
         log.info("play path looks stale; re-syncing to retry %r", title)
         try:
-            await sync_library(bus)
+            await sync_library(bus, full=full)
         except BrowseLost as e:
             log.warning("re-sync for a stale play path: browsing is lost (%s)", e)
         except Exception:
@@ -754,17 +1036,16 @@ async def main() -> None:
     async def play_fresh_copy(pick: dict) -> bool:
         """Play the pick's song from the latest crawl, by title and copy."""
         title, copy = pick["title"], pick["copy"]
-        fresh = [t["item_path"] for t in last_tracks if t["title"] == title]
-        if not fresh or phone is None:
+        index = find_in_list(None, title, copy)
+        if index is None or phone is None:
             return False
-        path = fresh[min(copy, len(fresh) - 1)]
         # The same path can be right: an iPhone's song paths survive a
         # reconnect, and the first try may have failed for another reason
         # (busy, no controls). Try it.
         try:
-            await phone.play_item(path)
+            await play_at(index)
         except Exception:
-            log.exception("retry after re-sync failed: %r", path)
+            log.exception("retry after re-sync failed: %r", title)
             return False
         log.info("played %r after re-sync", title)
         return True
@@ -870,6 +1151,7 @@ async def main() -> None:
         except Exception:
             log.exception("couldn't remove %s from Bluetooth", mac)
         book.forget(mac)
+        sg.forget(mac)
         if phone is not None and phone.mac == mac:
             await bus.clear_retained(f"jukebox/{SERVICE_NAME}/crawl-result")
         await bus.publish(f"jukebox/{SERVICE_NAME}/forgotten", {"mac": mac, "name": target[2] if target else None})

@@ -327,13 +327,33 @@ function watchSystem() {
   // The phone connecting and its song list being read (jb-source-phone/sync):
   // an overlay until it's done. Picks made meanwhile wait in the queue and
   // play when it's ready (jb-core). If the read fails, say what to do.
+  // A reconnect checks the list kept from last time (a couple of seconds);
+  // a full read counts its songs here (done/total).
   const overlay = document.createElement('div');
   overlay.id = 'jb-sync-overlay';
   overlay.hidden = true;
   overlay.innerHTML = '<div class="jb-sync-box"><div class="jb-sync-spinner"></div>'
     + '<div class="jb-sync-title">Connecting and updating library…</div>'
+    + '<div class="jb-sync-progress"></div>'
     + '<div class="jb-sync-message">Please wait. A song you pick now plays as soon as it\'s ready.</div></div>';
   document.body.append(overlay);
+  const progress = overlay.querySelector('.jb-sync-progress');
+  // Only for the phone that has the jukebox (jb-core/source), or while
+  // nobody has it yet: a Bluetooth phone arriving while the app phone has
+  // the jukebox doesn't cover the board it isn't showing.
+  const syncCovers = s => {
+    if (s?.state !== 'connecting' && s?.state !== 'syncing') return false;
+    const active = store.get('source')?.active;
+    return !active || (active.kind === 'phone' && (!s.mac || active.id === s.mac));
+  };
+  const showSync = () => {
+    const s = store.get('phoneSync');
+    const covers = syncCovers(s);
+    if (overlay.hidden === covers) overlay.hidden = !covers;
+    const text = covers && s.total > 0 ? `Reading your songs… ${Math.min(s.done || 0, s.total)} of ${s.total}` : '';
+    if (progress.textContent !== text) progress.textContent = text;
+  };
+  store.watch(html, 'source', showSync);
   // The phone isn't offering its songs: it's giving the jukebox another app
   // (wrong_app), or it never offered browsing (no_browse, after a minute of
   // connecting). Playing a song in Music fixes both; say so as soon as it
@@ -356,8 +376,7 @@ function watchSystem() {
   let syncWas = null;
   store.watch(html, 'phoneSync', s => {
     const state = s?.state;
-    const busy = state === 'connecting' || state === 'syncing';
-    if (overlay.hidden === busy) overlay.hidden = !busy;
+    showSync();
     if (state === 'failed' && syncWas && syncWas !== 'failed' && currentMode() === 'select' && !popupOpen()) {
       openPopup('notice', {
         title: 'Couldn\'t read your phone\'s songs',

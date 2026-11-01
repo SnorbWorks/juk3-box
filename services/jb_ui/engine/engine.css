@@ -612,6 +612,8 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 #jb-sync-overlay .jb-sync-box { max-width: 70vw; display: flex; flex-direction: column; align-items: center; gap: 2.5vmin; }
 #jb-sync-overlay .jb-sync-title { font-size: 4.5vmin; font-weight: 700; }
 #jb-sync-overlay .jb-sync-message { font-size: 3vmin; opacity: 0.8; }
+#jb-sync-overlay .jb-sync-progress { font-size: 3vmin; font-variant-numeric: tabular-nums; }
+#jb-sync-overlay .jb-sync-progress:empty { display: none; }
 #jb-sync-overlay .jb-sync-spinner {
   width: 9vmin;
   height: 9vmin;
