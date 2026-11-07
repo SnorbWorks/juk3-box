@@ -1,0 +1,21 @@
+# Installs at a start whatever the nightly check (jb-update auto) queued but
+# held back because a song was playing (deploy/jb-update boot). It runs before
+# any source can play, so "nothing is playing" holds, and reads the saved
+# state (no network), so a start with nothing queued doesn't hold the jukebox
+# up. If there is something to install, it restarts to install it (a protected
+# system); otherwise it just clears the screen's install notice.
+[Unit]
+Description=juk3-box update (install queued updates at startup)
+# After resume (the install's own restart finishes first) and the broker (so
+# the install notice can be cleared / shown). Before the sources and screen.
+After=network-online.target jb-update-resume.service mosquitto.service
+Wants=network-online.target
+Before=jb-core.service jb-source-phone.service jb-source-local.service jb-source-helper.service jb-ui.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jb-update boot
+TimeoutStartSec=90min
+
+[Install]
+WantedBy=multi-user.target

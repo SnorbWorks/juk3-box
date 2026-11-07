@@ -58,7 +58,7 @@ say "Root helpers, services, rules"
 install -o root -g root -m 0755 "$REPO/deploy/jb-modctl" "$REPO/deploy/jb-setupctl" "$REPO/deploy/jb-drive" \
   "$REPO/deploy/jb-update" "$REPO/deploy/jb-rootfs" /usr/local/sbin/
 for u in jb-modctl.service jb-modctl.path jb-setupctl.service jb-setupctl.path jb-drive@.service \
-    jb-update.service jb-update.timer jb-update-resume.service jb-rootfs-data.service; do
+    jb-update.service jb-update.timer jb-update-resume.service jb-update-boot.service jb-rootfs-data.service; do
   install -o root -g root -m 0644 "$REPO/deploy/systemd/$u" /etc/systemd/system/
 done
 for u in $OWN_UNITS; do
@@ -154,7 +154,7 @@ systemctl daemon-reload
 # a reason to stop the update: if ours fails, the system's own takes over.
 [ -n "$IMAGE" ] || systemctl try-restart bluetooth.service || echo "install.sh: Bluetooth didn't restart" >&2
 systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer jb-update-resume.service \
-  jb-rootfs-data.service $SWAP_UNIT >/dev/null
+  jb-update-boot.service jb-rootfs-data.service $SWAP_UNIT >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done
 

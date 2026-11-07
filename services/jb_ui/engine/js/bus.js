@@ -44,6 +44,9 @@ const HANDLERS = {
   'jukebox/jb-core/selection': s => store.set('selection', s),
   'jukebox/jb-audio/state': v => store.set('volume', v),
   'jukebox/jb-core/notice': n => store.set('notice', n),
+  // A software update is about to restart the jukebox to install (jb-update,
+  // retained): a full-screen notice so the restart isn't taken for a crash.
+  'jukebox/jb-update/installing': n => store.set('installing', n),
   'jukebox/jb-core/power': p => store.set('power', p),
   'jukebox/jb-source-phone/phones': p => store.set('phones', p.phones || []),
   'jukebox/jb-source-phone/pairing': s => store.set('pairing', s),

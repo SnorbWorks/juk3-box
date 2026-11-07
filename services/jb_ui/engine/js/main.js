@@ -526,6 +526,29 @@ function watchVolumeKeys() {
   });
 }
 
+// A software update is installing: jb-update publishes it (retained) just
+// before it restarts to install, so the restart doesn't look like a crash,
+// and clears it (empty retained message) once a start finds nothing left to
+// install. A plain full-screen notice, built here so it needs no theme block.
+function watchInstalling() {
+  if (PREVIEW) return;
+  let overlay = null;
+  store.watch(document.documentElement, 'installing', n => {
+    const text = n && typeof n === 'object' ? n.text : null;
+    if (!text) { overlay?.remove(); overlay = null; return; }
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'jb-updating';
+      overlay.setAttribute('role', 'status');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;display:flex;' +
+        'align-items:center;justify-content:center;text-align:center;padding:2rem;' +
+        'background:#1a1130;color:#fff;font:600 30px/1.45 system-ui,sans-serif';
+      document.body.append(overlay);
+    }
+    overlay.textContent = text;
+  });
+}
+
 // A real keyboard works too, for development: arrows turn, Enter clicks.
 function watchKeyboard() {
   document.addEventListener('keydown', e => {
@@ -582,6 +605,7 @@ async function start() {
   goToRest();
   watchKeyboard();
   watchVolumeKeys();
+  watchInstalling();
   connectBus();
   reveal();
 }

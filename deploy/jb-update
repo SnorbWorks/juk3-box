@@ -3,8 +3,13 @@
 
     jb-update check          is there a newer version? (writes the state)
     jb-update apply          install the newest version now
-    jb-update auto           what the nightly timer runs: check, and apply if
-                             the owner left "update automatically" on
+    jb-update auto           what the nightly timer runs: check, queue the
+                             downloads, and install (which restarts) when the
+                             owner left "update automatically" on and nothing
+                             is playing -- else the queued update waits
+    jb-update boot           what jb-update-boot runs at every start, before
+                             any source: install whatever auto queued, while
+                             nothing is playing yet (the "install on restart")
     jb-update set-auto on|off
     jb-update os-check       which Raspberry Pi OS packages have updates (security ones apart)
     jb-update os-apply security|all
@@ -25,6 +30,15 @@ each night when updates are automatic, everything else only when the owner
 asks (Chromium, the kernel and firmware are where a jukebox could break).
 Some packages only take effect on a restart: "restart_needed", which the
 admin acts on overnight when nothing is playing.
+
+An install always restarts (a protected system, below), so it never runs
+while a song is playing: auto queues the download but holds the restart
+back, and jb-update-boot installs at the next start, before any source can
+play.  The screen says "Installing updates" (NOTICE_TOPIC) before the
+restart and clears it once a start finds nothing left to install.  One
+operation at a time: a file lock (DIR/lock) serialises auto, boot, resume,
+Update now and the OS installs, so a start that's installing a queued update
+can't collide with a fresh check.
 
 On a protected system (deploy/jb-rootfs: the system drive read-only
 behind an overlay) nothing installed would survive a restart, so apply
@@ -47,6 +61,8 @@ leaves it to the next night when another is under way, and jb-setupctl
 doesn't start one beside it.
 """
 
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -85,13 +101,18 @@ RESUME = DIR / "resume.json"
 ROOTFS = "/usr/local/sbin/jb-rootfs"
 # The other updates: the admin's Update now and Raspberry Pi OS installs
 # (deploy/jb-setupctl), and the install after a restart to install.
-OTHER_UNITS = ("jb-update-now", "jb-update-os", "jb-update-resume")
+OTHER_UNITS = ("jb-update-now", "jb-update-os", "jb-update-resume", "jb-update-boot")
 APT_DATA = Path("/data/cache/apt")       # apt's lists and downloads while protected
 APT_OPTS = ("-y", "-q", "-o", "DPkg::Lock::Timeout=300",
             "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold")
 
 
 class Failed(Exception):
+    pass
+
+
+class Busy(Exception):
+    """Another update operation holds the lock."""
     pass
 
 
@@ -149,6 +170,65 @@ def auto_on() -> bool:
     return read_json(SETTINGS, {}).get("auto", True) is not False
 
 
+NOW_PLAYING_TOPICS = ("jukebox/jb-source-phone/now-playing",
+                      "jukebox/jb-source-local/now-playing",
+                      "jukebox/jb-source-helper/now-playing")
+NOTICE_TOPIC = "jukebox/jb-update/installing"
+NOTICE_PAUSE_S = 3            # the screen gets this long to show the install notice before the reboot
+
+
+def playing() -> bool:
+    """A song playing from any source, read from the bus's retained
+    now-playing (the admin's quiet() watches the same sources).  Can't tell
+    (no broker, no mosquitto_sub) -> not playing: an install is never blocked
+    forever by something being unreadable, and the install only runs at a
+    boot or overnight anyway, where quiet is the normal case."""
+    for topic in NOW_PLAYING_TOPICS:
+        try:
+            r = run("mosquitto_sub", "-t", topic, "-C", "1", "-W", "1", check=False)
+        except OSError:
+            return False
+        try:
+            if json.loads(r.stdout or "{}").get("status") == "playing":
+                return True
+        except (ValueError, TypeError):
+            pass
+    return False
+
+
+def notice(text: str | None) -> None:
+    """What the screen shows about the install (the kiosk's overlay, jb-ui):
+    a line before the restart, cleared (retained message removed) once it's
+    done.  Best-effort: the update never waits on it."""
+    try:
+        if text is None:
+            run("mosquitto_pub", "-t", NOTICE_TOPIC, "-r", "-n", check=False)
+        else:
+            run("mosquitto_pub", "-t", NOTICE_TOPIC, "-r", "-m",
+                json.dumps({"text": text, "at": time.time()}), check=False)
+    except OSError:
+        pass
+
+
+@contextlib.contextmanager
+def locked():
+    """Only one update operation at a time (the nightly check, the install at
+    a boot, the admin's Update now, resume): each would install over the
+    other's files.  Can't get the lock -> another holds it; the caller skips."""
+    DIR.mkdir(parents=True, exist_ok=True)
+    f = open(DIR / "lock", "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        raise Busy("another update is under way")
+    try:
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
 def under_way(unit: str) -> bool:
     """A oneshot unit (jb-update-resume) is "activating" until it's done,
     which systemctl is-active doesn't count as active."""
@@ -200,6 +280,8 @@ def restart_to_install(verbs: list[list[str]]) -> None:
     write_json(RESUME, {"verbs": verbs, "at": time.time()})
     off = False
     try:
+        notice("Installing updates. The jukebox will restart.")
+        time.sleep(NOTICE_PAUSE_S)     # a moment for the screen to show it before the reboot
         run(ROOTFS, "off")
         off = True
         run("systemctl", "--no-block", "reboot")
@@ -230,6 +312,13 @@ def resume() -> dict:
                 os_phase("starting", error=None)
         finally:
             RESUME.unlink(missing_ok=True)
+        if any(v[:1] == ["os-apply"] for v in verbs):
+            # Fresh apt lists on the real system drive before installing. The
+            # check that queued this kept its lists on the data partition
+            # (apt_dirs, while protected); unprotected now, apt reads the
+            # normal lists, so without this upgradable() finds nothing and the
+            # install never lands (and the queued state would keep re-trying).
+            run("apt-get", "update", "-q", "-o", "DPkg::Lock::Timeout=300", check=False, timeout=900)
         for verb in verbs:
             if verb == ["apply"]:
                 s = apply(then="protecting")
@@ -526,6 +615,56 @@ def _os_apply(which: str) -> dict:
     return os_phase(None, **changes)
 
 
+def pending_verbs(s: dict) -> list[list]:
+    """What the saved state says is queued to install: a newer Juk3box, and
+    the Raspberry Pi OS security fixes found but not yet installed."""
+    security = (s.get("os") or {}).get("security") or []
+    return ([["apply"]] if s.get("available") else []) + ([["os-apply", "security"]] if security else [])
+
+
+def auto_run() -> dict:
+    """The nightly/after-a-start timer: check, queue the downloads, and
+    install (which restarts) when automatic updates are on and nothing is
+    playing.  Queuing (the download) is never held back; a queued update it
+    can't install now waits for jb-update boot at the next start, or the next
+    quiet run."""
+    if not auto_on():                   # automatic updates off: look, never install
+        s = check()
+        os_check()
+        return s
+    if not protected():                 # not protected: install in place, no restart
+        s = apply()
+        os_check()
+        os_apply("security")
+        return s
+    s = check()                         # protected: queue, then restart once to install
+    os_check()
+    security, _ = upgradable()
+    verbs = ([["apply"]] if s.get("available") else []) + ([["os-apply", "security"]] if security else [])
+    if verbs and not playing():         # both in one start without protection, not a restart each
+        restart_to_install(verbs)
+        return read_json(STATE, {})
+    return s
+
+
+def boot_run() -> dict:
+    """What jb-update-boot runs at every start, before any source can play:
+    install whatever auto already queued -- read from the saved state, so a
+    start with nothing queued does no network and doesn't hold the jukebox up.
+    The install itself clears the queued state (resume's fresh check finds
+    nothing left), so this can't loop.  A normal start clears the screen's
+    install notice; the install sets it again if it restarts."""
+    notice(None)
+    if not auto_on() or not protected():
+        return read_json(STATE, {})
+    s = read_json(STATE, {})
+    verbs = pending_verbs(s)
+    if verbs and not playing():
+        restart_to_install(verbs)
+        return read_json(STATE, {})
+    return s
+
+
 def main():
     if os.geteuid() != 0:
         print("jb-update: must run as root", file=sys.stderr)
@@ -533,37 +672,35 @@ def main():
     a = sys.argv[1:]
     DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(DIR, 0o755)
+    # Looking only (no files change): no lock needed.
     if a == ["check"]:
         s = check()
-    elif a == ["apply"]:
-        s = apply()
-    elif a == ["auto"]:
-        if any(under_way(u) for u in OTHER_UNITS):
-            print("jb-update: another update is under way; this one waits for the next night")
-            sys.exit(0)
-        if auto_on() and protected():
-            # Both in one start without protection, not a restart each.
-            s = check()
-            os_check()
-            security, _ = upgradable()
-            verbs = ([["apply"]] if s.get("available") else []) + ([["os-apply", "security"]] if security else [])
-            if verbs:
-                restart_to_install(verbs)
-                s = read_json(STATE, {})
-        else:
-            s = apply() if auto_on() else check()
-            os_check()
-            if auto_on():
-                os_apply("security")
     elif a == ["os-check"]:
         s = os_check()
-    elif len(a) == 2 and a[0] == "os-apply" and a[1] in ("security", "all"):
-        s = os_apply(a[1])
-    elif a == ["resume"]:
-        s = resume()
     elif len(a) == 2 and a[0] == "set-auto" and a[1] in ("on", "off"):
         write_json(SETTINGS, {"auto": a[1] == "on"})
         s = {"auto": a[1] == "on"}
+    elif a in (["apply"], ["auto"], ["boot"], ["resume"]) or \
+            (len(a) == 2 and a[0] == "os-apply" and a[1] in ("security", "all")):
+        # Installing: one at a time (each would install over another's files).
+        try:
+            with locked():
+                if a == ["apply"]:
+                    s = apply()
+                elif a == ["auto"]:
+                    if any(under_way(u) for u in OTHER_UNITS):
+                        print("jb-update: another update is under way; this one waits for the next night")
+                        sys.exit(0)
+                    s = auto_run()
+                elif a == ["boot"]:
+                    s = boot_run()
+                elif a == ["resume"]:
+                    s = resume()
+                else:
+                    s = os_apply(a[1])
+        except Busy:
+            print("jb-update: another update is under way; this one skips")
+            sys.exit(0)
     else:
         print(__doc__, file=sys.stderr)
         sys.exit(2)

@@ -243,6 +243,9 @@ def jb(tmp_path, monkeypatch):
             raise subprocess.CalledProcessError(1, cmd)
         return subprocess.CompletedProcess(cmd, 0, "", "")
     monkeypatch.setattr(up, "run", run)
+    monkeypatch.setattr(up, "notice", lambda *a, **k: None)   # the kiosk notice: not through run()
+    monkeypatch.setattr(up, "playing", lambda: False)          # nothing playing unless a test says so
+    monkeypatch.setattr(up, "NOTICE_PAUSE_S", 0)               # no real pause in tests
     up.ran, up.fail = ran, fail
     return up
 
@@ -428,3 +431,73 @@ def test_update_now_is_starting_until_jb_update_takes_it_up(tmp_path, monkeypatc
             u = await (await c.get("/api/updates")).json()
             assert u["os"]["starting"] is True and u["os"]["phase"] is None
     asyncio.run(go())
+
+
+# The playing-gate, install-at-boot and the one-at-a-time lock -----------------
+
+def test_auto_queues_but_holds_the_install_back_while_a_song_is_playing(jb, monkeypatch):
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "check", lambda: jb.state(current="v1.0.0", latest="v1.1.0", available=True))
+    monkeypatch.setattr(jb, "os_check", lambda: jb.os_state(security=[{"name": "openssl", "from": "1", "to": "2"}]))
+    monkeypatch.setattr(jb, "upgradable", lambda: ([{"name": "openssl", "from": "1", "to": "2"}], []))
+
+    # Playing: it checks and queues (the state holds the update), but doesn't restart.
+    monkeypatch.setattr(jb, "playing", lambda: True)
+    jb.auto_run()
+    assert jb.ran == [] and not jb.RESUME.exists()
+    s = jb.read_json(jb.STATE, {})
+    assert s["available"] and s["os"]["security"]           # still queued for the next start
+
+    # Nothing playing: it restarts to install both.
+    monkeypatch.setattr(jb, "playing", lambda: False)
+    jb.auto_run()
+    assert [c for c, _ in jb.ran] == [OFF, REBOOT]
+    assert jb.read_json(jb.RESUME, {})["verbs"] == [["apply"], ["os-apply", "security"]]
+
+
+def test_boot_installs_only_what_was_queued_with_no_network(jb, monkeypatch):
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    looked = []
+    monkeypatch.setattr(jb, "check", lambda: looked.append("check") or {})      # must NOT be called at boot
+    monkeypatch.setattr(jb, "os_check", lambda: looked.append("os-check") or {})
+
+    # Nothing queued in the saved state: a fast, network-free start that clears the overlay.
+    cleared = []
+    monkeypatch.setattr(jb, "notice", lambda text=None: cleared.append(text))
+    jb.state(available=False)
+    jb.os_state(security=[])
+    jb.boot_run()
+    assert looked == [] and jb.ran == [] and cleared == [None]
+
+    # A queued update (from a prior auto run): it restarts to install it, still no network.
+    jb.state(available=True)
+    jb.ran.clear()
+    jb.boot_run()
+    assert looked == [] and [c for c, _ in jb.ran] == [OFF, REBOOT]
+    assert jb.read_json(jb.RESUME, {})["verbs"] == [["apply"]]
+
+
+def test_boot_does_nothing_while_a_song_is_playing(jb, monkeypatch):
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "playing", lambda: True)
+    jb.state(available=True)
+    jb.boot_run()
+    assert jb.ran == [] and not jb.RESUME.exists()
+
+
+def test_resume_refreshes_apt_before_the_os_install(jb, monkeypatch):
+    jb.write_json(jb.RESUME, {"verbs": [["os-apply", "security"]]})
+    did = []
+    monkeypatch.setattr(jb, "os_apply", lambda which: did.append(which) or {})
+    jb.resume()
+    cmds = [c for c, _ in jb.ran]
+    refresh = ("apt-get", "update", "-q", "-o", "DPkg::Lock::Timeout=300")
+    assert refresh in cmds and cmds.index(refresh) < cmds.index(ON)     # fresh lists before installing
+    assert did == ["security"]
+
+
+def test_only_one_update_operation_runs_at_a_time(jb):
+    with jb.locked():
+        with pytest.raises(jb.Busy):
+            with jb.locked():
+                pass
