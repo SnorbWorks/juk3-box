@@ -25,15 +25,36 @@ if ! pgrep -u "$(id -u)" -x chromium >/dev/null; then
     "$HOME/.config/chromium/SingletonCookie"
 fi
 
-# The page comes from jb-ui, which may still be starting at boot. Wait for
-# it (up to ~30s) rather than open a "can't connect" page. If it never
-# answers, launch anyway: the engine page retries on its own once loaded,
-# and agetty restarts this whole kiosk if Chromium exits.
+# The page comes from jb-ui, which may still be starting at boot -- and for
+# the minutes a software update spends installing (it restarts a couple of
+# times), jb-ui is down the whole way. Rather than open Chromium on a "can't
+# connect" error, open a local hold page (booting.html) that waits for jb-ui
+# and goes there the instant it answers. It needs no server, so it survives
+# the restarts. jb-update leaves a marker (kiosk.json) across the reboot when
+# an update is installing, so the hold page can say so.
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8090/}"
-for _ in $(seq 1 60); do
-  curl -sf -o /dev/null "$KIOSK_URL" && break
-  sleep 0.5
-done
+SPLASH="file:///opt/juk3-box/deploy/kiosk/booting.html"
+UPDATE_FLAG="/var/lib/juk3-box/update/kiosk.json"
+APP="$KIOSK_URL"        # the normal case: jb-ui is (or soon will be) up
+REVEAL_PAINTED=1        # wait for the engine's painted handshake before revealing
+if [ -f "$UPDATE_FLAG" ]; then
+  # An update is under way: say so at once, don't sit on a blank wait.
+  APP="$SPLASH?to=$KIOSK_URL&installing=1"
+  REVEAL_PAINTED=0
+else
+  # Give jb-ui ~30s to answer (a normal boot). If it doesn't, hold on the
+  # local "starting up" page instead of the browser's connection error.
+  i=0
+  while [ "$i" -lt 60 ]; do
+    curl -sf -o /dev/null "$KIOSK_URL" && break
+    i=$((i + 1))
+    sleep 0.5
+  done
+  if ! curl -sf -o /dev/null "$KIOSK_URL"; then
+    APP="$SPLASH?to=$KIOSK_URL"
+    REVEAL_PAINTED=0
+  fi
+fi
 
 # Hardware video decoding with zero-copy: the Pi's H.264 decoder hands
 # frames straight to the GPU. Without ZeroCopyGL every frame was copied
@@ -65,6 +86,8 @@ VIDEO_FEATURES="AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCop
 # the splash wallpaper, until the page reports it has painted the same
 # splash (jb-ui /api/kiosk-painted), else after 30 s regardless. Then the
 # script waits on Chromium, so getty still restarts the kiosk if it exits.
+# When we open the local hold page instead (jb-ui is down), there's no
+# painted handshake to wait for, so reveal as soon as it's had a moment.
 STARTED=$(date +%s)
 /usr/lib/chromium/chromium \
   --use-angle=gles \
@@ -79,7 +102,7 @@ STARTED=$(date +%s)
   --renderer-process-limit=1 \
   --kiosk \
   --enable-features="$VIDEO_FEATURES" \
-  --app="$KIOSK_URL" \
+  --app="$APP" \
   --start-fullscreen \
   --window-position=0,0 \
   --window-size=1920,1080 \
@@ -94,11 +117,21 @@ STARTED=$(date +%s)
   --check-for-update-interval=31536000 \
   "$@" &
 CHROMIUM=$!
-for _ in $(seq 1 120); do
-  AT=$(curl -sf "${KIOSK_URL%/}/api/kiosk-painted" | sed -n 's/.*"at": *\([0-9]*\).*/\1/p')
-  [ -n "$AT" ] && [ "$AT" -ge "$STARTED" ] && break
-  kill -0 "$CHROMIUM" 2>/dev/null || break
-  sleep 0.25
-done
+if [ "$REVEAL_PAINTED" = 1 ]; then
+  # The engine page (jb-ui) tells us when it has painted the splash.
+  for _ in $(seq 1 120); do
+    AT=$(curl -sf "${KIOSK_URL%/}/api/kiosk-painted" | sed -n 's/.*"at": *\([0-9]*\).*/\1/p')
+    [ -n "$AT" ] && [ "$AT" -ge "$STARTED" ] && break
+    kill -0 "$CHROMIUM" 2>/dev/null || break
+    sleep 0.25
+  done
+else
+  # The local hold page paints at once and jb-ui is down (no handshake);
+  # give it a moment, then reveal so its message is actually seen.
+  for _ in $(seq 1 6); do
+    kill -0 "$CHROMIUM" 2>/dev/null || break
+    sleep 0.25
+  done
+fi
 swaymsg '[app_id="^chrom"] opacity 1' >/dev/null 2>&1
 wait "$CHROMIUM"

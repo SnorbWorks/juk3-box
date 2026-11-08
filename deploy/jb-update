@@ -98,6 +98,10 @@ UPGRADABLE_RE = re.compile(r"^([^/\s]+)/(\S+) (\S+) \S+ \[upgradable from: ([^\]
 STATUS_RE = re.compile(r"^(dlstatus|pmstatus):(.+?):(\d+(?:\.\d+)?):(.*)$")
 RESTART_RE = re.compile(r"^(linux-image|linux-headers|raspi-firmware|rpi-eeprom|raspberrypi-sys-mods|libc6|systemd|dbus)")
 RESUME = DIR / "resume.json"
+# The kiosk launcher reads this at boot to show "Installing update" instead of
+# a blank wait while jb-ui is still down (notice() writes it; on the data
+# partition, so it survives the reboot the retained MQTT notice doesn't).
+KIOSK_FLAG = DIR / "kiosk.json"
 ROOTFS = "/usr/local/sbin/jb-rootfs"
 # The other updates: the admin's Update now and Raspberry Pi OS installs
 # (deploy/jb-setupctl), and the install after a restart to install.
@@ -197,15 +201,27 @@ def playing() -> bool:
 
 
 def notice(text: str | None) -> None:
-    """What the screen shows about the install (the kiosk's overlay, jb-ui):
-    a line before the restart, cleared (retained message removed) once it's
-    done.  Best-effort: the update never waits on it."""
+    """What the screen shows about the install: a line before the restart,
+    cleared once it's done.  Best-effort: the update never waits on it.
+    Two places, because the message has to outlive the restart to install:
+    - retained MQTT (NOTICE_TOPIC), for a running jb-ui / engine page;
+    - a file on the data partition (KIOSK_FLAG), which the kiosk launcher
+      reads at the next boot -- the retained message doesn't survive a
+      protected reboot (mosquitto keeps its store on the overlay).
+    boot_run() clears both on every normal start."""
     try:
         if text is None:
             run("mosquitto_pub", "-t", NOTICE_TOPIC, "-r", "-n", check=False)
         else:
             run("mosquitto_pub", "-t", NOTICE_TOPIC, "-r", "-m",
                 json.dumps({"text": text, "at": time.time()}), check=False)
+    except OSError:
+        pass
+    try:
+        if text is None:
+            KIOSK_FLAG.unlink(missing_ok=True)
+        else:
+            write_json(KIOSK_FLAG, {"text": text, "at": time.time()})
     except OSError:
         pass
 
@@ -287,6 +303,7 @@ def restart_to_install(verbs: list[list[str]]) -> None:
         run("systemctl", "--no-block", "reboot")
     except (subprocess.SubprocessError, OSError) as e:
         RESUME.unlink(missing_ok=True)
+        notice(None)                   # the restart didn't happen: don't leave "will restart" up
         if off:
             run(ROOTFS, "on", check=False)
         error = f"Couldn't restart to install: {e}"
@@ -455,15 +472,28 @@ def _apply(then=None) -> dict:
 
     set_phase("installing")
     swap_in(NEW)
+    # Called from resume (then="protecting")?  resume re-protects and reboots
+    # the moment this returns, and that reboot starts every service fresh on
+    # the new version.  Restarting them here would hang the whole cabinet:
+    # this runs inside jb-update-resume.service, which the boot
+    # (multi-user.target) is waiting on, so a synchronous `systemctl restart`
+    # of the boot's own services never completes -- v0.3.5's install wedged
+    # exactly this way (jb-core/jb-ui stuck dead, admin and kiosk frozen).
+    # So when a reboot follows, skip the in-place restart and the start check;
+    # the reboot does the restart, and a service that won't start shows up on
+    # the next boot.  The direct path (Update now on an already-unprotected
+    # system) still restarts and rolls back here, where it's safe.
+    reboot_follows = then == "protecting"
     try:
         install(REPO)
         run("systemctl", "daemon-reload")
-        set_phase("restarting")
-        services("restart")
-        time.sleep(SETTLE_S)
-        bad = failed_units()
-        if bad:
-            raise Failed("These didn't start on the new version: " + ", ".join(bad))
+        if not reboot_follows:
+            set_phase("restarting")
+            services("restart")
+            time.sleep(SETTLE_S)
+            bad = failed_units()
+            if bad:
+                raise Failed("These didn't start on the new version: " + ", ".join(bad))
     except (Failed, subprocess.SubprocessError, OSError) as e:
         set_phase("rolling back")
         swap_back()
@@ -472,7 +502,8 @@ def _apply(then=None) -> dict:
         except Failed:
             pass
         run("systemctl", "daemon-reload", check=False)
-        services("restart")
+        if not reboot_follows:
+            services("restart")
         return set_phase(None, current=current, available=True,
                          error=f"{latest} didn't work here, so {current} is back. {e}")
     return set_phase(then, current=latest, available=False, updated_at=time.time(),
