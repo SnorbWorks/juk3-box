@@ -4,7 +4,7 @@
 // settings page: #/sources/bluetooth, #/sources/app, #/sources/drives.
 
 import { get, post } from '../api.js';
-import { button, clear, h, icon, pageHeader, showError, toast } from '../ui.js';
+import { button, clear, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
 
 const KINDS = {
   bluetooth: { label: 'Bluetooth', icon: 'bluetooth', load: () => import('./phones.js') },
@@ -78,17 +78,46 @@ function nowCard(data) {
   const a = data.source?.active;
   const offer = data.source?.offer;
   const phones = phonesOf(data);
-  const rows = phones.map(p => h('div.phone-row.source-phone',
-    h('div.phone-text',
-      h('div.stat-value', p.name),
-      h('div.stat-sub', `${p.kind} · ${p.active ? (p.connected ? 'Has the jukebox' : 'Has the jukebox, not here') : p.connected ? 'Here' : 'Not here'}`)),
-    p.active ? h('span.badge.ok', 'In use') : button('Use', { variant: p.connected ? 'primary' : '', onclick: () => use(p) })));
+  const sharing = !!data.sharing?.on;
+  const rows = phones.map(p => {
+    // Sharing off: a Bluetooth guest can't take the jukebox.
+    const guestBlocked = p.kind === 'Bluetooth' && !sharing && !p.active;
+    const status = p.active ? (p.connected ? 'Has the jukebox' : 'Has the jukebox, not here')
+      : guestBlocked ? (p.connected ? 'Here · guest' : 'Guest')
+      : p.connected ? 'Here' : 'Not here';
+    const ctrl = p.active ? h('span.badge.ok', 'In use')
+      : guestBlocked ? h('span.stat-sub.muted', 'Sharing off')
+      : button('Use', { variant: p.connected ? 'primary' : '', onclick: () => use(p) });
+    return h('div.phone-row.source-phone',
+      h('div.phone-text', h('div.stat-value', p.name), h('div.stat-sub', `${p.kind} · ${status}`)),
+      ctrl);
+  });
   return h('div.card',
     h('div.card-head', h('h2', 'Has the jukebox')),
     h('div.card-pad.stack',
       a ? null : h('p.muted', 'No phone yet. The first one to connect gets it.'),
       offer ? h('div.notice', icon('info'), h('span', `${offer.name} is here too; the cabinet is asking whether to switch.`)) : null,
       rows.length ? rows : h('p.muted', 'No phones paired. Pair one over Bluetooth, or from the Juk3box Helper app.')));
+}
+
+function sharingCard(data) {
+  const on = !!data.sharing?.on;
+  const toggle = switchControl(on, value => {
+    post('/api/sources/sharing', { on: value })
+      .then(() => {
+        toast(value ? 'Sharing on — a Bluetooth guest can take the jukebox.'
+          : 'Sharing off — only the app controls the jukebox.', 'ok');
+        refresh();
+      })
+      .catch(e => { toggle.querySelector('input').checked = on; showError(e); });
+  }, on ? 'On' : 'Off');
+  return h('div.card.card-pad.phone-row',
+    h('div.stat-icon', icon('users')),
+    h('div.phone-text', h('div.stat-value', 'Sharing'),
+      h('div.stat-sub', on
+        ? 'On: a Bluetooth guest can take the jukebox (the cabinet asks first).'
+        : 'Off: the app keeps the jukebox. Guests can connect over Bluetooth but can\'t take over.')),
+    toggle);
 }
 
 function kindLink(id, sub) {
@@ -110,6 +139,7 @@ function render(data) {
     data.bus ? null : h('div.notice.warn', icon('circle-alert'),
       h('span', 'The admin can\'t reach the jukebox right now, so this may be out of date.')),
     nowCard(data),
+    sharingCard(data),
     h('div.stack',
       kindLink('bluetooth', !bt ? 'Off' : `${plural(data.phones.length, 'phone')} paired${btConnected ? ` · ${btConnected.name} connected` : ''}`),
       kindLink('app', `${apps.length ? plural(apps.length, 'phone') : 'No phones'} · new phones ${pairing ? 'can pair' : 'can\'t pair'}`),

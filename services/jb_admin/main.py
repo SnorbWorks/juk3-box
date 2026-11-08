@@ -184,6 +184,7 @@ class Admin:
         "jukebox/jb-source-helper/connected": "helper",
         "jukebox/jb-source-helper/settings": "helper_settings",
         "jukebox/jb-core/source": "source",
+        "jukebox/jb-core/sharing": "sharing",
         "jukebox/jb-library/drives-in": "drives_in",
         "jukebox/jb-input/status": "input",
         "jukebox/jb-lights/state": "lights",
@@ -776,6 +777,7 @@ class Admin:
             "bluetooth": self.live.get("bluetooth") or {"on": True},
             "helper": self.live.get("helper") or {"phones": []},
             "helper_settings": self.live.get("helper_settings") or {},
+            "sharing": self.live.get("sharing") or {"on": False},
             "drives": (self.live.get("drives_in") or {}).get("drives") or [],
             "bus": self.bus is not None,
         })
@@ -790,6 +792,15 @@ class Admin:
             raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
         await self.bus.publish("jukebox/jb-core/cmd", {"action": "use_source", "id": pid})
         self.log.info("sources: use %s", pid)
+        return web.json_response({"ok": True})
+
+    async def set_sharing(self, request):
+        """Whether Bluetooth guests may take the jukebox (jb-core phone_choice.py)."""
+        on = bool((await json_body(request)).get("on"))
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-core/cmd", {"action": "set_sharing", "on": on})
+        self.log.info("sources: sharing %s", "on" if on else "off")
         return web.json_response({"ok": True})
 
     HELPER_ACTIONS = {"forget", "rename", "sync", "settings"}
@@ -1652,6 +1663,7 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/phones/{action}", admin.phone_action)
     r.add_get("/api/sources", admin.get_sources)
     r.add_post("/api/sources/use", admin.use_source)
+    r.add_post("/api/sources/sharing", admin.set_sharing)
     r.add_post("/api/helper/{action}", admin.helper_action)
     r.add_get("/api/audio", admin.get_audio)
     r.add_post("/api/audio/{action}", admin.audio_action)

@@ -21,7 +21,11 @@ PHONE, HELPER = "phone", "helper"
 
 
 class PhoneChoice:
-    def __init__(self):
+    def __init__(self, sharing: bool = False):
+        # Sharing off (the default): a Bluetooth guest can never hold the
+        # jukebox -- only the app ("owner") phones arbitrate. On: Bluetooth
+        # joins in too, offered not forced, exactly as before.
+        self.sharing = sharing
         self.here: dict[str, dict] = {}         # id -> {kind, id, name}, connected now, in arrival order
         self.names: dict[str, tuple[str, str]] = {}   # id -> (kind, name), every paired phone
         self.active: dict | None = None
@@ -102,6 +106,8 @@ class PhoneChoice:
     def _arrived(self, c: dict, now: float) -> list:
         if self.settling:
             return []
+        if not self._eligible(c):
+            return []                      # a Bluetooth guest with sharing off: here, but never holds it
         if self.active is None:
             return self._activate(c, now)
         if c["id"] == self.active["id"]:
@@ -131,19 +137,51 @@ class PhoneChoice:
         return []
 
     def _latest(self) -> dict | None:
-        return list(self.here.values())[-1] if self.here else None
+        for c in reversed(list(self.here.values())):
+            if self._eligible(c):
+                return c
+        return None
+
+    def _eligible(self, c: dict) -> bool:
+        """A Bluetooth phone can hold the jukebox only while sharing is on."""
+        return self.sharing or c["kind"] != PHONE
 
     # -- the cabinet and the admin -------------------------------------------
 
     def use(self, pid: str, now: float) -> list:
         """Sources: switch to this phone, here or not (a Bluetooth phone is
         then connected; an app phone is woken for its first pick)."""
+        kind = self.here[pid]["kind"] if pid in self.here else (
+            self.names[pid][0] if pid in self.names else None)
+        if kind == PHONE and not self.sharing:
+            return []                      # a guest can't take it while sharing is off
         if pid in self.here:
             return self._activate(self.here[pid], now)
         if pid in self.names:
             kind, name = self.names[pid]
             return self._activate({"kind": kind, "id": pid, "name": name}, now)
         return []
+
+    def set_sharing(self, on: bool, now: float) -> list:
+        """Turn Bluetooth-guest sharing on or off. Off: any Bluetooth offer
+        drops, and a guest that has the jukebox is handed to the latest app
+        phone (or nobody). On: if nobody has it, the latest phone -- a guest
+        now allowed -- may take it."""
+        on = bool(on)
+        if on == self.sharing:
+            return []
+        self.sharing = on
+        actions: list = []
+        if not on:
+            if self.offer and self.offer["kind"] == PHONE:
+                self.offer = None
+                actions.append(("changed",))
+            if self.active and self.active["kind"] == PHONE:
+                latest = self._latest()
+                actions += self._activate(latest, now) if latest else self._clear()
+        elif self.active is None:
+            actions += self.tick(now)
+        return actions
 
     def decline(self) -> list:
         if not self.offer:
@@ -155,7 +193,8 @@ class PhoneChoice:
     def restore(self, retained: dict, now: float) -> None:
         """Our own retained choice, after a restart."""
         a = (retained or {}).get("active")
-        if self.active is None and isinstance(a, dict) and a.get("id") and a.get("kind") in (PHONE, HELPER):
+        if self.active is None and isinstance(a, dict) and a.get("id") and a.get("kind") in (PHONE, HELPER) \
+                and self._eligible({"kind": a["kind"]}):
             self.active = {"kind": a["kind"], "id": a["id"], "name": a.get("name") or "Phone"}
             self.gone_since = None if a["id"] in self.here else now
 

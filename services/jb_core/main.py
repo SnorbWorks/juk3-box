@@ -6,6 +6,7 @@ from pathlib import Path
 
 from shared import config, logging as jb_logging, setup_net
 from shared.bus import Bus
+from shared.files import write_atomic
 from shared import selection
 from shared.jb_entry.entry import Entry, EntryChanged, Rejected, Selection
 from services.jb_core.end_guard import EndGuard
@@ -19,6 +20,9 @@ ENTRY_TIMEOUT_MS = 10000   # a waiting letter clears after this long with no dig
 ENTRY_TICK_S = 0.25
 # The owner's settings (jb-admin writes them): the selection format is there.
 SETTINGS_PATH = Path("/var/lib/juk3-box/settings.json")
+# Whether Bluetooth guests may take the jukebox (admin Sources "Sharing"
+# toggle). Ours: jb-core owns arbitration, so jb-core persists it.
+SHARING_PATH = Path("/var/lib/juk3-box/sharing.json")
 
 
 def selection_format(path: Path = SETTINGS_PATH) -> selection.Format:
@@ -28,6 +32,17 @@ def selection_format(path: Path = SETTINGS_PATH) -> selection.Format:
     except (OSError, ValueError, AttributeError):
         raw = None
     return selection.load(raw)
+
+
+def sharing_wanted(path: Path = SHARING_PATH) -> bool:
+    try:
+        return bool(json.loads(path.read_text()).get("on", False))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def remember_sharing(on: bool, path: Path = SHARING_PATH) -> None:
+    write_atomic(path, json.dumps({"on": bool(on)}))
 
 SHUFFLE_BUFFER_TARGET = 20
 SETTLE_S = 2.0            # retained messages at startup, before choosing a phone (phone_choice.py)
@@ -403,6 +418,8 @@ async def main() -> None:
         messages = await bus.subscribe("jukebox/#")
         asyncio.create_task(bus.run_heartbeat())
         await publish_queue(bus, q)
+        q.choice.sharing = sharing_wanted()
+        await bus.publish("jukebox/jb-core/sharing", {"on": q.choice.sharing}, retain=True)
         entry = Entry(ENTRY_TIMEOUT_MS, selection_format())
         await bus.publish("jukebox/jb-core/entry", {"state": "idle", "letter": None, "reason": None}, retain=True)
         asyncio.create_task(entry_timeouts(bus, entry, log))
@@ -680,6 +697,14 @@ async def main() -> None:
                     await apply_choice(bus, q, q.choice.use(payload["id"], time.monotonic()), log)
                 elif action == "decline_source":
                     await apply_choice(bus, q, q.choice.decline(), log)
+                elif action == "set_sharing":
+                    # Admin Sources "Sharing" toggle: remember it, tell everyone,
+                    # and re-settle (a guest with the jukebox is handed off when
+                    # sharing turns off).
+                    on = bool(payload.get("on"))
+                    remember_sharing(on)
+                    await bus.publish("jukebox/jb-core/sharing", {"on": on}, retain=True)
+                    await apply_choice(bus, q, q.choice.set_sharing(on, time.monotonic()), log)
                 else:
                     log.warning("unknown jb-core command: %r", action)
 

@@ -14,8 +14,11 @@ def app(*phones):
                        for d, r, *n in phones]}
 
 
-def started(c=None, now=0.0):
+def started(c=None, now=0.0, sharing=True):
+    # Most tests exercise full arbitration (Bluetooth included) = sharing on;
+    # sharing off (the product default) is tested on its own below.
     c = c or PhoneChoice()
+    c.sharing = sharing
     c.settled(now)
     return c
 
@@ -94,3 +97,59 @@ def test_a_rename_reaches_the_badge():
     c.helper(app(("d1", True)), 1)
     c.helper(app(("d1", True, "Bar phone")), 2)
     assert c.state()["active"]["name"] == "Bar phone"
+
+
+# -- sharing off (the default): Bluetooth guests can't hold the jukebox --------
+
+def test_a_bluetooth_guest_is_locked_out_when_sharing_is_off():
+    c = started(sharing=False)
+    assert c.bluetooth(bt(), 1) == []                 # a guest connects, gets nothing
+    assert c.state()["active"] is None
+    c.helper(app(("d1", True)), 2)                    # an app phone then holds it
+    assert c.state()["active"]["id"] == "helper:d1"
+    c.bluetooth(bt(), 3)                              # the guest is never even offered
+    assert c.state()["offer"] is None
+
+
+def test_app_phones_still_arbitrate_among_themselves_with_sharing_off():
+    c = started(sharing=False)
+    c.helper(app(("d1", True)), 1)
+    assert c.state()["active"]["id"] == "helper:d1"
+    c.helper(app(("d1", True), ("d2", True)), 2)      # a second app phone
+    assert c.state()["offer"]["id"] == "helper:d2"    # offered, not forced -- as before
+
+
+def test_use_refuses_a_guest_when_sharing_off():
+    c = started(sharing=False)
+    c.bluetooth(bt(), 1)
+    assert c.use(BT, 2) == [] and c.state()["active"] is None
+
+
+def test_turning_sharing_off_hands_a_guests_jukebox_to_the_app():
+    c = started(sharing=True)
+    c.bluetooth(bt(), 1)                              # a guest has it
+    c.helper(app(("d1", True)), 2)                    # an app phone is here too (offered)
+    assert c.state()["active"]["id"] == BT
+    assert switches(c.set_sharing(False, 3)) == [(BT, "helper:d1")]
+    assert c.state()["active"]["id"] == "helper:d1" and c.state()["offer"] is None
+
+
+def test_turning_sharing_off_with_no_app_clears_the_jukebox():
+    c = started(sharing=True)
+    c.bluetooth(bt(), 1)
+    assert c.state()["active"]["id"] == BT
+    assert switches(c.set_sharing(False, 2)) == [(BT, None)]
+    assert c.state()["active"] is None
+
+
+def test_turning_sharing_on_lets_a_waiting_guest_take_an_unheld_jukebox():
+    c = started(sharing=False)
+    c.bluetooth(bt(), 1)                              # a guest, locked out
+    assert c.state()["active"] is None
+    assert switches(c.set_sharing(True, 2)) == [(None, BT)]
+    assert c.state()["active"]["id"] == BT
+
+
+def test_set_sharing_to_the_same_value_does_nothing():
+    c = started(sharing=False)
+    assert c.set_sharing(False, 1) == []
