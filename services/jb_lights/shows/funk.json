@@ -1,0 +1,49 @@
+{
+  "format": 2,
+  "id": "funk",
+  "name": "Funk",
+  "description": "Warm 70s funk and boogie: orange, gold and magenta on the groove, teal and violet when it opens up, the floor popping on the offbeat.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["soul"],
+  "fits": {
+    "groove": 0.9,
+    "energy": 0.6,
+    "valence": 0.72,
+    "eras": ["60s", "70s"],
+    "tags": ["funk", "soul", "boogie", "groove", "r&b", "motown"]
+  },
+  "palettes": [
+    ["#FF6A00", "#FFC400", "#FF0A8A"],
+    ["#E0008C", "#FF6A00", "#00D0A0"],
+    ["#FFB000", "#FF2A00", "#7A00FF"],
+    ["#00D0A0", "#FFC400", "#FF0A8A"]
+  ],
+  "peak": ["#FFD060", "#FF0A8A", "#FF6A00"],
+  "light": [0.3, 0.95],
+  "strobe": 1,
+  "drive": "kick",
+  "release": 0.2,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.4
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "swell",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {"calm": ["breathe", "wash"], "main": ["wash", "chase", "wobble"], "peak": ["chase", "marquee", "sweep"]},
+    "rhythm": {"calm": ["glow", "pulse"], "main": ["pulse", "offbeat", "chase"], "peak": ["chase", "rows"]},
+    "meter": {"calm": ["ribbon", "vu"], "main": ["spectrum", "bounce", "vu"], "peak": ["mirror", "bounce", "sparks"]},
+    "keys": "eq"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["wash", "eq"], "meter": ["spectrum", "vu"]},
+    "drive": {"storyteller": ["chase", "wobble"], "rhythm": ["offbeat", "chase"], "meter": ["bounce", "spectrum"]},
+    "big": {"storyteller": ["chase", "marquee", "beams"], "rhythm": ["chase", "rows"], "meter": ["mirror", "sparks"]},
+    "solo": {"storyteller": ["wobble", "chase"], "meter": ["comet", "trace"]}
+  }
+}

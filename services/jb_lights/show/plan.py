@@ -224,7 +224,10 @@ class Plan:
                        - 1.2 * max(0.0, _num(f.get("moody"), 0.0) - TYPICAL["moody"])
                        + 0.6 * max(0.0, _num(f.get("aggressive"), 0.0) - TYPICAL["aggressive"]), -1, 1)
         ranked = sorted(range(len(pals)), key=lambda k: (abs(warmth(pals[k]) - target), k))
-        keep = max(1, round(len(pals) * (1 - abs(target))))
+        # Always keep a couple of the warmth-closest in the running (when the
+        # show has them), so two songs of the same genre still change colour --
+        # the theme holds, the exact family varies song to song (the song's seed).
+        keep = min(len(pals), max(2, round(len(pals) * (1 - abs(target)))))
         return pals[ranked[self.seed % keep]]
 
     def _index(self, ch, label) -> int:

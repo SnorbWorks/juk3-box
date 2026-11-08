@@ -1,16 +1,21 @@
 """Arena: a dark cabinet, then VERY bright (the owner's design, 2026-10-30).
 
-  dark    most of the song: the cabinet dark, blue sparkles dancing all
-          over it, quicker with the hi-hats and the kick. The footlights
-          snap between two blue bands on the beat: the outer sixths lit
-          (the middle black), then the middle third lit (the outsides black)
+  dark    most of the song: the cabinet dark, sparkles in the show's
+          colours dancing all over it, quicker with the hi-hats and the
+          kick. The footlights snap between two bands on the beat: the
+          outer sixths lit (the middle black), then the middle third lit
+          (the outsides black), each band taking the palette across it
   hush    a build rising, or the bass falling away before a drop: the
           whole cabinet fades toward black (a gap snaps it black), so the
           drop comes out of the dark
   burst   on the drop itself (or a really big hit): the whole cabinet
-          flashes white, then the white breaks
-          up into white and blue sparkles from the centre of the cabinet
-          outwards, and settles back to the dark
+          flashes white, then the white breaks up into sparkles in the
+          show's colours from the centre of the cabinet outwards, and
+          settles back to the dark
+
+The colours come from the song's palette (cues.palette), so Arena dresses
+each kind of music in its own colour -- the keypad is the exception (its
+letters keep the fixed blue, behind the cabinet's blue filters).
 
 Every part draws from the same functions of the cabinet's shared picture
 (accent.positions, matrix.positions), so the burst spreads across the whole
@@ -117,9 +122,10 @@ class Arena:
         if cues.tier == "calm":
             rate *= CALM_RATE
         born = rate * dt * self.n
+        pal = cues.palette or (BLUE, ICE)       # the show's colours, not a fixed blue
         while born > 0:
             if self.rnd.random() < born:
-                self.sparks[self.rnd.randrange(self.n)] = [1.0, ICE if self.rnd.random() < 0.3 else BLUE]
+                self.sparks[self.rnd.randrange(self.n)] = [1.0, pal[self.rnd.randrange(len(pal))]]
             born -= 1
         out = [BLACK] * self.n
         for i, (life, colour) in self.sparks.items():
@@ -136,13 +142,16 @@ class Arena:
             return scale(WHITE, math.exp(-since / WHITE_FADE_S))
         if rand(int(a * 24), self.gid0 + i) > 0.55 * math.exp(-passed / SPARKLE_S):
             return BLACK
-        colour = lerp(WHITE, BLUE if rand(7, self.gid0 + i) < 0.6 else ICE, min(1.0, passed / 0.5))
+        pal = getattr(self, "_pal", None) or (BLUE, ICE)    # the drop breaks up into the show's colours
+        tint = pal[int(rand(7, self.gid0 + i) * len(pal)) % len(pal)]
+        colour = lerp(WHITE, tint, min(1.0, passed / 0.5))
         return scale(colour, math.exp(-passed / SPARKLE_S))
 
     def base(self, cues, dt):
         return self.sparkle(cues, dt)
 
     def frame(self, cues, dt):
+        self._pal = cues.palette or (BLUE, ICE)     # burst() breaks up into these
         out = self.base(cues, dt)
         quiet = hush(cues)
         if quiet > 0:
@@ -184,9 +193,11 @@ class FootArena(Arena):
     def base(self, cues, dt):
         v = band_level(cues)
         out = self.sparkle(cues, dt)
+        pal = cues.palette or (BLUE,)           # the bands take the show's colours, across the footlights
         for i, x in enumerate(self.x):
             if bands(cues, x):
-                out[i] = brighter(out[i], scale(BLUE, v))
+                col = pal[int(x * len(pal)) % len(pal)]
+                out[i] = brighter(out[i], scale(col, v))
         return out
 
 

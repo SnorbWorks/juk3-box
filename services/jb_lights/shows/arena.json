@@ -2,8 +2,8 @@
   "format": 2,
   "id": "arena",
   "name": "Arena",
-  "description": "A dark cabinet with blue sparkles, then on the drop the whole cabinet flashes white and sparkles away from the centre.",
-  "version": "2.0.0",
+  "description": "A dark cabinet with sparkles in the song's colours, a new colour each section; on the drop the whole cabinet flashes white and sparkles away from the centre.",
+  "version": "2.1.0",
   "author": "Juk3box",
   "for": ["metal", "edm", "bass"],
   "fits": {
@@ -11,8 +11,13 @@
     "aggressive": 0.5,
     "groove": 0.6
   },
-  "palettes": [["#081AFF", "#96AFFF"]],
-  "peak": ["#081AFF", "#96AFFF"],
+  "palettes": [
+    ["#FF1E8C", "#00E5FF", "#FFC400"],
+    ["#2A4BFF", "#FF00C8", "#00FFB0"],
+    ["#FF2A00", "#FF8A00", "#FFD000"],
+    ["#8A00FF", "#00E5FF", "#FF2A9A"]
+  ],
+  "peak": ["#FF1E8C", "#00E5FF", "#FFC400"],
   "light": [1.0, 1.0],
   "strobe": 0,
   "drive": "kick",

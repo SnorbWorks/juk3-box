@@ -1,0 +1,48 @@
+{
+  "format": 2,
+  "id": "disco",
+  "name": "Disco",
+  "description": "Saturated 70s disco: hot pink, gold and cyan chasing round the cabinet like a mirror ball, a new colour each section, the floor flashing on the four.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": ["soul", "pop", "oldies"],
+  "fits": {
+    "groove": 0.82,
+    "valence": 0.8,
+    "energy": 0.68,
+    "eras": ["70s", "80s"],
+    "tags": ["disco", "funk", "dance", "boogie", "soul", "nu-disco"]
+  },
+  "palettes": [
+    ["#FF0A78", "#FFC400", "#00D9FF"],
+    ["#B000FF", "#FF00A8", "#00FFC8"],
+    ["#FF3D00", "#FFD000", "#FF0A78"],
+    ["#00D9FF", "#7A00FF", "#FF0AC8"]
+  ],
+  "peak": ["#FF0A78", "#FFD000", "#00D9FF"],
+  "light": [0.25, 1.0],
+  "strobe": 1,
+  "drive": "kick",
+  "release": 0.18,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.3
+  },
+  "accents": {
+    "crash": "splash",
+    "drop": "flash",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {"calm": ["wash", "marquee"], "main": ["chase", "marquee", "sweep"], "peak": ["chase", "sweep", "beams"]},
+    "rhythm": {"calm": ["glow", "pulse"], "main": ["chase", "rows"], "peak": ["chase", "rows", "checker"]},
+    "meter": {"calm": ["ribbon", "tiles"], "main": ["spectrum", "tiles", "bounce"], "peak": ["mirror", "sparks", "comet"]},
+    "keys": "sparkle"
+  },
+  "sections": {
+    "vocal": {"storyteller": ["marquee", "wash"], "meter": ["spectrum", "tiles"]},
+    "build": {"storyteller": ["sweep", "chase"], "rhythm": ["chase", "rows"], "meter": ["counter", "comet"]},
+    "big": {"storyteller": ["chase", "marquee", "beams"], "rhythm": ["chase", "rows", "checker"], "meter": ["mirror", "sparks"]}
+  }
+}
