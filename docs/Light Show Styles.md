@@ -248,6 +248,22 @@ can bring their own.
 | Jazz | jazz, blues, swing | amber, steel blue | almost still; follows the level, not the beat | shimmers, swells; ignores gaps |
 | Chill | calm, slow songs; ambient, classical | lavender, soft gold, teal | slow breathing and flowing | shimmers, swells; ignores gaps |
 | Arena | energetic, aggressive, groovy; in the running for metal, EDM and bass | dark, blue sparkles; white | blue bands snapping on the beat | the drop: the whole cabinet white, breaking into sparkles from the centre out |
+| Flames | energetic rock and pop | deep red, orange, yellow; never white | fire licking up the machine: a bed of flame on the floor flaring on the snare, flames off the bar, tongues climbing the panel | slams; no white flashes or splashes |
+| Strobe | fast electronic music; EDM, bass | pure primaries and secondaries | a new solid colour each step, black between; the bar on the off-step; halves take turns in big parts; at most 3 flashes a second per area | gaps black out, slams; no white |
+| Saturday Night Fever | groovy, happy 70s and 80s dance; disco, funk | six vivid beam colours | a rig at the top throwing sweeping beams with a haze; pools where they land on the floor; gobo dots on the bar | slams; no white |
+| Infinity | 50s to 70s, dance floors, mid-century | floor purples and blues, AMI amber | an infinity mirror: rings of solid colour falling in; the floor and bar as infinity tiles | slams; no white |
+
+### The bold shows
+
+The owner's ask (2026-11-09): "more solid bold strong colors… very strong,
+solid colors at 85+%". The older shows read pastel for two measurable
+reasons: colours mixed in RGB (`along()`: hot pink to cyan passes through a
+grey lavender) and mixing toward white (crash splashes, starfield, beams at
+the rig, the big-section lift). `show/bold.py` draws Flames, Strobe,
+Saturday Night Fever and Infinity with every colour pushed to at least 90%
+saturation (`vivid()`), mixed by hue (`hue_mix()`), never toward white; the
+four show files turn off white flashes and splashes. In the preview engine
+they average 98-99% saturation.
 
 ### Arena
 
@@ -291,8 +307,9 @@ Scenes, by part (`show/parts.py`):
 
 - **Upper:** breathe, wash, chase, sweep, rise, slab, wobble, marquee, tubes, eq, ribbon, starfield, flow, beams
 - **Footlights:** glow, pulse, rows, chase, checker, offbeat, starfield, flow, beams
+- **Every part (the bold scenes):** flames, strobe, fever, infinity
 - **Level bar:** spectrum (in the palette), classic (the rainbow analyzer), vu, ribbon, starfield, flow, and in chunky blocks: drumkit (hi-hat, snare, kick, tom and crash, each hit by its own drum), tiles, mirror, bounce, trace (a heart-monitor scroll), ripple, counter (1-2-3-4), comet, fire, rain, sparks
-- **Keypad:** sparkle, eq, pulse, glow, arena (on a Pi 5 the keypad sends
+- **Keypad:** sparkle, eq, pulse, glow, arena, solid (on a Pi 5 the keypad sends
   its own frames: its chain is its own device there)
 - **Arena:** one scene for every part, drawing the whole cabinet together
 

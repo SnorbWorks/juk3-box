@@ -1,0 +1,118 @@
+{
+  "format": 2,
+  "id": "infinity",
+  "name": "Infinity",
+  "description": "The infinity mirror of a 70s dance floor and a mid-century jukebox: rings of solid colour going in and in, falling toward the middle with the beat. The upper panel is one deep tunnel; the floor and the level bar are rows of infinity tiles, each its own colour.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [
+    "oldies",
+    "soul",
+    "pop"
+  ],
+  "fits": {
+    "groove": 0.7,
+    "valence": 0.7,
+    "energy": 0.6,
+    "eras": [
+      "50s",
+      "60s",
+      "70s"
+    ],
+    "tags": [
+      "disco",
+      "dance",
+      "doo-wop",
+      "rock and roll",
+      "60s",
+      "50s",
+      "oldies",
+      "motown",
+      "lounge"
+    ]
+  },
+  "palettes": [
+    [
+      "#9000FF",
+      "#FF00C0",
+      "#0040FF",
+      "#00C0FF"
+    ],
+    [
+      "#FF8000",
+      "#FF5000",
+      "#FFB000"
+    ],
+    [
+      "#FF0080",
+      "#8000FF",
+      "#00FFFF",
+      "#FF2000"
+    ],
+    [
+      "#0030FF",
+      "#00FFC0",
+      "#FF00FF"
+    ]
+  ],
+  "peak": [
+    "#FF00C0",
+    "#9000FF",
+    "#00C0FF",
+    "#FF8000",
+    "#FF0000"
+  ],
+  "light": [
+    0.7,
+    1.0
+  ],
+  "strobe": 0,
+  "drive": "kick",
+  "release": 0.15,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.3
+  },
+  "accents": {
+    "crash": "none",
+    "drop": "slam",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {
+      "calm": [
+        "infinity"
+      ],
+      "main": [
+        "infinity"
+      ],
+      "peak": [
+        "infinity"
+      ]
+    },
+    "rhythm": {
+      "calm": [
+        "infinity"
+      ],
+      "main": [
+        "infinity"
+      ],
+      "peak": [
+        "infinity"
+      ]
+    },
+    "meter": {
+      "calm": [
+        "infinity"
+      ],
+      "main": [
+        "infinity"
+      ],
+      "peak": [
+        "infinity"
+      ]
+    },
+    "keys": "solid"
+  }
+}

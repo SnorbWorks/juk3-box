@@ -24,8 +24,8 @@ def test_the_effect_library_is_what_the_parts_can_draw():
 
 
 def test_every_built_in_show_checks_out():
-    assert len(styles.STYLES) == 17
-    assert {"moody", "love", "starfield", "rock-show"} <= set(styles.STYLES)
+    assert len(styles.STYLES) == 23
+    assert {"moody", "love", "starfield", "rock-show", "disco", "funk", *styles.BOLD} <= set(styles.STYLES)
     for f in styles.BUILTIN_DIR.glob("*.json"):
         assert styles.check(json.loads(f.read_text())) == [], f.name
 
@@ -57,7 +57,7 @@ def test_uploaded_and_module_shows_join_the_rotations(tmp_path):
     assert lib.shows["my-show"].source == "uploaded" and lib.shows["weather"].source == "jb-weather"
     assert "not-mine" not in lib.shows                      # a module's show is named after the module
     assert any("broken.json" in n for n in lib.notes) and any("not-mine" in n for n in lib.notes)
-    assert lib.rotation("rock") == ["rock", "rock-show", "my-show"]   # the group's own first, then built-ins
+    assert lib.rotation("rock") == ["rock", "flames", "rock-show", "my-show"]   # the group's own first, then built-ins
     assert lib.rotation("chill") == ["chill", "moody", "weather"]
 
 
@@ -68,7 +68,7 @@ def test_the_owner_picks_rotations_disables_and_pins(tmp_path):
     path.write_text(json.dumps({"rotations": {"metal": ["arena"]}, "disabled": ["edm"]}))
     lib.refresh(force=True)
     assert lib.rotation("metal") == ["arena"]
-    assert lib.rotation("edm") == ["arena"]                  # edm's own show is off
+    assert lib.rotation("edm") == ["arena", "strobe"]        # edm's own show is off
     assert lib.pick("metal", [], 0.8, seed=12345).name == "arena"
     path.write_text(json.dumps({"pin": "oldies"}))
     lib.refresh(force=True)

@@ -1,0 +1,109 @@
+{
+  "format": 2,
+  "id": "flames",
+  "name": "Flames",
+  "description": "Fire licking up the machine: a bed of flame along the floor, flames rising off the level bar with the music, and tongues of fire climbing the upper panel, higher on the kick. Deep red to yellow, never pastel, never white.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [
+    "rock",
+    "pop"
+  ],
+  "fits": {
+    "energy": 0.8,
+    "aggressive": 0.5,
+    "valence": 0.55,
+    "pace": 0.65,
+    "tags": [
+      "rock",
+      "hard rock",
+      "pop rock",
+      "punk",
+      "arena rock",
+      "classic rock",
+      "pop",
+      "southern rock"
+    ]
+  },
+  "palettes": [
+    [
+      "#FF0000",
+      "#FF3000",
+      "#FF8000",
+      "#FFC800"
+    ],
+    [
+      "#FF0010",
+      "#FF2000",
+      "#FFD000"
+    ],
+    [
+      "#E00040",
+      "#FF2000",
+      "#FF9000"
+    ],
+    [
+      "#FF0000",
+      "#FF6000",
+      "#FFFF00"
+    ]
+  ],
+  "peak": [
+    "#FF0000",
+    "#FF4000",
+    "#FFE000"
+  ],
+  "light": [
+    0.7,
+    1.0
+  ],
+  "strobe": 0,
+  "drive": "snare",
+  "release": 0.2,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.25
+  },
+  "accents": {
+    "crash": "none",
+    "drop": "slam",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {
+      "calm": [
+        "flames"
+      ],
+      "main": [
+        "flames"
+      ],
+      "peak": [
+        "flames"
+      ]
+    },
+    "rhythm": {
+      "calm": [
+        "flames"
+      ],
+      "main": [
+        "flames"
+      ],
+      "peak": [
+        "flames"
+      ]
+    },
+    "meter": {
+      "calm": [
+        "flames"
+      ],
+      "main": [
+        "flames"
+      ],
+      "peak": [
+        "flames"
+      ]
+    },
+    "keys": "solid"
+  }
+}

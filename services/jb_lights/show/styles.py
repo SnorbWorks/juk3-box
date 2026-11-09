@@ -66,15 +66,17 @@ CRASHES = ("splash", "flash", "shimmer", "none")
 DROPS = ("slam", "flash", "swell", "burst")
 GAPS = ("blackout", "dim", "")
 
+# The bold scenes (show/bold.py), in every part: solid, saturated colour.
+BOLD = ("flames", "strobe", "fever", "infinity")
 # The effect library: the scenes each role can play (parts.py draws them;
 # tests check the two agree).
 SCENES = {
     "storyteller": {"breathe", "wash", "chase", "sweep", "rise", "slab", "wobble", "marquee", "tubes", "eq",
-                    "ribbon", "arena", "starfield", "flow", "beams"},
-    "rhythm": {"glow", "pulse", "rows", "chase", "checker", "offbeat", "arena", "starfield", "flow", "beams"},
+                    "ribbon", "arena", "starfield", "flow", "beams", *BOLD},
+    "rhythm": {"glow", "pulse", "rows", "chase", "checker", "offbeat", "arena", "starfield", "flow", "beams", *BOLD},
     "meter": {"spectrum", "classic", "vu", "ribbon", "drumkit", "tiles", "mirror", "bounce", "trace", "ripple",
-              "counter", "comet", "fire", "rain", "sparks", "arena", "starfield", "flow"},
-    "keys": {"sparkle", "eq", "pulse", "glow", "arena"},
+              "counter", "comet", "fire", "rain", "sparks", "arena", "starfield", "flow", *BOLD},
+    "keys": {"sparkle", "eq", "pulse", "glow", "arena", "solid"},
 }
 
 

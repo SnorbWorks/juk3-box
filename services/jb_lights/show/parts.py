@@ -17,6 +17,9 @@ the director's cues (director.py), in the scenes the style names
            arena    the whole cabinet dark with blue sparkles, bursting white (show/arena.py), in every part
            starfield, flow, beams (show/moves.py), in every part they suit: stars flying out from the
                     middle; slow waves of colour; a rock show's beams sweeping from the top
+           flames, strobe, fever, infinity (show/bold.py), in every part: solid, saturated colour --
+                    fire licking up the machine; flashing solid colours; Saturday Night Fever's
+                    beams and the pools they throw on the floor; an infinity mirror's rings
   Foot   (accent chain 189-348, 4 rows x 40) the rhythm section
            glow / pulse / rows (kick front, snare back) / chase / checker / offbeat / starfield / flow / beams
   Bar    (the 36 x 5 level bar) the secondary voice, as chunky blocks or lines:
@@ -33,7 +36,7 @@ the director's cues (director.py), in the scenes the style names
            rain     a raindrop for each hi-hat
            sparks   hits bursting into sparks, hi-hats throwing single ones
            starfield, flow
-  Keys   (the keypad) the sparkle: sparkle / eq / pulse / glow / arena
+  Keys   (the keypad) the sparkle: sparkle / eq / pulse / glow / arena / solid
 
 Every part renders 0..255 RGB floats; finish() lays the crash cymbals'
 splashes over it, then the director's brightness (where the look sits in
@@ -47,7 +50,7 @@ import math
 import random
 
 from services.jb_lights import accent, buttons, matrix
-from services.jb_lights.show import arena, moves
+from services.jb_lights.show import arena, bold, moves
 from services.jb_lights.themes import volume_bar_theme2 as bar_ribbon, volume_bar_theme3 as bar_spectrum
 from services.jb_lights.themes.accent_diner import CIRCLE, Diner
 from services.jb_lights.themes.accent_eq import EQ
@@ -166,6 +169,7 @@ class Upper(Scenes):
         self.xy_in = inches(self.pos)
         self.norm = moves.normalised(self.pos)
         self.stars = moves.Starfield(self.xy_in, seed=11)
+        self.bold = bold.UpperBold(self.xy_in)
 
     def _record(self, out, cues, colour):
         """The circle as a spinning record: one highlight going round once a bar (of steps)."""
@@ -315,6 +319,19 @@ class Upper(Scenes):
     def beams(self, cues, snap, t, dt):
         return moves.beams(self.norm, cues)
 
+    # The bold shows (show/bold.py): solid, saturated colour.
+    def flames(self, cues, snap, t, dt):
+        return self.bold.flames(cues, snap, t, dt)
+
+    def strobe(self, cues, snap, t, dt):
+        return self.bold.strobe(cues, snap, t, dt)
+
+    def fever(self, cues, snap, t, dt):
+        return self.bold.fever(cues, snap, t, dt)
+
+    def infinity(self, cues, snap, t, dt):
+        return self.bold.infinity(cues, snap, t, dt)
+
 
 class Foot(Scenes):
     ROWS, COLS = accent.FOOT_ROWS, accent.FOOT_COLS
@@ -330,6 +347,9 @@ class Foot(Scenes):
         self.xy_in = inches(pos)
         self.norm = moves.normalised(pos)
         self.stars = moves.Starfield(self.xy_in, seed=12)
+        self.bold = bold.GridBold([(self.at[r][c], c, r, *self.xy_in[self.at[r][c]])
+                                   for r in range(self.ROWS) for c in range(self.COLS)],
+                                  self.COLS, self.ROWS, tile_cols=8)
 
     def _grid(self, fn):
         out = [BLACK] * self.size
@@ -406,6 +426,18 @@ class Foot(Scenes):
     def beams(self, cues, snap, t, dt):
         return moves.beams(self.norm, cues, count=4 if cues.character in ("big", "solo") else 2)
 
+    def flames(self, cues, snap, t, dt):
+        return self.bold.flames_foot(cues, snap, t, dt)
+
+    def strobe(self, cues, snap, t, dt):
+        return self.bold.strobe(cues, snap, t, dt)
+
+    def fever(self, cues, snap, t, dt):
+        return self.bold.fever_foot(cues, snap, t, dt)
+
+    def infinity(self, cues, snap, t, dt):
+        return self.bold.infinity(cues, snap, t, dt)
+
 
 class Bar(Scenes):
     def __init__(self):
@@ -426,6 +458,10 @@ class Bar(Scenes):
         self.xy_in = inches(pos)
         self.norm = moves.normalised(pos)
         self.stars = moves.Starfield(self.xy_in, seed=13)
+        # rows counted from the top here (bold.GridBold), the matrix's from the bottom
+        self.bold = bold.GridBold([(matrix.index(c, r), c, matrix.ROWS - 1 - r, *self.xy_in[matrix.index(c, r)])
+                                   for r in range(matrix.ROWS) for c in range(matrix.COLS)],
+                                  matrix.COLS, matrix.ROWS, tile_cols=9)
 
     def spectrum(self, cues, snap, t, dt):
         """The classic analyzer, in the song's palette: bass on the left,
@@ -675,6 +711,18 @@ class Bar(Scenes):
     def flow(self, cues, snap, t, dt):
         return moves.flow(self.norm, cues, t)
 
+    def flames(self, cues, snap, t, dt):
+        return self.bold.flames_bar(cues, snap, t, dt)
+
+    def strobe(self, cues, snap, t, dt):
+        return self.bold.strobe(cues, snap, t, dt, offset=0.5, blocks=1)     # on the off-step: ping-pong with the panel
+
+    def fever(self, cues, snap, t, dt):
+        return self.bold.fever_bar(cues, snap, t, dt)
+
+    def infinity(self, cues, snap, t, dt):
+        return self.bold.infinity(cues, snap, t, dt)
+
 
 class Keys:
     """The keypad's part: RGBW per pixel. Not a Scenes: one look per style."""
@@ -710,6 +758,8 @@ class Keys:
             for i, x in ROW_X.items():
                 v = 0.08 + 0.92 * min(1.0, bands[round(x * 9)] * (0.5 + 0.5 * cues.level))
                 out[i] = scale(along(cues.palette, x), v)
+        elif name == "solid":
+            out = bold.keys_solid(cues, ROW_X, dt)
         elif name == "pulse":
             v = 0.15 + 0.85 * cues.pulse["drive"]
             for i, x in ROW_X.items():

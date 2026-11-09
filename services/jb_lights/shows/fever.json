@@ -1,0 +1,121 @@
+{
+  "format": 2,
+  "id": "fever",
+  "name": "Saturday Night Fever",
+  "description": "The disco rig: solid beams of colour thrown down from the top of the cabinet, sweeping, with a soft haze at their edges. The footlights light pools of the beams' colours where they land, black between; the level bar shows the pools up close as gobo patterns.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [
+    "soul",
+    "pop",
+    "oldies"
+  ],
+  "fits": {
+    "groove": 0.85,
+    "valence": 0.78,
+    "energy": 0.7,
+    "eras": [
+      "70s",
+      "80s"
+    ],
+    "tags": [
+      "disco",
+      "dance",
+      "funk",
+      "boogie",
+      "70s",
+      "soul",
+      "nu-disco",
+      "dance-pop"
+    ]
+  },
+  "palettes": [
+    [
+      "#FF0040",
+      "#0030FF",
+      "#00FF30",
+      "#FFC000",
+      "#FF00C0",
+      "#00E0FF"
+    ],
+    [
+      "#FF0000",
+      "#8000FF",
+      "#00FF60",
+      "#FF8000"
+    ],
+    [
+      "#FF00A0",
+      "#0050FF",
+      "#FFE000",
+      "#00FF00"
+    ],
+    [
+      "#FF2000",
+      "#00C0FF",
+      "#C000FF",
+      "#FFFF00"
+    ]
+  ],
+  "peak": [
+    "#FF0000",
+    "#FFD000",
+    "#00FF40",
+    "#00C0FF",
+    "#6000FF",
+    "#FF00C0"
+  ],
+  "light": [
+    0.7,
+    1.0
+  ],
+  "strobe": 0,
+  "drive": "kick",
+  "release": 0.15,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.35
+  },
+  "accents": {
+    "crash": "none",
+    "drop": "slam",
+    "gap": "dim"
+  },
+  "roles": {
+    "storyteller": {
+      "calm": [
+        "fever"
+      ],
+      "main": [
+        "fever"
+      ],
+      "peak": [
+        "fever"
+      ]
+    },
+    "rhythm": {
+      "calm": [
+        "fever"
+      ],
+      "main": [
+        "fever"
+      ],
+      "peak": [
+        "fever"
+      ]
+    },
+    "meter": {
+      "calm": [
+        "fever"
+      ],
+      "main": [
+        "fever"
+      ],
+      "peak": [
+        "fever"
+      ]
+    },
+    "keys": "solid"
+  }
+}

@@ -24,7 +24,7 @@ def test_the_light_show_page_lists_shows_and_saves_settings(tmp_path):
     async def check(c, admin):
         r = await (await c.get("/api/lights", headers=H)).json()
         ids = [s["id"] for s in r["shows"]]
-        assert "arena" in ids and "starfield" in ids and len(ids) == 17 and r["settings"]["idle"] == "city"
+        assert "arena" in ids and "starfield" in ids and len(ids) == 23 and r["settings"]["idle"] == "city"
         shows = {s["id"]: s for s in r["shows"]}
         assert {"tender", "slow"} <= set(shows["love"]["fits"]) and "love songs" in shows["love"]["tags"]
         assert {"70s", "80s"} <= set(shows["starfield"]["fits"]) and shows["starfield"]["songs"]

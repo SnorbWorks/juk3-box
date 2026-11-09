@@ -23,7 +23,8 @@ def test_genre_and_tags_pick_the_style_and_mood_is_the_fallback():
     # Before the feel, a genre group's shows take turns, song by song: metal's own, then arena, the rock show.
     assert lib.rotation("metal") == ["metal", "arena", "rock-show"]
     assert {pick("metal", [], 0.8, seed=n) for n in range(4)} == {"metal", "arena", "rock-show"}
-    assert pick("rock", [], 0.8, seed=2) == "rock"
+    assert lib.rotation("rock") == ["rock", "flames", "rock-show"]
+    assert pick("rock", [], 0.8, seed=0) == "rock"
     # A compound tag counts by its main word.
     assert styles.group_of(None, ["sludge", "doom metal"], 0.4) == "metal"
     assert styles.group_of(None, ["seen live", "dream pop"], 0.4) == "pop"
@@ -40,7 +41,7 @@ def test_every_style_names_scenes_the_parts_can_draw():
             assert set(tiers) == {"calm", "main", "peak"}, (st.name, part)
             for options in tiers.values():
                 assert options and all(callable(getattr(cls, s, None)) for s in options), (st.name, part, options)
-        assert st.keys in ("sparkle", "eq", "pulse", "glow", "arena")
+        assert st.keys in ("sparkle", "eq", "pulse", "glow", "arena", "solid")
         assert st.drive in ("kick", "snare", "offbeat", "level") and st.gap in ("blackout", "dim", "")
 
 
@@ -61,7 +62,7 @@ def run(director, r, start, seconds, step=0.025):
 
 
 def test_a_gap_blacks_out_and_the_hit_flashes_white():
-    d, r = Director(), raw(genre="edm")
+    d, r = Director(Library({"pin": "edm"})), raw(genre="edm")      # a show that flashes (Strobe never flashes white)
     cues, t = run(d, r, 0, 2)
     assert cues.style.name == "edm" and cues.black == 0 and cues.flash < 0.01
     r.gap_at = t
@@ -129,12 +130,13 @@ def test_the_kick_drives_the_footlights_at_most_three_times_a_second():
 
 def test_a_new_song_restyles_and_the_genre_arriving_late_restyles_too():
     d = Director()
+    lively = Library({}).rotation("pop")                  # a lively song with no genre: one of pop's shows
     r = raw(title="One", genre=None, tags=[], arousal=0.8)
-    assert run(d, r, 0, 1)[0].style.name == "pop"
+    assert run(d, r, 0, 1)[0].style.name in lively
     r.genre, r.tags, r.genre_at = "country", ["country"], 1.0
     assert run(d, r, 1, 1)[0].style.name == "country"
     r.title, r.genre, r.tags = "Two", "rock", ["rock"]
-    assert run(d, r, 2, 1)[0].style.name in ("rock", "rock-show")
+    assert run(d, r, 2, 1)[0].style.name in ("rock", "flames", "rock-show")
 
 
 def stream(feed, t, genre="edm", kick=False):
@@ -233,7 +235,7 @@ def test_the_drum_kit_hits_each_drum_in_its_own_block():
 
 
 def test_the_level_bar_changes_its_scene_through_a_song():
-    d, r = Director(), raw(genre="edm")
+    d, r = Director(Library({"pin": "edm"})), raw(genre="edm")     # (Strobe's bar plays its one scene)
     seen, t = set(), 0.0
     for _ in range(int(120 / 0.1)):                  # two minutes at 120 bpm
         seen.add(d.update(t, r).scene["bar"])

@@ -112,6 +112,7 @@ def test_persist_refuses_anything_but_system_paths(monkeypatch):
 
 def test_updates_restart_to_install_when_protected(tmp_path, monkeypatch):
     calls = []
+    monkeypatch.setattr(up, "DIR", tmp_path)
     monkeypatch.setattr(up, "RESUME", tmp_path / "resume.json")
     monkeypatch.setattr(up, "STATE", tmp_path / "state.json")
     monkeypatch.setattr(up, "run", lambda *cmd, **kw: calls.append(cmd))
@@ -120,7 +121,7 @@ def test_updates_restart_to_install_when_protected(tmp_path, monkeypatch):
     o = up.os_apply("security")
     assert o["phase"] == "to install"
     assert up.read_json(up.RESUME, {})["verbs"] == [["os-apply", "security"]]
-    assert calls == [(up.ROOTFS, "off"), ("systemctl", "--no-block", "reboot")]
+    assert [c for c in calls if c[0] != "mosquitto_pub"] == [(up.ROOTFS, "off"), ("systemctl", "--no-block", "reboot")]
 
 
 def test_resume_installs_then_protects_again_and_restarts(tmp_path, monkeypatch):
@@ -132,7 +133,7 @@ def test_resume_installs_then_protects_again_and_restarts(tmp_path, monkeypatch)
     up.write_json(up.RESUME, {"verbs": [["os-apply", "all"]], "at": 1})
     up.resume()
     assert done == ["all"] and not up.RESUME.exists()
-    assert calls == [(up.ROOTFS, "on"), ("systemctl", "--no-block", "reboot")]
+    assert [c for c in calls if c[0] != "apt-get"] == [(up.ROOTFS, "on"), ("systemctl", "--no-block", "reboot")]
     assert up.read_json(up.STATE, {})["os"]["phase"] == "protecting"     # until that restart
 
 

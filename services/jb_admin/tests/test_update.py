@@ -254,6 +254,7 @@ OFF, ON, REBOOT = (up.ROOTFS, "off"), (up.ROOTFS, "on"), ("systemctl", "--no-blo
 
 
 def test_each_step_is_dated_and_a_crash_never_looks_still_going(jb, monkeypatch):
+    monkeypatch.setattr(jb, "protected", lambda: False)
     before = time.time()
     s = jb.set_phase("downloading", error=None)
     assert s["phase"] == "downloading" and before <= s["phase_at"] <= time.time()
@@ -274,6 +275,7 @@ def test_each_step_is_dated_and_a_crash_never_looks_still_going(jb, monkeypatch)
 
 def test_a_protected_jukebox_says_so_before_it_restarts(jb, monkeypatch):
     monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "stage", lambda s: True)                      # downloaded and checked
     monkeypatch.setattr(jb, "check", lambda: jb.state(current="v1.0.0", latest="v1.1.0", available=True))
     s = jb.apply()
     assert s["phase"] == "to install" and s["error"] is None
@@ -281,12 +283,14 @@ def test_a_protected_jukebox_says_so_before_it_restarts(jb, monkeypatch):
     assert jb.read_json(jb.RESUME, {})["verbs"] == [["apply"]]
 
     # It can't turn the protection off: nothing changed, and it says why.
+    jb.forgive()                                                          # (each try counts toward the brake)
     jb.ran.clear()
     jb.fail.add(OFF)
     s = jb.apply()
     assert s["phase"] is None and s["error"].startswith("Couldn't restart to install")
     assert not jb.RESUME.exists() and [c for c, _ in jb.ran] == [OFF]
     # It can't restart: the protection goes back on.
+    jb.forgive()
     jb.ran.clear()
     jb.fail.clear()
     jb.fail.add(REBOOT)
@@ -294,6 +298,7 @@ def test_a_protected_jukebox_says_so_before_it_restarts(jb, monkeypatch):
     assert s["phase"] is None and not jb.RESUME.exists() and [c for c, _ in jb.ran] == [OFF, REBOOT, ON]
 
     # Raspberry Pi OS the same way, and the nightly run with both.
+    jb.forgive()
     jb.ran.clear()
     jb.fail.clear()
     pkgs = [{"name": "openssl", "from": "1", "to": "2"}]
@@ -437,6 +442,7 @@ def test_update_now_is_starting_until_jb_update_takes_it_up(tmp_path, monkeypatc
 
 def test_auto_queues_but_holds_the_install_back_while_a_song_is_playing(jb, monkeypatch):
     monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "stage", lambda s: True)
     monkeypatch.setattr(jb, "check", lambda: jb.state(current="v1.0.0", latest="v1.1.0", available=True))
     monkeypatch.setattr(jb, "os_check", lambda: jb.os_state(security=[{"name": "openssl", "from": "1", "to": "2"}]))
     monkeypatch.setattr(jb, "upgradable", lambda: ([{"name": "openssl", "from": "1", "to": "2"}], []))
@@ -469,8 +475,13 @@ def test_boot_installs_only_what_was_queued_with_no_network(jb, monkeypatch):
     jb.boot_run()
     assert looked == [] and jb.ran == [] and cleared == [None]
 
-    # A queued update (from a prior auto run): it restarts to install it, still no network.
-    jb.state(available=True)
+    # Available but not downloaded yet: the start doesn't restart for it (it would need the network).
+    jb.state(available=True, current="v1.0.0", latest="v1.1.0")
+    jb.boot_run()
+    assert looked == [] and jb.ran == []
+
+    # A queued update (downloaded and checked by a prior auto run): it restarts to install it, still no network.
+    staged(jb, "v1.1.0")
     jb.ran.clear()
     jb.boot_run()
     assert looked == [] and [c for c, _ in jb.ran] == [OFF, REBOOT]
@@ -501,3 +512,96 @@ def test_only_one_update_operation_runs_at_a_time(jb):
         with pytest.raises(jb.Busy):
             with jb.locked():
                 pass
+
+
+# Never a restart loop (v0.3.9: GitHub's 504s looped a cabinet 18 times in 9 minutes) ---
+
+def staged(jb, version):
+    d = jb.staged_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "VERSION").write_text(version + "\n")
+
+
+def test_a_download_that_fails_never_restarts(jb, monkeypatch):
+    """The night of v0.3.8: GitHub answered 504. Now the download comes
+    before the restart, so a failed one means no restart at all."""
+    import urllib.error
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    monkeypatch.setattr(jb, "REPO", jb.DIR / "repo")
+    (jb.DIR / "repo").mkdir()
+    (jb.DIR / "repo" / "VERSION").write_text("v1.0.0\n")
+    release = {"code": "https://x/code.tar.gz", "signature": "https://x/code.sig", "code_sha256": "0"}
+    monkeypatch.setattr(jb, "check", lambda: jb.state(current="v1.0.0", latest="v1.1.0", available=True, release=release))
+    monkeypatch.setattr(jb, "os_check", lambda: jb.os_state(security=[]))
+    monkeypatch.setattr(jb, "upgradable", lambda: ([], []))
+
+    def gateway(url, dest=None):
+        raise urllib.error.HTTPError(url, 504, "Gateway Time-out", None, None)
+    monkeypatch.setattr(jb, "fetch", gateway)
+    for _ in range(3):                           # night after night, and every start
+        jb.auto_run()
+        jb.boot_run()
+    assert jb.ran == [] and not jb.RESUME.exists()
+    s = jb.read_json(jb.STATE, {})
+    assert "504" in s["error"] and s["phase"] is None and not jb.staged_dir().exists()
+
+
+def test_the_start_after_the_restart_installs_whats_staged_with_no_network(jb, monkeypatch, tmp_path):
+    monkeypatch.setattr(jb, "protected", lambda: False)
+    repo = tmp_path / "opt" / "juk3-box"
+    repo.mkdir(parents=True)
+    (repo / "VERSION").write_text("v1.0.0\n")
+    monkeypatch.setattr(jb, "REPO", repo)
+    monkeypatch.setattr(jb, "PREV", repo.with_name("juk3-box.prev"))
+    monkeypatch.setattr(jb, "NEW", repo.with_name("juk3-box.new"))
+    monkeypatch.setattr(jb, "check", lambda: (_ for _ in ()).throw(AssertionError("no network here")))
+    monkeypatch.setattr(jb, "install", lambda root: None)
+    staged(jb, "v1.1.0")
+    s = jb.apply(then="protecting")
+    assert s["current"] == "v1.1.0" and s["error"] is None and s["phase"] == "protecting"
+    assert (repo / "VERSION").read_text().strip() == "v1.1.0" and not jb.staged_dir().exists()
+
+
+def test_each_update_gets_two_tries_then_waits_for_the_owner(jb, monkeypatch):
+    """A release that won't install (it rolls back) or OS fixes apt won't take:
+    two restarts to install, then held -- no loop."""
+    monkeypatch.setattr(jb, "protected", lambda: True)
+    jb.state(available=True, current="v1.0.0", latest="v1.1.0")
+    staged(jb, "v1.1.0")
+    restarts = 0
+    for _ in range(5):                           # every start after a failed install
+        jb.ran.clear()
+        jb.boot_run()
+        restarts += [c for c, _ in jb.ran].count(REBOOT)
+        jb.RESUME.unlink(missing_ok=True)
+    assert restarts == jb.MAX_TRIES
+    assert "on hold" in jb.read_json(jb.STATE, {})["error"]
+    jb.forgive()                                 # the owner's Update now
+    jb.ran.clear()
+    jb.boot_run()
+    assert REBOOT in [c for c, _ in jb.ran]
+    # A newer release is a new thing to try.
+    jb.forgive()
+    for _ in range(3):
+        jb.boot_run()
+    jb.state(latest="v1.2.0")
+    staged(jb, "v1.2.0")
+    monkeypatch.setattr(jb, "RESTART_WINDOW_S", 0)    # (past the brake's window)
+    jb.ran.clear()
+    jb.boot_run()
+    assert REBOOT in [c for c, _ in jb.ran]
+
+
+def test_the_brake_stops_any_run_of_restarts(jb, monkeypatch):
+    jb.os_state(security=[])
+    for k in range(jb.MAX_RESTARTS):
+        jb.state(latest=f"v1.{k}.0")             # a different thing each time: the tries don't catch it
+        jb.restart_to_install([["apply"]])
+    jb.ran.clear()
+    jb.state(latest="v9.0.0")
+    jb.restart_to_install([["apply"]])
+    s = jb.read_json(jb.STATE, {})
+    assert jb.ran == [] and s["phase"] is None and s["error"].startswith("Updates are paused")
+    jb.forgive()
+    jb.restart_to_install([["apply"]])
+    assert [c for c, _ in jb.ran] == [OFF, REBOOT]

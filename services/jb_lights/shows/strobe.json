@@ -1,0 +1,114 @@
+{
+  "format": 2,
+  "id": "strobe",
+  "name": "Strobe",
+  "description": "Flashing solid colours: the upper panel a new solid colour on every beat, black between, the level bar answering on the off-beat, the floor in blocks of colour. Calm parts hold the colours instead. At most three flashes a second in any area.",
+  "version": "1.0.0",
+  "author": "Juk3box",
+  "for": [
+    "edm",
+    "bass"
+  ],
+  "fits": {
+    "energy": 0.88,
+    "pace": 0.8,
+    "groove": 0.6,
+    "aggressive": 0.35,
+    "voice": 0.35,
+    "tags": [
+      "electronic",
+      "edm",
+      "techno",
+      "house",
+      "trance",
+      "dance",
+      "electro",
+      "drum and bass",
+      "dubstep",
+      "club"
+    ]
+  },
+  "palettes": [
+    [
+      "#FF0000",
+      "#0000FF",
+      "#00FF00"
+    ],
+    [
+      "#FF00FF",
+      "#00FFFF",
+      "#FFFF00"
+    ],
+    [
+      "#FF0040",
+      "#8000FF",
+      "#00FF40"
+    ],
+    [
+      "#FF6000",
+      "#0040FF",
+      "#FF00C0"
+    ]
+  ],
+  "peak": [
+    "#FF0000",
+    "#00FF00",
+    "#0000FF",
+    "#FF00FF",
+    "#FFFF00",
+    "#00FFFF"
+  ],
+  "light": [
+    0.7,
+    1.0
+  ],
+  "strobe": 0,
+  "drive": "kick",
+  "release": 0.08,
+  "beat_locked": true,
+  "motion": {
+    "pace": "auto",
+    "smooth": 0.0
+  },
+  "accents": {
+    "crash": "none",
+    "drop": "slam",
+    "gap": "blackout"
+  },
+  "roles": {
+    "storyteller": {
+      "calm": [
+        "strobe"
+      ],
+      "main": [
+        "strobe"
+      ],
+      "peak": [
+        "strobe"
+      ]
+    },
+    "rhythm": {
+      "calm": [
+        "strobe"
+      ],
+      "main": [
+        "strobe"
+      ],
+      "peak": [
+        "strobe"
+      ]
+    },
+    "meter": {
+      "calm": [
+        "strobe"
+      ],
+      "main": [
+        "strobe"
+      ],
+      "peak": [
+        "strobe"
+      ]
+    },
+    "keys": "solid"
+  }
+}
