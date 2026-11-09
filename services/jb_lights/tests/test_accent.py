@@ -23,26 +23,26 @@ def test_positions_share_one_picture():
     assert pos[accent.foot_index(0, 0)][0] < pos[accent.foot_index(0, 39)][0]
 
 
-def test_city_footlights_reflect_the_panel_and_trace_the_cars():
-    from services.jb_lights.themes.accent_city import City
+def test_city_footlights_blink_through_blended_colour_pairs():
+    from services.jb_lights.themes import accent_city
+    from services.jb_lights.themes.accent_city import FOOT_COLOURS, City
     city = City(accent.positions())
-    frame = None
-    for k in range(40):
-        frame = city.frame(k / 40, 1 / 40)
-    foot = frame[accent.UPPER:]
-    assert all(b > 0 for _, _, b in foot)                       # night blue everywhere
-    assert any(r > b for r, _, b in foot)                       # warm window light somewhere
-    for row in range(1, accent.FOOT_ROWS):                      # all four rows show the same street
-        for col in range(accent.FOOT_COLS):
-            assert frame[accent.foot_index(row, col)] == frame[accent.foot_index(0, col)]
-    street = [c for c in city.cars if c[0] in city.streets]
-    assert street, "seed 11 starts with cars on the streets"
-    lane, p, _, colour = street[0]
-    x = accent.positions()[lane[int(p)]][0]
-    col = min(accent.FOOT_COLS - 1, int(x * accent.FOOT_COLS))
-    city.cars = []
-    bare = city.frame(1.0, 0.0)[accent.foot_index(0, col)]
-    assert sum(frame[accent.foot_index(0, col)]) > sum(bare)    # the car lit its spot
+    frame = city.frame(0.6, 1 / 40)                             # settled on the first pair
+    inner = frame[accent.foot_index(0, 12)]
+    outer = frame[accent.foot_index(accent.FOOT_ROWS - 1, 12)]
+    assert inner != outer                                      # two colours blended across the rows
+    assert city.foot_pair[0] in FOOT_COLOURS and city.foot_pair[1] in FOOT_COLOURS
+    assert city.foot_pair[0] != city.foot_pair[1]
+    # Over many swaps the footlights blink to more than one colour pair.
+    pairs = set()
+    for k in range(50):
+        city.frame(k * accent_city.FOOT_SWAP_S, 1 / 40)
+        pairs.add(city.foot_pair)
+    assert len(pairs) > 1
+    # A wave travels along them: the same spot changes moment to moment.
+    a = city.frame(10.0, 1 / 40)[accent.foot_index(0, 12)]
+    b = city.frame(10.12, 1 / 40)[accent.foot_index(0, 12)]
+    assert a != b
 
 
 def test_level_bar_sits_mid_cabinet_left_aligned_with_the_panel():

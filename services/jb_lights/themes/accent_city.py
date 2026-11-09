@@ -12,9 +12,11 @@ skyline, so at idle it should look like a city at night, in slow motion.
   - the two swooshes = bridges -> a string of soft bridge lights, the odd
     car crossing
   - circle -> the moon, a soft pale glow breathing very slowly
-  - footlights -> the city reflected on the grill below: a night-blue glow
-    with the warm light of the windows above each spot, and every car
-    traced along them as it drives by (user, 2026-10-13)
+  - footlights -> colour on the grill below (user, 2026-11-08): two vivid
+    colours blended across the four rows (outer row one colour, inner row
+    another, e.g. purple outside, red inside), a slow wave travelling along
+    them, blinking to a fresh pair of colours every couple of seconds --
+    red, green, purple, blue and orange
 
 Shapes come from the same map-based detection as accent-diner; bridges are
 pixels 92-104 and the circle 77-85 (their chain ranges from the mapping).
@@ -44,17 +46,20 @@ HEADLIGHT = (255, 240, 210)
 TAILLIGHT = (255, 10, 0)
 BRIDGE = (70, 80, 110)            # cool bridge-cable lights
 MOON = (150, 170, 210)
-NIGHT = (10, 22, 80)             # footlights: the night sky's blue between the buildings
-FOOT_WINDOW = (150, 100, 40)      # footlights: window light spilling down
 
 WINDOW_LIT = 0.38                 # share of windows lit at any moment
 WINDOW_TOGGLE_PER_S = 0.012       # chance per window per second to switch
 CAR_SPEED = (1.2, 2.2)            # pixels per second: slow motion
 CAR_SPAWN_PER_S = 0.06            # per street, per second
 BLINK_S, BLINK_ON_S = 1.8, 0.35   # aviation lights: a short flash every 1.8 s
-FOOT_SPREAD = 0.04                # footlights reflect the windows within about this much x
-FOOT_WARM = (0.25, 0.5)           # lit share of the windows above: blue below, fully warm above
-FOOT_CAR = 0.7                    # a car's trace on the footlights
+
+# Footlights: blended colour pairs that move and blink (user, 2026-11-08).
+FOOT_COLOURS = [(255, 20, 20), (20, 220, 40), (150, 30, 255), (30, 60, 255), (255, 120, 0)]  # red green purple blue orange
+FOOT_SWAP_S = 2.6                 # how often the colour pair changes
+FOOT_BLINK_S = 0.45               # the quick dark blink as it changes over
+FOOT_WAVE = 1.6                   # colour waves across the footlights' width
+FOOT_SPEED = 0.5                  # how fast the wave travels (widths per second)
+FOOT_DIM = (0.45, 1.0)            # the travelling wave's brightness, trough to crest
 
 
 def mix(c, k):
@@ -92,14 +97,11 @@ class City:
                 self.bridges.append(seg)                                 # chain order follows the curve
             else:
                 self.streets.append(sorted(seg, key=lambda i: pos[i][0]))  # left -> right
-        # Footlights: which windows each column reflects.
-        self.reflect = []
-        for col in range(accent.FOOT_COLS):
-            x = (col + 0.5) / accent.FOOT_COLS
-            w = [(i, math.exp(-((pos[i][0] - x) / FOOT_SPREAD) ** 2)) for i in self.windows]
-            w = [(i, k) for i, k in w if k > 0.02]
-            total = sum(k for _, k in w)
-            self.reflect.append([(i, k / total) for i, k in w])
+        # Footlights: the current and previous colour pair (inner, outer); they
+        # swap every FOOT_SWAP_S with a quick blink (self._foot_colours).
+        self.foot_n = -1
+        self.foot_pair = self._pick_pair()
+        self.foot_prev = self.foot_pair
         self.cars = []          # [lane, position (px along lane), speed (px/s, signed), colour]
         for lane in self.streets + self.bridges:
             if self.rnd.random() < 0.6:
@@ -112,6 +114,28 @@ class City:
         start = self.rnd.uniform(0, n - 1) if anywhere else (-1.0 if rightward else n)
         self.cars.append([lane, start, speed if rightward else -speed,
                           HEADLIGHT if rightward else TAILLIGHT])
+
+    def _pick_pair(self):
+        """Two distinct footlight colours (inner, outer)."""
+        a = self.rnd.randrange(len(FOOT_COLOURS))
+        b = self.rnd.randrange(len(FOOT_COLOURS) - 1)
+        b += b >= a                                       # b != a
+        return FOOT_COLOURS[a], FOOT_COLOURS[b]
+
+    def _foot_colours(self, t):
+        """The footlights' (inner, outer) colours now and a 0..1 brightness
+        for the blink: a new pair every FOOT_SWAP_S, crossfading up from dark
+        over FOOT_BLINK_S so it reads as a blink."""
+        n = int(t / FOOT_SWAP_S)
+        if n != self.foot_n:
+            self.foot_n, self.foot_prev = n, self.foot_pair
+            self.foot_pair = self._pick_pair()
+        into = t - n * FOOT_SWAP_S
+        k = min(1.0, into / FOOT_BLINK_S)                 # 0 at the swap, 1 once settled
+        inner = blend(self.foot_prev[0], self.foot_pair[0], k)
+        outer = blend(self.foot_prev[1], self.foot_pair[1], k)
+        blink = 0.3 + 0.7 * k                             # dip to 0.3 as it changes, back to full
+        return inner, outer, blink
 
     def frame(self, t, dt):
         out = [(0.0, 0.0, 0.0)] * accent.NUM_PIXELS
@@ -157,25 +181,18 @@ class City:
             if self.rnd.random() < CAR_SPAWN_PER_S * dt and sum(c[0] is lane for c in self.cars) < 2:
                 self._spawn(lane)
 
-        # Footlights: night blue, breathing, turning warm under lit windows;
-        # each car leaves a trace at its x as it drives by.
-        night = mix(NIGHT, 0.8 + 0.2 * math.sin(t * 2 * math.pi / 9))
-        foot = []
-        for weights in self.reflect:
-            lit = sum(k * self.window_level[i] for i, k in weights if self.windows[i])
-            foot.append(blend(night, FOOT_WINDOW, min(1.0, max(0.0, (lit - FOOT_WARM[0]) / (FOOT_WARM[1] - FOOT_WARM[0])))))
-        for lane, p, _, colour in self.cars:
-            k = min(len(lane) - 1.0, max(0.0, p))
-            a, z = lane[int(k)], lane[min(len(lane) - 1, int(k) + 1)]
-            x = self.pos[a][0] + (self.pos[z][0] - self.pos[a][0]) * (k - int(k))
-            edge = min(1.0, p + 1.5, len(lane) + 0.5 - p)               # fade in/out at the lane's ends
-            for col in range(accent.FOOT_COLS):
-                w = max(0.0, 1 - abs((col + 0.5) / accent.FOOT_COLS - x) * accent.FOOT_COLS / 1.6)
-                if w and edge > 0:
-                    foot[col] = add(foot[col], mix(colour, FOOT_CAR * w * edge))
-        for row in range(accent.FOOT_ROWS):
-            for col in range(accent.FOOT_COLS):
-                out[accent.foot_index(row, col)] = foot[col]
+        # Footlights: two vivid colours blended across the rows (outer row to
+        # inner row), a wave travelling along them, blinking to a new pair.
+        inner, outer, blink = self._foot_colours(t)
+        trough, crest = FOOT_DIM
+        for col in range(accent.FOOT_COLS):
+            x = (col + 0.5) / accent.FOOT_COLS
+            ph = 2 * math.pi * (FOOT_WAVE * x - FOOT_SPEED * t)
+            wave = trough + (crest - trough) * (0.5 + 0.5 * math.sin(ph))
+            for row in range(accent.FOOT_ROWS):
+                f = row / (accent.FOOT_ROWS - 1)                          # 0 inner .. 1 outer
+                f = min(1.0, max(0.0, f + 0.18 * math.sin(ph)))           # the blend point ripples across
+                out[accent.foot_index(row, col)] = mix(blend(inner, outer, f), blink * wave)
         return [(int(r), int(g), int(b)) for r, g, b in out]
 
 

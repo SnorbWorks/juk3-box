@@ -7,7 +7,10 @@ accent chain.
                    circle and bars it passes over
   - footlights  -> the same band across their 4 rows (as the volume bar
                    runs it across its 5), in step with the panel's -- the
-                   ribbon's glow spilling onto the grill
+                   ribbon's glow spilling onto the grill. The footlights drop
+                   the white-hot core (it drowned the colour out down here,
+                   user 2026-11-08) and flow pink -> purple -> deep blue, the
+                   volume bar's colours in the wave.
 White-hot core, pink, purple, deep blue edge; hot spots flare and fade
 along it, sparkles flick just outside it. Palette and hot-spot behaviour
 come straight from volume_bar_theme2.
@@ -28,6 +31,16 @@ from services.jb_lights.themes.volume_bar_theme2 import _lerp, _palette, colours
 FPS = 40
 BRIGHTNESS = 0.6
 BUCKETS = 36          # hot spots and shimmer along x, like the bar's 36 columns
+
+
+def _no_white_core(stops):
+    """The band's stops with the white-hot core dropped and the rest rescaled
+    to 0..1, so the core is the brightest colour, not white -- the footlights
+    flow through the colours only (user, 2026-11-08)."""
+    rest = stops[1:] if len(stops) > 1 else stops
+    d0 = rest[0][0]
+    span = (1.0 - d0) or 1.0
+    return [((d - d0) / span, c) for d, c in rest]
 
 
 class AccentRibbon:
@@ -75,6 +88,8 @@ class AccentRibbon:
         palette: a light show's colours (volume_bar_theme2.colours())."""
         self._step(ignite)
         look = colours(palette)
+        stops, hot, spark_c = look
+        foot_look = (_no_white_core(stops), hot, spark_c)   # footlights: no white core
         out = [(0, 0, 0)] * accent.NUM_PIXELS
         for i in range(accent.NUM_PIXELS):
             x, y = self.pos[i]
@@ -86,7 +101,7 @@ class AccentRibbon:
             d = abs(y - centre) / max(half, 0.05)
             if 1.2 < d < 1.5 and random.random() < 0.002:
                 self.sparks[i] = 1.0
-            out[i] = self._colour(i, d, self.bucket[i], look)
+            out[i] = self._colour(i, d, self.bucket[i], foot_look if i >= accent.UPPER else look)
         return out
 
 
