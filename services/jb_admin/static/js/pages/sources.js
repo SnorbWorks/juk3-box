@@ -1,7 +1,8 @@
 // Sources: where the music comes from. The phone that has the jukebox
 // (Bluetooth or the Juk3box Helper app; one at a time, jb-core chooses,
-// like the cabinet's Sources button) and the three kinds, each with its own
-// settings page: #/sources/bluetooth, #/sources/app, #/sources/drives.
+// like the cabinet's Sources button) and the kinds, each with its own
+// settings page: #/sources/bluetooth, #/sources/app, #/sources/drives, and
+// Apple Music itself through the app, #/sources/apple-music.
 
 import { get, post } from '../api.js';
 import { button, clear, h, icon, pageHeader, showError, switchControl, toast } from '../ui.js';
@@ -10,7 +11,9 @@ const KINDS = {
   bluetooth: { label: 'Bluetooth', icon: 'bluetooth', load: () => import('./phones.js') },
   app: { label: 'App', icon: 'smartphone', load: () => import('./helper-app.js') },
   drives: { label: 'Drives', icon: 'usb', load: () => import('./drives.js') },
+  'apple-music': { label: 'Apple Music', icon: 'music', load: () => import('./apple-music.js') },
 };
+const AM_REASONS = { no_phone: 'connect your phone', app_update: 'update the app', no_subscription: 'needs a subscription' };
 
 let sub = null;       // the open kind's page module
 let timer = null;
@@ -143,5 +146,12 @@ function render(data) {
     h('div.stack',
       kindLink('bluetooth', !bt ? 'Off' : `${plural(data.phones.length, 'phone')} paired${btConnected ? ` · ${btConnected.name} connected` : ''}`),
       kindLink('app', `${apps.length ? plural(apps.length, 'phone') : 'No phones'} · new phones ${pairing ? 'can pair' : 'can\'t pair'}`),
-      kindLink('drives', drives.length ? `${drives.map(d => d.label || 'USB drive').join(', ')} plugged in` : 'None plugged in')));
+      kindLink('drives', drives.length ? `${drives.map(d => d.label || 'USB drive').join(', ')} plugged in` : 'None plugged in'),
+      kindLink('apple-music', appleMusicLine(data.apple_music))));
+}
+
+function appleMusicLine(s) {
+  if (!s?.on) return 'Off';
+  if (s.available) return `On · available${s.storefront ? ` (${s.storefront.toUpperCase()} store)` : ''}`;
+  return `On · not available: ${AM_REASONS[s.reason] || 'waiting'}`;
 }

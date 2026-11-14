@@ -777,3 +777,110 @@ def test_per_board_suggestions_reach_the_pages(tmp_path):
         assert mods["jb-analyzer"]["suggestion"] is None
         assert (await (await client.get("/api/board", headers=H)).json())["features"] == {}
     run(tmp_path, check)
+
+
+# Sources > Apple Music (docs/contracts/apple-music.md, "The admin")
+
+def test_apple_music_page_shows_the_status_and_sends_only_its_settings(tmp_path):
+    async def check(client, admin):
+        admin.live["catalog_status"] = {"v": 1, "on": True, "available": False, "reason": "no_subscription", "storefront": None}
+        admin.live["helper_settings"] = {"allow_pairing": False, "apple_music": {"on": True, "clean": False,
+                                                                                 "genres": None, "refresh_hours": 24}}
+        admin.live["helper"] = {"device_id": "dev-1", "name": "Alex's iPhone", "connected": True,
+                                "music": {"canPlayCatalog": False}}
+        data = await (await client.get("/api/apple-music")).json()
+        assert data["status"]["reason"] == "no_subscription" and data["settings"]["on"]
+        assert data["phone"] == {"name": "Alex's iPhone", "connected": True, "music": {"canPlayCatalog": False}}
+        assert data["shortcuts"]["browse"] == {"added": False, "can_add": True}
+        assert (await client.post("/api/apple-music/settings", json={"on": True}, headers=H)).status == 503
+        admin.bus = RecordingBus()
+        assert (await client.post("/api/apple-music/settings", json={"refresh_hours": 12}, headers=H)).status == 400
+        assert (await client.post("/api/apple-music/settings", json={"genres": [3]}, headers=H)).status == 400
+        assert (await client.post("/api/apple-music/settings", json={"on": 1, "clean": True, "refresh_hours": 168,
+                                                                     "genres": ["21", "14", "21"]}, headers=H)).status == 200
+        assert (await client.post("/api/apple-music/settings", json={"genres": None}, headers=H)).status == 200
+        assert (await client.post("/api/apple-music/load", json={}, headers=H)).status == 200
+        assert (await client.post("/api/apple-music/refresh", json={}, headers=H)).status == 200
+        assert (await client.post("/api/apple-music/reboot", json={}, headers=H)).status == 404
+        assert admin.bus.sent == [
+            ("jukebox/jb-source-helper/cmd", {"action": "settings", "apple_music": {
+                "on": True, "clean": True, "refresh_hours": 168, "genres": ["21", "14"]}}),
+            ("jukebox/jb-source-helper/cmd", {"action": "settings", "apple_music": {"genres": None}}),
+            ("jukebox/jb-source-helper/cmd", {"action": "catalog", "what": "genres"}),
+            ("jukebox/jb-source-helper/cmd", {"action": "catalog", "what": "all", "refresh": True}),
+        ]
+        # Genre tiles: the covers jb-source-helper downloaded.
+        covers = tmp_path / "covers"
+        covers.mkdir()
+        (covers / ("a" * 40 + ".jpg")).write_bytes(b"\xff\xd8")
+        admin.cfg["covers_dir"] = str(covers)
+        assert (await client.get(f"/covers/{'a' * 40}.jpg")).status == 200
+        assert (await client.get("/covers/..%2Fsettings.json")).status == 404
+    run(tmp_path, check)
+
+
+def test_apple_music_shortcuts_add_it_to_navigation_browse_and_home(tmp_path, monkeypatch):
+    from services.jb_admin import schema
+    from services.jb_ui import main as ui_main
+    if "apple-music" not in ui_main.NAV_BUTTONS:          # the screen's button (jb-ui) may come separately
+        monkeypatch.setattr(ui_main, "NAV_BUTTONS", (*ui_main.NAV_BUTTONS, "apple-music"))
+        monkeypatch.setattr(schema, "NAV_BUTTONS", ui_main.NAV_BUTTONS)
+
+    async def check(c, admin):
+        theme = admin.active_theme()
+
+        async def shortcut(what):
+            r = await c.post("/api/apple-music/shortcut", json={"what": what}, headers=H)
+            assert r.status == 200
+            return (await r.json())["shortcuts"]
+
+        # The owner is halfway through a Home draft: it keeps its place.
+        draft = json.loads((SHIPPED / theme / "layouts" / "home.json").read_text())
+        draft["children"][0]["children"].pop(0)
+        assert (await c.put(f"/api/layouts/{theme}/home/draft", json={"tree": draft}, headers=H)).status == 200
+
+        s = await shortcut("nav")
+        assert s["nav"] == {"added": True, "can_add": True}
+        nav = (await (await c.get("/api/settings")).json())["values"]["nav"]
+        assert nav.index("apple-music") == max(i for i, v in enumerate(nav) if not v.startswith("block:"))
+        assert schema.NAV_LABELS["apple-music"] == "Apple Music"     # Menus > Navigation's label for it
+        await shortcut("nav")                                 # twice: still once
+        nav2 = (await (await c.get("/api/settings")).json())["values"]["nav"]
+        assert nav2 == nav
+
+        s = await shortcut("browse")
+        assert s["browse"]["added"]
+        live = json.loads((tmp_path / "layouts" / theme / "home.json").read_text())
+        rows = live["children"][0]["children"]
+        browse = next(r for r in rows if r.get("type") == "browse")
+        assert browse["sorts"].endswith(",apple-music")
+        s = await shortcut("home_row")
+        live = json.loads((tmp_path / "layouts" / theme / "home.json").read_text())
+        rows = live["children"][0]["children"]
+        i = next(i for i, r in enumerate(rows) if r.get("type") == "browse")
+        assert rows[i + 1] == {"block": "section", "type": "apple-music"} and s["home_row"]["added"]
+        await shortcut("home_row")
+        live2 = json.loads((tmp_path / "layouts" / theme / "home.json").read_text())
+        assert live2 == live                                  # once only
+        # The draft got both, and is still a draft.
+        got = await (await c.get(f"/api/layouts/{theme}/home")).json()
+        d_rows = got["draft"]["children"][0]["children"]
+        assert len(d_rows) == len(rows) - 1 and any(r.get("type") == "apple-music" for r in d_rows)
+        assert next(r for r in d_rows if r.get("type") == "browse")["sorts"].endswith(",apple-music")
+        assert (await c.post("/api/apple-music/shortcut", json={"what": "x"}, headers=H)).status == 400
+    run(tmp_path, check)
+
+
+def test_apple_music_layout_edits_are_pure():
+    from services.jb_admin import apple_music as am
+    home = {"children": [{"class": "home-sections", "children": [{"block": "section", "type": "new"},
+                                                                 {"block": "section", "type": "browse"}]}]}
+    with_card = am.add_browse_card(home)
+    assert with_card["children"][0]["children"][1]["sorts"] == "artist,album,top-100,most-played,apple-music"
+    assert "sorts" not in home["children"][0]["children"][1]               # a copy
+    assert am.add_browse_card(with_card) is None
+    assert am.add_browse_card({"children": [{"block": "section", "type": "new"}]}) is None
+    with_row = am.add_home_row({"children": [{"block": "section", "type": "new"}]})
+    assert with_row["children"][-1] == {"block": "section", "type": "apple-music"}
+    assert am.add_nav_button(["home", "volume", "block:up-next"], {"home", "volume", "apple-music"}) == \
+        ["home", "volume", "apple-music", "block:up-next"]

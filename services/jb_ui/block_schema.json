@@ -17,6 +17,14 @@
     "collection": {
       "label": "See All",
       "description": "A row's full page, opened from See All."
+    },
+    "apple-music": {
+      "label": "Apple Music",
+      "description": "Apple Music's own screen: the top playlists, then every genre. Opened by the Apple Music nav button, Browse card, Home row and block. Shows only while Apple Music is on."
+    },
+    "apple-music-genre": {
+      "label": "Apple Music genre",
+      "description": "One Apple Music genre: its top playlists, albums and songs. Opened by a genre tile; its blocks show the genre it was opened for."
     }
   },
   "groups": [
@@ -568,6 +576,13 @@
             "type": "recents",
             "limit": 18
           }
+        },
+        {
+          "label": "Apple Music",
+          "values": {
+            "type": "apple-music",
+            "limit": 12
+          }
         }
       ],
       "settings": {
@@ -595,6 +610,10 @@
             {
               "value": "browse",
               "label": "Browse shortcuts"
+            },
+            {
+              "value": "apple-music",
+              "label": "Apple Music genres"
             }
           ]
         },
@@ -756,6 +775,10 @@
             {
               "value": "most-played",
               "label": "Most played"
+            },
+            {
+              "value": "apple-music",
+              "label": "Apple Music"
             }
           ]
         },
@@ -1221,6 +1244,114 @@
             "list-music",
             "library"
           ]
+        }
+      }
+    },
+    "apple-music": {
+      "label": "Apple Music",
+      "group": "music",
+      "icon": "apple-music",
+      "description": "Apple Music's genres or charts (top playlists, albums or songs). Fits its space: one card that opens the Apple Music screen when narrow, a strip of cards, or a grid. Hidden while Apple Music is off (Sources > Apple Music).",
+      "presets": [
+        {
+          "label": "Genres",
+          "values": {
+            "show": "genres"
+          }
+        },
+        {
+          "label": "Top Playlists",
+          "values": {
+            "show": "top-playlists",
+            "limit": 12
+          }
+        },
+        {
+          "label": "Apple Music card",
+          "values": {
+            "show": "genres",
+            "shape": "tile"
+          }
+        }
+      ],
+      "settings": {
+        "show": {
+          "type": "enum",
+          "label": "Shows",
+          "default": "genres",
+          "options": [
+            {
+              "value": "genres",
+              "label": "Genres"
+            },
+            {
+              "value": "top-playlists",
+              "label": "Top playlists"
+            },
+            {
+              "value": "top-albums",
+              "label": "Top albums"
+            },
+            {
+              "value": "top-songs",
+              "label": "Top songs"
+            },
+            {
+              "value": "genre",
+              "label": "One genre's top playlists"
+            }
+          ],
+          "help": "Top playlists, albums and songs are Apple Music's charts: overall, for the genre below, or on the genre screen that screen's genre."
+        },
+        "which": {
+          "type": "text",
+          "label": "Genre",
+          "only_when": {
+            "show": [
+              "top-playlists",
+              "top-albums",
+              "top-songs",
+              "genre"
+            ]
+          },
+          "help": "An Apple Music genre id (Rock is 21). Leave empty for the overall charts, or on the genre screen for the genre it shows.",
+          "pattern": "^[0-9]*$"
+        },
+        "title": {
+          "type": "text",
+          "label": "Title",
+          "help": "Leave empty for the usual title."
+        },
+        "limit": {
+          "type": "int",
+          "label": "How many cards",
+          "min": 1,
+          "max": 50,
+          "help": "Leave empty for all of them (a strip shows as many as fit)."
+        },
+        "shape": {
+          "type": "enum",
+          "label": "Layout",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "label": "Auto: fits its space"
+            },
+            {
+              "value": "tile",
+              "label": "One card"
+            },
+            {
+              "value": "row",
+              "label": "Strip of cards"
+            },
+            {
+              "value": "grid",
+              "label": "Grid"
+            }
+          ],
+          "help": "Auto picks for you: one card that opens the Apple Music screen in a narrow space, a strip of cards, a grid across a wide one."
         }
       }
     }

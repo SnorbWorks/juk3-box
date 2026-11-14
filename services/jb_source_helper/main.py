@@ -97,6 +97,7 @@ async def main() -> None:
         helper = Helper(bus, phones, data_dir, log, jid, cfg["jukebox_name"], ble)
         commands = await bus.subscribe(f"{TOPIC}/cmd")
         await bus.subscribe("jukebox/jb-core/source")      # which phone has the jukebox
+        await bus.subscribe("jukebox/jb-core/queue")       # what's next, for the app's "Up next"
         asyncio.create_task(bus.run_heartbeat())
         await helper.ble_update()
         await helper.start()
@@ -130,6 +131,9 @@ async def main() -> None:
             async for topic, payload in commands:
                 if topic == "jukebox/jb-core/source":
                     await helper.follow_choice(payload)
+                    continue
+                if topic == "jukebox/jb-core/queue":
+                    await helper.follow_queue(payload)
                     continue
                 # A pick can wait for a sleeping app: never hold up the next command.
                 asyncio.create_task(run(payload))

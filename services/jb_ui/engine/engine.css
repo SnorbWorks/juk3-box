@@ -564,6 +564,198 @@ jb-shortcut[tint-strength="strong"] { --jb-tint-amount: 75%; }
   font-size: 2vh;
 }
 
+/* ------------------------------------------------- Apple Music
+   (docs/contracts/apple-music.md): the Apple Music screen and the genre
+   screen (main.js's default layouts), the apple-music block and its cards,
+   and the Apple Music badge. A working plain look for any theme; Neon
+   restyles it. Sizes are shares of the screen's height, so the same number
+   of cards fit at any resolution. */
+.jb-apple-music-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* The blocks, stacked; they scroll, and the knob brings a card below the
+   fold into view. */
+.jb-apple-music-sections {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3.4vh;
+  padding: 1.4vh 2vw 6vh 2.6vw;
+  scrollbar-width: none;
+}
+.jb-apple-music-sections::-webkit-scrollbar { display: none; }
+
+/* The block. --jb-am-min is the narrowest a card may get: the grid fits as
+   many across as that allows (a row shows only its first line, the engine
+   hides the rest). Genre tiles and playlists ~19vh, song cards ~40vh. */
+jb-apple-music { display: block; min-width: 0; --jb-am-min: 19vh; }
+jb-apple-music[show="top-songs"] { --jb-am-min: 40vh; }
+jb-apple-music[data-empty] { display: none; }
+.jb-am-head { display: flex; align-items: baseline; gap: 1.2vw; margin-bottom: 1.6vh; }
+.jb-am-title { margin: 0; font-size: 3.1vh; font-weight: 700; }
+.jb-am-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--jb-am-min), 100%), 1fr));
+  gap: 2.4vh 1.25vw;
+}
+jb-apple-music[data-shape="tile"] .jb-am-cards { display: block; }
+/* Loading, or why Apple Music can't be browsed ("Connect your phone"). */
+.jb-am-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  padding: 5vh 2vw;
+  text-align: center;
+}
+.jb-am-message-text { font-size: 2.6vh; font-weight: 700; }
+.jb-am-message-detail { font-size: 1.8vh; opacity: 0.7; max-width: 60ch; }
+.jb-am-spinner {
+  width: 4.4vh;
+  height: 4.4vh;
+  border-radius: 50%;
+  border: 0.5vh solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  animation: jb-sync-spin 1s linear infinite;
+}
+
+/* The Apple Music badge (Apple's identity color), on the header and on the
+   Apple Music card. */
+.jb-header-kicker { display: flex; align-items: center; gap: 0.7vw; margin-bottom: 0.5vh; font-size: 1.3vh; font-weight: 600;
+  letter-spacing: 0.24em; text-transform: uppercase; opacity: 0.9; }
+.jb-header-badge, .jb-link-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vh;
+  padding: 0.4vh 0.9vh;
+  border-radius: 0.6vh;
+  background: #fa2d48;
+  color: #ffffff;
+  font-size: 1.3vh;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
+}
+.jb-header-badge-icon, .jb-link-badge-icon { display: flex; font-size: 1.4vh; }
+.jb-header-badge-icon svg, .jb-link-badge-icon svg { width: 1em; height: 1em; }
+.jb-link-badge { position: absolute; left: 1.2vh; top: 1.2vh; z-index: 4; }
+/* Two covers side by side, over the card's one picture. */
+.jb-link-collage { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.jb-link-collage img { display: block; width: 100%; height: 100%; object-fit: cover; }
+jb-apple-music .jb-card-link { display: block; }
+
+/* A genre tile: the cover of its #1 playlist, a dark fade at the bottom,
+   the name in spaced capitals and a round arrow. */
+/* Sized to the tile (cqi: 1% of its width), so a long name ("Alternative")
+   fits a narrow tile without breaking mid-word. */
+.jb-genre-tile {
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 1.15;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #2a2f45;
+}
+.jb-card-genre, .jb-card-catalog, .jb-card-catalog-song { border-radius: 1.4vh; }
+.jb-genre-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.jb-genre-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 4, 20, 0) 35%, rgba(10, 4, 20, 0.88)); }
+.jb-genre-name {
+  position: absolute;
+  left: 1.7vh;
+  right: 5.6vh;
+  bottom: 1.6vh;
+  font-size: min(2.3vh, 7.6cqi);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+.jb-genre-open {
+  position: absolute;
+  right: 1.6vh;
+  bottom: 1.5vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.6vh;
+  height: 3.6vh;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  font-size: 1.8vh;
+}
+
+/* A chart playlist or album: the square cover (ranked), its name and who
+   made it below. */
+.jb-catalog-art { position: relative; border-radius: inherit; }
+.jb-catalog-cover { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: inherit; }
+.jb-catalog-blank { background: rgba(255, 255, 255, 0.08); }
+.jb-catalog-rank {
+  position: absolute;
+  left: 1vh;
+  top: 1vh;
+  padding: 0.4vh 0.8vh;
+  border-radius: 0.6vh;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 1.2vh;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.jb-catalog-name { margin-top: 1vh; font-size: 1.8vh; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-catalog-sub { margin-top: 0.3vh; font-size: 1.4vh; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-catalog-sub:empty { display: none; }
+.jb-catalog-explicit {
+  display: inline-block;
+  margin-right: 0.5vh;
+  padding: 0 0.45vh;
+  border-radius: 0.3vh;
+  background: rgba(255, 255, 255, 0.28);
+  font-size: 0.75em;
+  line-height: 1.5;
+  vertical-align: 0.12em;
+}
+
+/* A chart song: cover, rank, title and artist, a play circle. Picking it
+   plays it, or queues it. */
+.jb-catalog-song {
+  display: flex;
+  align-items: center;
+  gap: 1.5vh;
+  height: 8.4vh;
+  padding: 0 1.6vh 0 1vh;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.jb-catalog-song-cover { flex: none; width: 6.4vh; height: 6.4vh; object-fit: cover; border-radius: 0.8vh; }
+.jb-catalog-song-rank { flex: none; min-width: 2.2vh; font-size: 1.8vh; font-weight: 700; opacity: 0.55; }
+.jb-catalog-song-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.3vh; }
+.jb-catalog-song-title { font-size: 1.9vh; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-catalog-song-artist { font-size: 1.3vh; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.75;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-catalog-song-play {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.4vh;
+  height: 4.4vh;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.2vh rgba(255, 255, 255, 0.75);
+  font-size: 1.8vh;
+}
+
+/* The Home row of genre tiles (section type apple-music): a grid, like the
+   block's. */
+jb-section[type="apple-music"] .jb-section-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19vh, 1fr));
+  gap: 2.4vh 1.25vw;
+}
+
 /* Screens fill jb-screen, one over another: the one showing, and any kept
    for a quick return (main.js, showScreen), which are see-through and
    can't be touched. Always positioned the same way, so putting one away

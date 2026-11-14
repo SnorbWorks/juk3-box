@@ -30,7 +30,7 @@ from pathlib import Path
 from aiohttp import web
 
 from shared import config, hardware, logging as jb_logging
-from services.jb_admin import bus_relay, schema, theme_store, updates
+from services.jb_admin import apple_music, bus_relay, schema, theme_store, updates
 from services.jb_admin.auth import Auth
 from services.jb_admin.extensions import Extensions
 from services.jb_admin.files import Layouts, read_json, write_bytes, write_json
@@ -79,6 +79,9 @@ DEFAULTS = {
     "songs_dir": str(DATA / "songs"),
     "setupctl_dir": str(DATA / "setupctl"),
     "setupnet_dir": str(DATA / "setupnet"),
+    # Covers jb-source-helper keeps (the app's uploads and Apple Music's),
+    # for Sources > Apple Music's genre tiles: "/covers/<sha1>.jpg", as jb-ui serves them.
+    "covers_dir": str(DATA / "helper" / "artwork"),
     # Updates from the project's releases (deploy/jb-update, root): what it last found.
     "update_dir": str(DATA / "update"),
     "default_theme": "neon",
@@ -183,6 +186,8 @@ class Admin:
         "jukebox/jb-display/state": "display",
         "jukebox/jb-source-helper/connected": "helper",
         "jukebox/jb-source-helper/settings": "helper_settings",
+        "jukebox/jb-source-helper/catalog/status": "catalog_status",
+        "jukebox/jb-source-helper/catalog/genres": "catalog_genres",
         "jukebox/jb-core/source": "source",
         "jukebox/jb-core/sharing": "sharing",
         "jukebox/jb-library/drives-in": "drives_in",
@@ -779,6 +784,7 @@ class Admin:
             "helper_settings": self.live.get("helper_settings") or {},
             "sharing": self.live.get("sharing") or {"on": False},
             "drives": (self.live.get("drives_in") or {}).get("drives") or [],
+            "apple_music": self.live.get("catalog_status"),
             "bus": self.bus is not None,
         })
 
@@ -832,6 +838,112 @@ class Admin:
         await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
         self.log.info("helper app: %s %s", action, cmd.get("device_id", ""))
         return web.json_response({"ok": True})
+
+    # Sources > Apple Music (docs/contracts/apple-music.md, "The admin") -----------
+
+    def home_layout(self) -> dict | None:
+        """The Home layout the cabinet shows: the owner's published one, else the theme's."""
+        theme_id = self.active_theme()
+        published, _ = self.layouts.get(theme_id, "home")
+        return published if published is not None else self.load_theme(theme_id).layouts.get("home")
+
+    def apple_music_shortcuts(self) -> dict:
+        nav = schema.current(self.raw_settings())["nav"]
+        try:
+            home = self.home_layout()
+        except web.HTTPException:
+            home = None
+        return {
+            "nav": {"added": apple_music.NAV_BUTTON in nav, "can_add": apple_music.NAV_BUTTON in schema.NAV_BUTTONS},
+            "browse": {"added": apple_music.has_browse_card(home), "can_add": apple_music.can_add_browse_card(home)},
+            "home_row": {"added": apple_music.has_home_row(home), "can_add": isinstance(home, dict)},
+        }
+
+    async def get_apple_music(self, request):
+        helper = self.live.get("helper") or {}
+        return web.json_response({
+            "status": self.live.get("catalog_status"),
+            "settings": {"on": False, "clean": False, "genres": None, "refresh_hours": 24,
+                         **((self.live.get("helper_settings") or {}).get("apple_music") or {})},
+            "genres": self.live.get("catalog_genres"),
+            "phone": {"name": helper.get("name"), "connected": bool(helper.get("connected")),
+                      "music": helper.get("music")} if helper.get("device_id") else None,
+            "shortcuts": self.apple_music_shortcuts(),
+            "theme": self.active_theme(),
+            "bus": self.bus is not None,
+        })
+
+    async def edit_live_layout(self, name: str, change) -> bool:
+        """Applies `change` (a tree -> a changed copy, or None for no change)
+        to the layout the cabinet shows, and publishes it, as the page
+        builder would (a draft, then published: a revision is kept). A draft
+        the owner is still working on keeps its place, with the change too.
+        False if there was nothing to change."""
+        theme_id = self.active_theme()
+        theme = self.load_theme(theme_id)
+        published, draft = self.layouts.get(theme_id, name)
+        changed = change(published if published is not None else theme.layouts.get(name))
+        if changed is None:
+            return False
+        problems, _ = themes.check_layout(name, changed)
+        problems += schema.nav_placement_problems(changed, self.nav_blocks())
+        if problems:
+            raise error(400, "The layout can't be used.", problems=problems)
+        self.layouts.save_draft(theme_id, name, changed)
+        self.layouts.publish(theme_id, name)
+        if draft is not None:
+            self.layouts.save_draft(theme_id, name, change(draft) or draft)
+        self.log.info("apple music: changed %s/%s", theme_id, name)
+        await self.announce("layouts")
+        return True
+
+    async def apple_music_action(self, request):
+        action = request.match_info["action"]
+        body = await json_body(request)
+        if action == "shortcut":
+            what = body.get("what")
+            if what == "nav":
+                if apple_music.NAV_BUTTON not in schema.NAV_BUTTONS:
+                    raise error(409, "This jukebox's screen doesn't have an Apple Music button yet. Update the jukebox first.")
+                raw = self.raw_settings()
+                nav = apple_music.add_nav_button(schema.current(raw)["nav"], schema.NAV_BUTTONS)
+                if nav is not None:
+                    clean, problems = schema.validate({"nav": nav}, self.nav_blocks())
+                    if problems:
+                        raise error(400, "The navigation bar can't take it.", problems=problems)
+                    raw.update(clean)
+                    write_json(self.settings_path, raw)
+                    await self.announce("settings")
+            elif what == "browse":
+                await self.edit_live_layout("home", apple_music.add_browse_card)
+            elif what == "home_row":
+                await self.edit_live_layout("home", apple_music.add_home_row)
+            else:
+                raise error(400, "Which shortcut?")
+            return web.json_response({"shortcuts": self.apple_music_shortcuts()})
+        if action == "settings":
+            changes, problem = apple_music.settings_changes(body)
+            if problem:
+                raise error(400, problem)
+            cmd = {"action": "settings", "apple_music": changes}
+        elif action == "load":
+            # The genres for the Genres list (answered from the kept copy if fresh).
+            cmd = {"action": "catalog", "what": "genres"}
+        elif action == "refresh":
+            cmd = {"action": "catalog", "what": "all", "refresh": True}
+        else:
+            raise web.HTTPNotFound()
+        if self.bus is None:
+            raise error(503, "The admin can't reach the jukebox right now. Try again in a moment.")
+        await self.bus.publish("jukebox/jb-source-helper/cmd", cmd)
+        self.log.info("apple music: %s %s", action, cmd.get("apple_music", ""))
+        return web.json_response({"ok": True})
+
+    async def cover_file(self, request):
+        path = ui.cover_path(Path(self.cfg["covers_dir"]), request.match_info["name"])
+        if path is None or not path.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path)
 
     async def phone_action(self, request):
         action = request.match_info["action"]
@@ -1665,6 +1777,9 @@ def build_app(cfg: dict, log, bus_enabled: bool = True) -> web.Application:
     r.add_post("/api/sources/use", admin.use_source)
     r.add_post("/api/sources/sharing", admin.set_sharing)
     r.add_post("/api/helper/{action}", admin.helper_action)
+    r.add_get("/api/apple-music", admin.get_apple_music)
+    r.add_post("/api/apple-music/{action}", admin.apple_music_action)
+    r.add_get("/covers/{name}", admin.cover_file)
     r.add_get("/api/audio", admin.get_audio)
     r.add_post("/api/audio/{action}", admin.audio_action)
     r.add_get("/api/lights", admin.get_lights)

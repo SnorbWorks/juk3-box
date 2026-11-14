@@ -1,3 +1,4 @@
+import { store } from './store.js';
 // Turns service payloads into the track fields themes use
 // (docs/theme-format.md, "Data fields").
 
@@ -35,4 +36,22 @@ export function toTrack(raw, library) {
 // of covers within the Pi's memory.
 export function sized(url, px) {
   return url ? url.replace(/\/\d+x\d+bb\./, `/${px}x${px}bb.`) : url;
+}
+
+// One of a list, the same for the same key all through each half hour --
+// across re-renders and reloads -- and a different one the next. For
+// pictures that change on their own (Browse and Shortcut covers).
+export function steadyPick(list, key) {
+  if (!list.length) return undefined;
+  const text = `${key}|${Math.floor(Date.now() / 1800000)}`;
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return list[(h >>> 0) % list.length];
+}
+
+// The library plus the Apple Music songs played here, for the views that
+// rank by plays (Recents, Most Played). Nothing else shows catalog songs.
+export function withCatalogPlays(tracks) {
+  const played = store.get('catalogPlays') || [];
+  return played.length ? [...tracks, ...played] : tracks;
 }

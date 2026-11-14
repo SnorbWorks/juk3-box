@@ -1,7 +1,8 @@
 // Juk3box UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { albumSongs, openFilter, openList, pick, setSort, upLevel } from './board.js';
+import { albumSongs, openCatalog, openFilter, openList, pick, setSort, showingCatalog, upLevel } from './board.js';
+import { appleMusicOn, genreCard, genres, statusChanged } from './catalog.js';
 import { playList, startAutoplay } from './lists.js';
 import { reloadMissingCovers } from './bind.js';
 import { connectBus, PREVIEW, publish } from './bus.js';
@@ -40,6 +41,31 @@ const DEFAULT_SETTINGS_LAYOUT = {
     { class: 'jb-settings-sections', focus: 'settings', children: [{ block: 'sources' }, { block: 'wholehome' }, { block: 'display' }] },
   ],
 };
+// Apple Music (docs/contracts/apple-music.md), unless the theme lays it out
+// itself: the top playlists, then every genre; and a genre's screen, its
+// top playlists, albums and songs. Every card is a knob stop.
+const DEFAULT_APPLE_MUSIC_LAYOUT = {
+  class: 'jb-apple-music-screen',
+  children: [
+    { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
+    { class: 'jb-apple-music-sections', focus: 'apple-music', children: [
+      { block: 'apple-music', show: 'top-playlists', shape: 'row', limit: 12 },
+      { block: 'apple-music', show: 'genres', shape: 'grid' },
+    ] },
+  ],
+};
+const DEFAULT_APPLE_MUSIC_GENRE_LAYOUT = {
+  class: 'jb-apple-music-screen jb-apple-music-genre',
+  children: [
+    { class: 'top-bar', focus: 'top', children: [{ block: 'header' }] },
+    { class: 'jb-apple-music-sections', focus: 'apple-music', children: [
+      { block: 'apple-music', show: 'top-playlists', shape: 'row', limit: 12 },
+      { block: 'apple-music', show: 'top-albums', shape: 'row', limit: 12 },
+      { block: 'apple-music', show: 'top-songs', shape: 'grid' },
+    ] },
+  ],
+};
+const APPLE_MUSIC_SCREENS = ['apple-music', 'apple-music-genre'];
 // Settings > Sources > Bluetooth, App, Drives: one block each.
 const sourceLayout = name => ({
   class: 'jb-settings-screen',
@@ -86,6 +112,20 @@ const actions = {
   playList(name) {
     playList(name);
   },
+  // Apple Music: its screen; a genre's screen; a chart playlist's or
+  // album's songs on the board (catalog.js).
+  openAppleMusic() {
+    showScreen('apple-music');
+  },
+  openGenre(genre) {
+    if (!genre?.id) return;
+    store.set('amGenre', { id: String(genre.id), name: genre.name || '' });
+    showScreen('apple-music-genre');
+  },
+  openCatalog(kind, id, name) {
+    openCatalog(kind, id, name);
+    showScreen('all-songs');
+  },
   openCollection(type) {
     const view = sectionView(type, context());
     if (!view) return;
@@ -93,9 +133,17 @@ const actions = {
     showScreen('collection');
   },
   // Back: out of an artist (album, genre) to the list of them, else to the
-  // previous screen, else Home.
+  // previous screen, else Home. An Apple Music list on the board goes back
+  // to the screen it was opened from, and the board back to All Songs for
+  // next time; a genre's screen always to the Apple Music screen.
   back() {
-    if (store.get('screen') === 'all-songs' && upLevel()) return;
+    const screen = store.get('screen');
+    if (screen === 'all-songs' && upLevel()) return;
+    if (screen === 'all-songs' && showingCatalog()) setSort('title');
+    if (screen === 'apple-music-genre') {
+      if (history[history.length - 1] === 'apple-music') history.pop();
+      return showScreen('apple-music', { remember: false });
+    }
     showScreen(history.pop() || 'home', { remember: false });
   },
   phones,
@@ -124,7 +172,12 @@ const keeps = name => !PREVIEW && name !== 'collection';
 // The theme's layout for a screen, else the engine's own.
 function layoutFor(name) {
   return theme.layouts[name]
-    || { collection: DEFAULT_COLLECTION_LAYOUT, settings: DEFAULT_SETTINGS_LAYOUT }[name]
+    || {
+      collection: DEFAULT_COLLECTION_LAYOUT,
+      settings: DEFAULT_SETTINGS_LAYOUT,
+      'apple-music': DEFAULT_APPLE_MUSIC_LAYOUT,
+      'apple-music-genre': DEFAULT_APPLE_MUSIC_GENRE_LAYOUT,
+    }[name]
     || (SOURCE_SCREENS[name] ? sourceLayout(name) : null);
 }
 
@@ -150,7 +203,9 @@ function showScreen(name, { remember = true } = {}) {
     kept.inert = false;
     delete kept.dataset.parked;
   } else if (layout) {
-    holder.append(renderLayout(layout, context(), PREVIEW ? name : undefined));
+    // Blocks learn which screen they're on (an Apple Music block on the
+    // genre screen shows that genre's charts).
+    holder.append(renderLayout(layout, { ...context(), screen: name }, PREVIEW ? name : undefined));
   } else {
     // The theme has no layout for this screen (only home and all-songs
     // are required). The engine's own version comes later; for now, say so.
@@ -301,6 +356,25 @@ function watchPower() {
 // The Sources badge: switch phones, see the drives (phones.js).
 function phones() {
   openSwitcher();
+}
+
+// Apple Music being switched off (Sources > Apple Music) takes its screens
+// away: back Home from them, and the board back to All Songs.
+function watchAppleMusic() {
+  store.watch(html, 'catalogStatus', statusChanged);
+  store.watch(html, 'helperSettings', () => {
+    if (appleMusicOn() || store.get('helperSettings') === undefined) return;
+    const screen = store.get('screen');
+    const onCatalog = showingCatalog();
+    if (onCatalog) setSort('title');
+    if (APPLE_MUSIC_SCREENS.includes(screen) || (screen === 'all-songs' && onCatalog)) showScreen('home');
+  });
+  // The page builder's preview of the genre screen shows the first genre.
+  if (PREVIEW) {
+    store.watch(html, 'catalogGenres', () => {
+      if (!store.get('amGenre') && genres().length) store.set('amGenre', genreCard(genres()[0]).genre);
+    });
+  }
 }
 
 function watchSystem() {
@@ -489,7 +563,11 @@ function watchSystem() {
   store.watch(html, 'entry', e => {
     if (e?.state !== 'partial') return;
     if (popupOpen() === 'now-playing') closePopup('now-playing');
-    if (store.get('screen') !== 'all-songs') showScreen('all-songs');
+    if (store.get('screen') !== 'all-songs') {
+      // An Apple Music list left on the board isn't what the keypad picks from.
+      if (showingCatalog()) setSort('title');
+      showScreen('all-songs');
+    }
   });
   store.watch(html, 'selection', s => {
     if (typeof s?.slot !== 'string') return;
@@ -593,6 +671,7 @@ async function start() {
     },
   });
   watchSystem();
+  watchAppleMusic();
   watchPower();
   watchAlbumPlay();
   watchIdle();

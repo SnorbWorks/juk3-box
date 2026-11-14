@@ -985,3 +985,95 @@ jb-board[data-cards] .jb-slot[data-entry] .jb-album-code { background: hsl(from 
 }
 .jb-settings-row[data-focused] .jb-settings-value { color: rgba(255, 255, 255, 0.9); }
 .jb-settings-row[data-pressed], .jb-settings-list .jb-phone-row[data-pressed] { transform: scale(0.98); }
+
+/* ---------------------------------------------------------------- Apple Music */
+
+/* The Apple Music screen and a genre's screen (layouts/apple-music.json,
+   apple-music-genre.json; designed Nov 2026): the header with the Apple
+   Music badge, then rows of cards that scroll like Home's. The engine draws
+   a plain version (engine.css); this is Neon's. Six playlists or genres
+   across the main screen, seven playlists or albums and three songs across
+   a genre's, at any resolution (--jb-am-min is a share of the height). */
+.jb-apple-music-sections { gap: 3.4vh; padding: 1.2vh 2vw 6vh 2.6vw; }
+.apple-music jb-apple-music { --jb-am-min: 19vh; }
+.apple-music-genre jb-apple-music { --jb-am-min: 16vh; }
+.apple-music-genre jb-apple-music[show="top-songs"] { --jb-am-min: 38vh; }
+.jb-am-cards { gap: 2.6vh 1.3vw; }
+.jb-am-head { margin-bottom: 1.7vh; }
+.jb-am-title { font-size: 3.3vh; font-weight: 620; letter-spacing: -0.005em; color: var(--ink); }
+.apple-music-genre .jb-am-title { font-size: 3vh; }
+.jb-am-message-text { color: var(--ink); }
+.jb-am-message-detail { color: var(--ink-soft); opacity: 1; }
+/* The reason Apple Music can't be browsed sits on a glass panel. */
+jb-apple-music[data-unavailable] .jb-am-message {
+  margin-top: 2vh;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, hsl(from var(--opt-panel) calc(h + 1.919) calc(s * 0.981) calc(l + 6.863) / 0.82), hsl(from var(--opt-panel) calc(h + 3.556) calc(s * 1.091) calc(l - 3.333) / 0.88));
+  box-shadow: inset 0 0 0 1px var(--edge), 0 1.4vh 3.4vh rgba(0, 0, 0, 0.45);
+}
+
+/* The header: the badge and a spaced-out line above a bigger title. */
+.jb-apple-music-screen .jb-header-title { font-size: 4.6vh; font-weight: 800; letter-spacing: -0.01em; }
+.jb-header-kicker { color: color-mix(in srgb, var(--pill-a) 45%, #ffffff); opacity: 1; }
+
+/* Genre tiles: the art's own rim and vignette (every .jb-card's), a dark
+   fade for the name. */
+.jb-genre-tile { background: var(--navy-2); }
+.jb-genre-shade { background: linear-gradient(180deg, transparent 35%, hsl(from var(--opt-panel) calc(h + 1.438) calc(s * 1.151) calc(l - 4.706) / 0.9)); }
+.jb-genre-name { z-index: 4; color: var(--ink); text-shadow: 0 0.3vh 1.2vh rgba(0, 0, 0, 0.5); }
+.jb-genre-open { z-index: 4; color: var(--ink); }
+
+/* Playlists and albums: the cover with the rim, words below (like Recents). */
+.jb-card-catalog { border-radius: var(--radius-lg); }
+.jb-card-catalog > .jb-catalog-art { box-shadow: 0 1.1vh 2.6vh rgba(0, 0, 0, 0.55), 0 0.3vh 0.8vh rgba(0, 0, 0, 0.35); }
+.jb-catalog-blank { background: var(--navy-2); }
+.jb-catalog-rank { z-index: 7; background: hsl(from var(--opt-panel) h s calc(l - 4) / 0.7); color: var(--ink); }
+.jb-catalog-name { font-size: 1.85vh; font-weight: 650; color: var(--ink); }
+.jb-catalog-sub { font-size: 1.4vh; color: var(--blue-text); opacity: 1; }
+.apple-music-genre .jb-catalog-name { font-size: 1.7vh; }
+
+/* Songs: glass cards, the play circle Neon's New cards have. */
+.jb-catalog-song {
+  background: linear-gradient(160deg, hsl(from var(--opt-panel) calc(h + 1.156) calc(s * 0.962) calc(l + 9.608) / 0.8), hsl(from var(--opt-panel) calc(h + 1.556) calc(s * 1.015) calc(l + 0.98) / 0.86));
+  box-shadow: 0 1vh 2.4vh rgba(0, 0, 0, 0.4);
+}
+.jb-catalog-song-cover { border-radius: var(--radius-sm); box-shadow: 0 0.4vh 1vh rgba(0, 0, 0, 0.5); }
+.jb-catalog-song-rank { color: var(--ink-soft); opacity: 1; }
+.jb-catalog-song-title { color: var(--ink); }
+.jb-catalog-song-artist { color: var(--blue-text); opacity: 1; }
+.jb-catalog-song-play {
+  position: relative;
+  z-index: 7;
+  color: #fff;
+  background: hsl(from var(--opt-panel) calc(h + 2.222) calc(s * 0.93) calc(l - 2.941) / 0.45);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+.jb-catalog-song-play svg { fill: #fff; }
+
+/* The knob on an Apple Music card: the lift every card has, and a ring with
+   a glow in the theme's button color (coral, blue...), pre-drawn and faded
+   in by opacity on the GPU (see the Performance notes at the top). On a
+   playlist or album only the square cover glows. */
+.jb-card:is(.jb-card-genre, .jb-card-catalog, .jb-card-catalog-song, .jb-card-apple-music)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 0.28vh color-mix(in srgb, var(--pill-a) 40%, #ffffff),
+    0 0 0 0.4vh hsl(from var(--opt-button) h s l / 0.35),
+    0 0 4vh hsl(from var(--opt-button) h s calc(l + 8) / 0.55);
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  will-change: opacity;
+  pointer-events: none;
+}
+.jb-card-catalog::after { bottom: auto; aspect-ratio: 1; }
+.jb-card:is(.jb-card-genre, .jb-card-catalog, .jb-card-catalog-song, .jb-card-apple-music)[data-focused]::after { opacity: 1; }
+.jb-card-catalog-song { --lift: 1.03; }
+
+/* The Apple Music card (Browse, the block's one-card shape): the badge over
+   two genre covers. */
+.jb-link-badge { left: 1.2vh; top: 1.2vh; }
+jb-apple-music[data-shape="tile"] .jb-link-card { height: auto; aspect-ratio: 1.6; }

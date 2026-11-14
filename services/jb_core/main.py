@@ -224,25 +224,31 @@ async def publish_power(bus: Bus, state: str, **extra) -> None:
     await bus.publish("jukebox/jb-core/power", {"state": state, **extra}, retain=True)
 
 
+async def skip_song(bus: Bus, q: Queue, log, by: str) -> None:
+    """Cancels the song and plays what's next, or stops if nothing is
+    queued. `by`: "reset" (Reset held) or "phone" (the Helper app's Skip)."""
+    q.expected_title = None
+    # The button lights blink Reset twice for this.
+    await bus.publish("jukebox/jb-core/skipped", {"by": by})
+    next_track = q.pop_next()
+    if next_track:
+        log.info("skip (%s): cancelling the song; next: %s", by, next_track["title"])
+        await play_track(bus, q, next_track)
+    else:
+        log.info("skip (%s): cancelling the song; nothing queued, stopping", by)
+        q.doctor.forget()
+        # "stop", not "pause": the song is done with, and shows as
+        # nothing playing (jb-source-phone keeps the phone paused).
+        await source_action(bus, q, "stop")
+        q.playing = False
+    await publish_queue(bus, q)
+
+
 async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
     """Carries out what PowerMenu decided (see power.py for the meanings)."""
     for act in actions:
         if act == "skip":
-            q.expected_title = None
-            # The button lights blink Reset twice for this.
-            await bus.publish("jukebox/jb-core/skipped", {"by": "reset"})
-            next_track = q.pop_next()
-            if next_track:
-                log.info("Reset held: cancelling the song; next: %s", next_track["title"])
-                await play_track(bus, q, next_track)
-            else:
-                log.info("Reset held: cancelling the song; nothing queued, stopping")
-                q.doctor.forget()
-                # "stop", not "pause": the song is done with, and shows as
-                # nothing playing (jb-source-phone keeps the phone paused).
-                await source_action(bus, q, "stop")
-                q.playing = False
-            await publish_queue(bus, q)
+            await skip_song(bus, q, log, "reset")
         elif act == "pause":
             await source_action(bus, q, "pause")
         elif act == "open":
@@ -690,6 +696,12 @@ async def main() -> None:
                     q.shuffle_active = False
                     q.shuffle_buffer = []
                     await publish_queue(bus, q)
+                elif action == "skip":
+                    # The Helper app's Skip (jb-source-helper passes it on).
+                    # Only while a song plays, and not while the power menu
+                    # holds the jukebox.
+                    if q.playing and not q.held:
+                        await skip_song(bus, q, log, str(payload.get("by") or "phone"))
                 elif action == "power":
                     await apply_power(bus, q, menu.choose(payload.get("choice", "")), log)
                 elif action == "use_source" and isinstance(payload.get("id"), str):

@@ -3,9 +3,11 @@
 // block draws this; the keypad and the pager change it.
 
 import { publish } from './bus.js';
+import { catalogSongs, catalogStatus, request as requestCatalog } from './catalog.js';
 import { listSongs } from './lists.js';
 import { format } from './selection.js';
 import { store } from './store.js';
+import { withCatalogPlays } from './tracks.js';
 
 // Sorts the engine knows (docs/theme-format.md, "Home sections").
 // Category sorts list one slot per artist/album/genre first; picking one
@@ -70,6 +72,7 @@ function requestAlbum(name) {
 }
 
 function songsFor(tracks, sort, filter) {
+  if (filter?.field === 'catalog') return catalogSongs(filter.kind, filter.id);
   if (filter?.field === 'list') return listSongs(filter.value, tracks);
   if (filter?.field === 'playlist') return playlistSongs(tracks, filter.value);
   if (filter?.field === 'album' && phoneAlbums().length) return albumSongs(tracks, filter.value) || [];
@@ -85,7 +88,7 @@ function songsFor(tracks, sort, filter) {
   }
   if (sort === 'most-played') {
     // Plays on this jukebox (jb-library counts a play after 30s).
-    return tracks.filter(t => t.play_count > 0)
+    return withCatalogPlays(tracks).filter(t => t.play_count > 0)
       .sort((a, b) => b.play_count - a.play_count || (b.last_played_at || 0) - (a.last_played_at || 0) || byTitle(a, b));
   }
   return [...tracks].sort(byTitle);
@@ -142,9 +145,11 @@ export function albumCover(tracks, key) {
   return tracks.find(t => t.album === title && t.artwork_url)?.artwork_url || null;
 }
 
-// While an opened album's songs are being fetched: { loading } or { failed }.
+// While an opened album's (or Apple Music list's) songs are being fetched:
+// { loading } or { failed }.
 function albumStatus() {
   const f = state.filter;
+  if (f?.field === 'catalog') return catalogStatus(f.kind, f.id);
   if (f?.field !== 'album' || !phoneAlbums().length || store.get('albums')?.contents?.[f.value]) return null;
   const st = store.get('albumFetch');
   if (st?.name === f.value && st.state === 'failed') return { failed: st.reason || "Couldn't load this album" };
@@ -208,7 +213,9 @@ export function turnPage(dir) {
 // Back up from an artist's (album's, genre's) songs to the list of them.
 // Returns whether there was a level to go back up from.
 export function upLevel() {
-  if (!state.filter) return false;
+  // An Apple Music list has no level above it on the board: Back goes back
+  // to the screen it was opened from (main.js).
+  if (!state.filter || state.filter.field === 'catalog') return false;
   state = { sort: state.sort, filter: null, page: state.categoryPage || 0 };
   changed();
   return true;
@@ -247,6 +254,19 @@ export function openFilter(field, value) {
 export function openList(name) {
   state = { sort: 'title', filter: { field: 'list', value: name }, page: 0, categoryPage: 0 };
   changed();
+}
+
+// An Apple Music playlist or album (catalog.js) on the board: its songs, in
+// order, once jb-source-helper has them. The header reads "Apple Music ·
+// Rock Hits"; Back returns to the screen it was opened from.
+export function openCatalog(kind, id, name) {
+  state = { sort: 'title', filter: { field: 'catalog', value: name || '', kind, id }, page: 0, categoryPage: 0 };
+  requestCatalog('items', { kind, id });
+  changed();
+}
+
+export function showingCatalog() {
+  return state.filter?.field === 'catalog';
 }
 
 // Cover art found among a sort's songs (for Browse cards without a

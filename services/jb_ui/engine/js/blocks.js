@@ -6,6 +6,8 @@ import { bind, fromTemplate, slot } from './bind.js';
 import { watchTopic } from './bus.js';
 import { listData, listSongs, registerList } from './lists.js';
 import { SORTS, turnPage, view } from './board.js';
+import { fillAppleMusic } from './applemusic.js';
+import { appleMusicOn, catalogSubtitle, catalogTitle, TICK } from './catalog.js';
 import { makeStop } from './focus.js';
 import { nowPlayingData } from './np.js';
 import { fillCollection, fillSection, fillShortcut } from './sections.js';
@@ -43,6 +45,8 @@ export const BLOCKS = {
   image: fillImage,
   spacer: () => {},
   shortcut: fillShortcut,
+  // Apple Music (applemusic.js): the genres or a chart, fitting its space.
+  'apple-music': fillAppleMusic,
 };
 
 // Blocks that fit themselves to the space they're given
@@ -55,6 +59,7 @@ export const SHAPES = {
   'up-next': [['compact', 0], ['strip', 0.6]],
   nav: [['compact', 0], ['bar', 0.6]],
   section: [['narrow', 0], ['medium', 0.7], ['wide', 1.15]],
+  'apple-music': [['tile', 0], ['row', 0.42], ['grid', 1.15]],
 };
 
 const shapeWatch = new ResizeObserver(entries => {
@@ -321,6 +326,8 @@ function fillBoard(el, node, ctx) {
   store.watch(el, 'playlists', render);
   store.watch(el, 'albums', render);
   store.watch(el, 'albumFetch', render);
+  store.watch(el, TICK, render);
+  store.watch(el, 'catalogStatus', render);
   store.watch(el, 'board', render);
   store.watch(el, 'entry', showEntry);
 }
@@ -335,6 +342,7 @@ function fillPageInfo(el, node, ctx) {
   store.watch(el, 'playlists', render);
   store.watch(el, 'albums', render);
   store.watch(el, 'albumFetch', render);
+  store.watch(el, TICK, render);
   store.watch(el, 'board', render);
 }
 
@@ -363,6 +371,14 @@ const NAV_LABELS = {
   settings: 'Settings',
   'now-playing': 'Now Playing',
   shuffle: 'Shuffle',
+  'apple-music': 'Apple Music',
+};
+
+// Screens a nav button stands for besides its own: Settings > Sources'
+// pages are part of Settings; the genre screen is part of Apple Music.
+const NAV_SCREENS = {
+  settings: screen => !!SOURCE_SCREENS[screen],
+  'apple-music': screen => screen === 'apple-music-genre',
 };
 
 // The engine's own blocks the owner can put below the buttons, as they're
@@ -409,13 +425,15 @@ function fillNav(el, node, ctx) {
         label: on ? 'Single Play' : NAV_LABELS[name],
         icon: (on && ctx.icons['shuffle-on']) || ctx.icons[name],
       });
-      // Settings > Sources' pages are part of Settings.
-      item.toggleAttribute('data-active', name === screen || (name === 'settings' && !!SOURCE_SCREENS[screen]));
+      item.toggleAttribute('data-active', name === screen || !!NAV_SCREENS[name]?.(screen));
       if (name === 'shuffle') item.toggleAttribute('data-on', on);
+      // Apple Music's button shows only while the owner has it switched on.
+      if (name === 'apple-music' && item.hidden === appleMusicOn()) item.hidden = !appleMusicOn();
     }
   };
   store.watch(el, 'queue', render);
   store.watch(el, 'screen', render);
+  if (items.some(item => item.dataset.button === 'apple-music')) store.watch(el, 'helperSettings', render);
 }
 
 // The screen's title, subtitle and a Back button. On the board: the sort
@@ -426,7 +444,7 @@ function fillHeader(el, node, ctx) {
   stopsFrom(el, 'header', { back: () => ctx.actions.back() });
   const render = () => {
     const screen = store.get('screen');
-    let title = '', subtitle = '';
+    let title = '', subtitle = '', badge = '', kicker = '';
     if (screen === 'all-songs') {
       const v = view();
       const sort = SORTS[v.sort];
@@ -438,19 +456,39 @@ function fillHeader(el, node, ctx) {
         title = d?.hook || 'Mix';
         subtitle = [d?.subtitle, v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : ''].filter(Boolean).join(' · ');
       }
-      if (v.album?.loading) subtitle += ' · Loading album…';
-      if (v.album?.failed) subtitle += ` · ${v.album.failed}`;
+      if (v.filter?.field === 'catalog') {
+        // An Apple Music playlist or album: "Apple Music · Rock Hits".
+        title = catalogTitle(v.filter.value);
+        subtitle = [catalogSubtitle(v.filter.kind, v.filter.id), v.pages > 1 ? `Page ${v.page + 1} of ${v.pages}` : '']
+          .filter(Boolean).join(' · ');
+        if (v.album?.loading) subtitle = [subtitle, 'Loading…'].filter(Boolean).join(' · ');
+        if (v.album?.failed) subtitle = [subtitle, v.album.failed].filter(Boolean).join(' · ');
+      } else {
+        if (v.album?.loading) subtitle += ' · Loading album…';
+        if (v.album?.failed) subtitle += ` · ${v.album.failed}`;
+      }
     } else if (screen === 'collection') {
       const c = store.get('collection');
       title = c?.title || '';
       subtitle = c?.subtitle || '';
+    } else if (screen === 'apple-music') {
+      // The Apple Music badge over the title, and which phone it's from.
+      title = 'Apple Music';
+      badge = 'Apple Music';
+      const a = store.get('source')?.active;
+      kicker = a?.kind === 'helper' && a.connected && a.name ? `Streaming from ${a.name}` : '';
+    } else if (screen === 'apple-music-genre') {
+      title = store.get('amGenre')?.name || 'Genre';
+      badge = 'Apple Music';
+      kicker = 'Genre';
     } else if (screen === 'settings') {
       title = 'Settings';
     } else if (SOURCE_SCREENS[screen]) {
       title = SOURCE_SCREENS[screen].title;
       subtitle = 'Settings · Sources';
     }
-    bind(el, { title, subtitle, canGoBack: screen !== 'home', backIcon: ctx.icons.back });
+    bind(el, { title, subtitle, badge, kicker, badgeIcon: badge ? ctx.icons['apple-music'] : null,
+      canGoBack: screen !== 'home', backIcon: ctx.icons.back });
   };
   store.watch(el, 'screen', render);
   store.watch(el, 'board', render);
@@ -458,6 +496,9 @@ function fillHeader(el, node, ctx) {
   store.watch(el, 'albums', render);
   store.watch(el, 'albumFetch', render);
   store.watch(el, 'collection', render);
+  store.watch(el, 'amGenre', render);
+  store.watch(el, 'source', render);
+  store.watch(el, TICK, render);
 }
 
 // The Sources badge (top right): the phone that has the jukebox, Bluetooth

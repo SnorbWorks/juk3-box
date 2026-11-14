@@ -91,3 +91,21 @@ The Pi holds a command for up to 20 s for its phone to reconnect; after that the
 ## On the jukebox's bus
 
 `jb-source-helper` is a `source` (see [modules.md](modules.md), Roles). Its songs' `item_path` is `helper:<deviceId>/<itemId>`; jb-core sends their picks to it. It publishes, in the Bluetooth source's shapes: `jukebox/jb-source-helper/connected`, `sync`, `now-playing`, `play-error`, `pairing` (the cabinet's code), and `library` (the phone's songs for jb-library). Details in [bus.md](bus.md).
+
+## The remote (the app's song controls)
+
+The Helper app's Home has Stop, Play/Pause and Skip for the song it's playing, and shows what the jukebox plays next.
+
+- Both sides say they can: the Pi's `hello` carries `"features": ["remote"]`, the app's `client_hello` carries `"remote"` in its `features`. Without both, neither of the messages below is sent (the app hides Skip).
+- **Stop and Play/Pause** need nothing new: the app stops or pauses the song itself and its `playback_state` tells the Pi, as when an incoming call pauses it. jb-core keeps its queue; a stopped song is not counted as ended.
+- **Skip**, app → Pi event `skip` `{ "itemId": "…" }` (the song that was playing). The Pi takes it only from the source phone and only while that song is the one playing (a late tap can't skip the next song), and publishes `jukebox/jb-core/cmd` `{ "action": "skip", "by": "phone" }`: jb-core plays what's next, or stops if nothing is queued, exactly as when Reset is held.
+- **Up next**, Pi → app command `up_next` `{ "title", "artist", "album" }`, or `{}` when nothing is queued; the app `ack`s it. Sent to the source phone when jb-core's queue's first song changes, when the phone becomes the source, and when it reconnects.
+
+## Apple Music itself
+
+Browsing Apple Music (its genres and charts, not just the owner's library) is an extension of this protocol, in [apple-music.md](apple-music.md):
+
+- `client_hello` gains `"features": ["catalog"]`. The Pi records each phone's features; an app without `catalog` (the App Store 1.0 build) is never sent the commands below, and the jukebox says Apple Music needs an app update.
+- New Pi → app commands `catalog_genres`, `catalog_charts` and `catalog_items`, answered with `ack` (the lists in its payload) or `error`.
+- `play` takes an `itemId` of `catalog:<song id>` for an Apple Music song.
+- `music_status.canPlayCatalog` says whether the phone's subscription can play it.

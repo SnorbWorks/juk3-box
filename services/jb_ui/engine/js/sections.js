@@ -4,18 +4,23 @@
 // their way. "See All" opens the section's full card view (the
 // collection screen).
 
+import { appleMusicLink, catalogCard } from './applemusic.js';
 import { bind, fromTemplate, slot } from './bind.js';
 import { SORTS, coversFor, playlistSongs } from './board.js';
+import { appleMusicOn, homeRowCards, request as requestCatalog } from './catalog.js';
 import { featuredFor, headingOf, KINDS } from './featured.js';
 import { isList, listData, listSongs, registerList } from './lists.js';
 import { makeStop } from './focus.js';
 import { store } from './store.js';
-import { sized, toTrack } from './tracks.js';
+import { sized, steadyPick, toTrack, withCatalogPlays } from './tracks.js';
 
 const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '');
 
 // The Browse module's categories unless its "sorts" setting says otherwise.
 const DEFAULT_SORTS = ['artist', 'album', 'top-100', 'most-played'];
+// A Browse card that isn't a board sort: Apple Music (catalog.js), shown
+// only while the owner has it switched on.
+const APPLE_MUSIC = 'apple-music';
 
 const BROWSE_DESCRIPTIONS = {
   title: 'Every song',
@@ -27,17 +32,6 @@ const BROWSE_DESCRIPTIONS = {
   'most-played': 'Played most here',
 };
 
-// One of a list, the same for the same key all through each half hour --
-// across re-renders and reloads -- and a different one the next. For
-// pictures that change on their own (Browse and Shortcut covers).
-export function steadyPick(list, key) {
-  if (!list.length) return undefined;
-  const text = `${key}|${Math.floor(Date.now() / 1800000)}`;
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
-  return list[(h >>> 0) % list.length];
-}
-
 // A Browse card with no picture from the theme shows a cover from its own
 // songs, changing every half hour.
 function randomCover(sort) {
@@ -45,6 +39,7 @@ function randomCover(sort) {
 }
 
 function browseCard(sort, ctx) {
+  if (sort === APPLE_MUSIC) return appleMusicLink(ctx);
   // A module's playlist among the Browse cards (lists.js): its own name,
   // its first song's cover; opens it on the board.
   if (isList(sort, ctx)) {
@@ -88,7 +83,7 @@ const SECTIONS = {
     title: 'Recents',
     kind: 'song',
     limit: 18,
-    items: tracks => tracks.filter(t => t.last_played_at).sort((a, b) => b.last_played_at - a.last_played_at),
+    items: tracks => withCatalogPlays(tracks).filter(t => t.last_played_at).sort((a, b) => b.last_played_at - a.last_played_at),
     all: { limit: 100, subtitle: n => `The last ${n} played` },
   },
   // "Featured" in the admin: one artist, album, genre or playlist, picked
@@ -139,20 +134,36 @@ const SECTIONS = {
     title: 'Browse',
     kind: 'link',
     limit: Infinity,
-    items: (tracks, ctx, node) => sortsSetting(node, ctx).map(sort => browseCard(sort, ctx)),
+    items: (tracks, ctx, node) => sortsSetting(node, ctx).filter(shown).map(sort => browseCard(sort, ctx)),
     // See All: every way to browse, not just the owner's chosen four.
     all: {
       limit: Infinity,
-      items: (tracks, ctx) => Object.keys(SORTS).map(sort => browseCard(sort, ctx)),
+      items: (tracks, ctx) => [...Object.keys(SORTS), APPLE_MUSIC].filter(shown).map(sort => browseCard(sort, ctx)),
       subtitle: () => 'Every way to browse',
     },
   },
+  // Apple Music's genres (catalog.js), one tile each; a tile opens its
+  // genre screen, See All the Apple Music screen. Hidden while Apple Music
+  // is off.
+  'apple-music': {
+    title: 'Apple Music',
+    kind: 'link',
+    limit: 12,
+    items: (tracks, ctx, node) => homeRowCards(Number(node?.limit) || 12),
+    card: (item, ctx) => catalogCard(item, ctx, 'card:apple-music'),
+    seeAll: ctx => ctx.actions.openAppleMusic(),
+    hidden: () => !appleMusicOn(),
+  },
 };
+
+// Whether a Browse card shows: Apple Music's only while it's switched on.
+const shown = sort => sort !== APPLE_MUSIC || appleMusicOn();
 
 // The "sorts" setting: a comma-separated list, e.g. "artist,genre,top-100";
 // a module's playlist block name ("weather-mix") may be one of them.
 function sortsSetting(node, ctx) {
-  const list = String(node?.sorts || '').split(',').map(s => s.trim()).filter(s => SORTS[s] || (ctx && isList(s, ctx)));
+  const list = String(node?.sorts || '').split(',').map(s => s.trim())
+    .filter(s => SORTS[s] || s === APPLE_MUSIC || (ctx && isList(s, ctx)));
   return list.length ? list : DEFAULT_SORTS;
 }
 
@@ -168,6 +179,7 @@ function cardTemplate(def, type, ctx) {
 
 // One card: a stop, with its colors sampled from its picture.
 function makeCard(item, type, def, template, ctx) {
+  if (def.card) return def.card(item, ctx);
   const card = document.createElement('div');
   card.className = `jb-card jb-card-${def.kind}`;
   card.dataset.artScope = '';
@@ -203,18 +215,24 @@ export function fillSection(el, node, ctx) {
   const limit = Number(node.limit) || def.limit;
   const template = cardTemplate(def, node.type, ctx);
   const seeAll = el.querySelector('[data-stop="see-all"]');
-  const hasSeeAll = !!def.all && !off(node['see-all']);
-  if (seeAll && hasSeeAll) makeStop(seeAll, `see-all:${node.type}`, () => ctx.actions.openCollection(node.type));
+  const hasSeeAll = !!(def.all || def.seeAll) && !off(node['see-all']);
+  // See All opens the section's collection screen, or a screen of its own
+  // (Apple Music's).
+  if (seeAll && hasSeeAll) {
+    makeStop(seeAll, `see-all:${node.type}`, def.seeAll ? () => def.seeAll(ctx) : () => ctx.actions.openCollection(node.type));
+  }
 
   let shown = null;
   const render = () => {
     // A Featured block picks once it's on the page (its place there tells
     // it apart from other Featured blocks).
     if (def.heading && !el.isConnected) return requestAnimationFrame(() => el.isConnected && render());
+    // A row that hides itself (Apple Music's, while it's off).
+    if (def.hidden && el.hidden !== def.hidden()) el.hidden = def.hidden();
     const tracks = store.get('tracks') || [];
     const items = def.items(tracks, ctx, node, el).slice(0, limit);
     // Unchanged: leave the cards be (a focused card keeps its focus).
-    const sig = JSON.stringify(items.map(i => [i.title, i.artist, i.artwork_url, i.label, i.image, i.description]));
+    const sig = JSON.stringify(items.map(i => [i.title, i.artist, i.artwork_url, i.label, i.image, i.image2, i.description]));
     if (sig === shown) return;
     shown = sig;
     bind(el, {
@@ -230,6 +248,16 @@ export function fillSection(el, node, ctx) {
   store.watch(el, 'tracks', render);
   store.watch(el, 'featured', render);
   store.watch(el, 'playlists', render);
+  // Apple Music: its genres, and its switch. Its genres are asked for each
+  // time Home shows (jb-source-helper answers from its kept copy).
+  const appleMusic = node.type === APPLE_MUSIC || (node.type === 'browse' && sortsSetting(node, ctx).includes(APPLE_MUSIC));
+  if (appleMusic) {
+    const want = () => (!ctx.screen || store.get('screen') === ctx.screen) && requestCatalog('genres');
+    store.watch(el, 'helperSettings', () => { render(); want(); });
+    store.watch(el, 'catalogStatus', want);
+    store.watch(el, 'catalogGenres', render);
+    store.watch(el, 'screen', want);
+  }
   // Module playlists among Browse's cards change on their own topics.
   if (node.type === 'browse') {
     for (const s of sortsSetting(node, ctx).filter(s => isList(s, ctx))) {

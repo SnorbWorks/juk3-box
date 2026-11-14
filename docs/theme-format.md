@@ -44,6 +44,8 @@ my-theme/
     all-songs.json
     settings.json
     collection.json   optional: the See All view
+    apple-music.json  optional: the Apple Music screen (see Apple Music)
+    apple-music-genre.json  optional: an Apple Music genre's screen
   blocks/             optional: your own markup for any block or popup
     song-card.html
   theme.css           your styles (required)
@@ -206,6 +208,7 @@ Blocks are what layouts place. The engine fills each one with live data. In a la
 | `image` | A picture from the owner's media library or the theme | `src`, `alt`, `width` (`small`, `medium`, `large`, `full`), `align`, `fit` (`contain`, `cover`) |
 | `spacer` | Empty space | `size` (`small`, `medium`, `large`) |
 | `shortcut` | One card that opens a genre, artist, album, playlist or list; several share a row | `opens` (`genre`, `artist`, `album`, `playlist`, `list`), `which`, `list` (`title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played`), `label`, `picture-from` (`cover`: a cover from what it opens, changing every half hour; `picture`), `picture`, `tint` (a color; also `--jb-tint`), `tint-strength`, `icon`. Markup: `shortcut.html`, classes `.jb-shortcut-*`, inside a `.jb-card` |
+| `apple-music` | Apple Music's genres or charts (see Apple Music). Hidden while Apple Music is off | `show` (`genres`, `top-playlists`, `top-albums`, `top-songs`, `genre`: one genre's top playlists), `which` (a genre id; empty: the overall charts, or on the genre screen that screen's genre), `limit`, `title`, `shape` |
 
 The last four are owner content: what the page builder offers for words and pictures of the owner's own. The engine gives them a plain look (`jb-heading > h2`, `jb-text > p`, `jb-image > img`) that suits a dark theme; style them in your CSS like any block. Each takes a full line inside a flex container, like a paragraph.
 
@@ -244,6 +247,7 @@ Some blocks fit themselves to the space they're given. The engine measures the b
 | `up-next` | `compact`: your sidebar list. `strip` (from 0.6): a row of song cards, as many as fit |
 | `nav` | `compact`: your stacked buttons. `bar` (from 0.6): side by side |
 | `section` | `narrow`, `medium` (from 0.7), `wide` (from 1.15): your design. Narrow and medium show fewer cards across (`--jb-section-across`), and only inside the page builder's rows, columns and grids; in your own containers your design stands |
+| `apple-music` | `tile` (under 0.42): one card that opens the Apple Music screen. `row` (from 0.42): one line of cards, as many as fit. `grid` (from 1.15): all its cards in a grid. The Apple Music screens fix theirs (`"shape": "row"` / `"grid"`) |
 
 The shape a block was designed for (the sidebar's, or a card row's full width) is your theme's own design and gets nothing from the engine. For the wider ones the engine has working defaults in `engine.css`; restyle them with the same selectors, e.g. `jb-now-playing[data-shape="banner"] .jb-np-card { ... }`. Now Playing's template has two elements only those shapes show: `.jb-np-backdrop` (the blurred cover, or the owner's picture, with `data-kind` = `cover`, `picture` or `none`) and `.jb-np-tagline`.
 
@@ -259,6 +263,7 @@ The engine knows these nav buttons. The owner picks which show, and in what orde
 | `volume` | Turn the knob to change the volume |
 | `now-playing` | Opens the Now Playing overlay |
 | `shuffle` | Shuffle on or off |
+| `apple-music` | Opens the Apple Music screen. Shown only while Apple Music is on (Sources › Apple Music); active on the Apple Music and genre screens |
 
 The default order is Home, Volume, Shuffle, All Songs, Settings. `now-playing` can be added as a nav button, but by default Now Playing is the header of the `now-playing` block (its `data-stop="open"`), which opens the overlay; put the block in the same focus group as the nav to keep the knob walking from Settings into it. Labels come from the engine; while shuffle is on, its label reads "Single Play", which is what a click switches to. Icons: see Icons.
 
@@ -279,30 +284,59 @@ Each section is a row of cards. There are two kinds of card:
 | `recents` | Songs played for at least 30 seconds, most recent first | Plays the song |
 | `featured-artist` | **Featured** in the admin: one artist, album, genre or playlist. Settings: `feature` (artist, album, genre, playlist), `from` (any, most-played, recently-added, recently-played, pinned, with `pin` naming it), `every` (minutes between changes, 0 = never), `repeats`. The pick is kept in the browser, so a reload doesn't change it; several Featured blocks never show the same thing at once. Cards get `kicker`, the heading ("Most Played Album") | Opens the board filtered to it |
 | `playlists` | The phone's own playlists (from the deep crawl), with a cover from their songs. Empty playlists are left out | Opens the board on that playlist's songs, in its order |
-| `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played` | Opens the board in that sort |
+| `browse` | Shortcuts to sorts: `title`, `artist`, `album`, `genre`, `playlist`, `top-100`, `most-played`, and `apple-music` (label "Apple Music", "Genres and charts", the Apple Music badge over two genre covers; left out while Apple Music is off) | Opens the board in that sort; `apple-music` opens the Apple Music screen |
+| `apple-music` | Apple Music's genres, one tile each (see Apple Music). Hidden while Apple Music is off, empty (`data-empty`) until the genres arrive | A tile: its genre's screen. See All: the Apple Music screen |
 
 A section's settings:
 
 | Setting | Meaning | Default |
 | --- | --- | --- |
 | `type` | Which section (above) | required |
-| `limit` | How many cards | New 2, Featured Artist 1, Browse all its sorts, Playlists 12, Recents 18 |
-| `title` | Its heading | New, Featured Artist, Browse, Playlists, Recents |
+| `limit` | How many cards | New 2, Featured Artist 1, Browse all its sorts, Playlists 12, Recents 18, Apple Music 12 |
+| `title` | Its heading | New, Featured Artist, Browse, Playlists, Recents, Apple Music |
 | `sorts` | Browse only: which categories, comma-separated, e.g. `"artist,genre,top-100"` | `artist,album,top-100,most-played` |
-| `see-all` | Show See All in its header | `true` (New, Browse, Playlists, Recents) |
+| `see-all` | Show See All in its header | `true` (New, Browse, Playlists, Recents, Apple Music) |
 | `show` | `false` hides the row | `true` |
 
 See All (`data-stop="see-all"` in `section.html`) opens the `collection` screen, the section's full page, like a WordPress archive: every Browse category, the last 100 played, or every new song, as cards. A theme lays that screen out in `layouts/collection.json`; without one, the engine uses a header plus the cards.
 
 The Home sections area should scroll (`overflow-y: auto`): when the knob moves to a card below the fold, the engine scrolls it smoothly into view, and back to the top when the highlight returns to rest.
 
+Apple Music's See All opens the Apple Music screen instead.
+
 More section types will come with later format versions and plugins. A theme that doesn't style a new type gets the engine's plain look for it.
+
+### Apple Music
+
+When the owner's phone has an Apple Music subscription, the jukebox can browse Apple Music itself: its genres and its charts (top playlists, albums and songs, overall or for one genre). It all comes through the Juk3box Helper app ([contracts/apple-music.md](contracts/apple-music.md)). Everything Apple Music shows only while the owner has it switched on (Sources › Apple Music): the nav button, the Browse card, the Home row and the block hide themselves while it's off, so a layout that includes them still looks right.
+
+Two screens of its own, each a layout you may provide; without one the engine uses its own (a header, then the blocks below):
+
+| Screen | Default layout | Back |
+| --- | --- | --- |
+| `apple-music` | A `top-bar` (focus `top`) with the `header`; then a `jb-apple-music-sections` container (focus `apple-music`) with `{"block": "apple-music", "show": "top-playlists", "shape": "row", "limit": 12}` and `{"block": "apple-music", "show": "genres", "shape": "grid"}` | The previous screen |
+| `apple-music-genre` | The same header, then `top-playlists` (row), `top-albums` (row) and `top-songs` (grid), each without `which`: they show the genre the screen was opened for | Always the Apple Music screen |
+
+The engine's default classes are `jb-apple-music-screen` (both screens; the genre screen adds `jb-apple-music-genre`) and `jb-apple-music-sections` (scrolls; the knob brings a card below the fold into view). Neon's layouts add `apple-music` and `apple-music-genre`.
+
+The header on these screens has the Apple Music badge: `header.html` gets `badge` ("Apple Music"), `badgeIcon` and `kicker` ("Streaming from Shawn's App" on the Apple Music screen, "Genre" on a genre's), and an empty `subtitle`; elsewhere `badge` is empty, so `data-if="badge"` hides it.
+
+Every card is a knob stop, in reading order, like Home's:
+
+- A **genre** tile (`genre-tile.html`, in a `.jb-card.jb-card-genre`): `label` (its name), `image` (its #1 chart playlist's cover), `openIcon`. Opens the genre screen.
+- A **playlist** or **album** (`catalog-card.html`, in a `.jb-card.jb-card-catalog`; its first element is the square cover, so a theme's card rim can go on the cover only): `label`, `description` (the curator, or the album's artist), `image`, `rank` and `rankLabel` ("#1"; chart playlists only), `explicit`. Opens its songs on the song board: the header reads "Apple Music · Rock Hits"; the keypad and the knob pick from it as usual, and Back returns to the screen it was opened from.
+- A **song** (`catalog-song.html`, in a `.jb-card.jb-card-catalog-song`): the track fields, `rank`, `rankLabel` ("1"), `explicit`, `playIcon`. Picks it, exactly like a song card on Home: it plays now if nothing is playing, else joins the queue.
+- The **Apple Music card** (the Browse card, and the block's `tile` shape; `link-card-apple-music.html` if you have one, else `link-card.html`, in a `.jb-card.jb-card-link.jb-card-apple-music`): a link card with `badge`, `badgeIcon` and a second picture, `image2` (`.jb-link-collage` shows the two side by side). Opens the Apple Music screen.
+
+The block (`apple-music.html`, the element `<jb-apple-music>`) has `title`, `data-slot="cards"`, and a message: `message` ("Loading…", or why there's nothing, e.g. "Couldn't load this from Apple Music"), `detail`, `loading` (a spinner). When Apple Music isn't available it says why: "Connect your phone", "Update the Juk3box Helper app" or "This phone has no Apple Music subscription"; only the first block on a screen does, with `data-unavailable`, and the others stay empty. A block with nothing to show has `data-empty` (the engine hides it). A row sizes its cards by your CSS: the engine's default is a grid of `repeat(auto-fill, minmax(var(--jb-am-min), 1fr))`, and the cards past its first line are hidden (so they're no knob stops). Set `--jb-am-min` on `jb-apple-music` (the engine's: `19vh`, `40vh` for `show="top-songs"`) to choose how many fit.
+
+The Apple Music badge's red, `#fa2d48`, is Apple's; keep it as it is.
 
 ### Icons
 
 Juk3box bundles open-source icon sets in [Iconify](https://iconify.design)'s format, starting with [Lucide](https://lucide.dev) (ISC license). They live on the jukebox, so they work offline. More sets can be added as files (and later downloaded from jb-admin).
 
-Every button the engine draws has an icon name: `home`, `volume`, `all-songs`, `settings`, `now-playing`, `shuffle`, `shuffle-on` (while shuffle is on), `back`, `page-prev`, `page-next`, `see-all`, `card-open`, `play`, `favorite`, `close`, `connection`, `dropdown`. For each, the engine uses the first of:
+Every button the engine draws has an icon name: `home`, `volume`, `all-songs`, `settings`, `now-playing`, `shuffle`, `shuffle-on` (while shuffle is on), `back`, `page-prev`, `page-next`, `see-all`, `card-open`, `play`, `favorite`, `close`, `connection`, `dropdown`, `apple-music` (the nav button and the Apple Music badge). For each, the engine uses the first of:
 
 1. A file in your theme: `assets/icons/<name>.svg` (or PNG, WebP).
 2. Your choice in theme.json: `"icons": {"home": "lucide:house"}`. Any icon in a bundled set, as `set:name`.
@@ -345,10 +379,12 @@ Every block has default markup. To change it, put a file in `blocks/`:
 | `popup-now-playing.html` | The Now Playing overlay: `song`, `artist`, `album`, `year`, `cover`, `elapsed`, `length`, `favorite`, `favoriteLabel`, and stops `favorite` and `close` |
 | `popup-phones.html` | The phone badge's popup: `name`, `status` |
 | `popup-power.html` | The power menu (hold Reset 4 s, or 1 s with nothing playing): `message`, `countdown`, and stops `reboot`, `shutdown` and `cancel`. The knob starts on `cancel` |
-| `header.html` | The screen header: `title`, `subtitle`, `canGoBack`, and the stop `back` |
+| `header.html` | The screen header: `title`, `subtitle`, `canGoBack`, and the stop `back`; on the Apple Music screens also `badge`, `badgeIcon`, `kicker` |
 | `connection.html` | The phone badge: `status`, `name`, `icon`, `moreIcon` |
 | `page-info.html` | The board's page info: `sort`, `filter`, `page`, `pages` |
 | `pager-button.html` | Each pager button: `label`, `icon` (from `assets/icons/page-prev`, `page-next`, `page-up`) |
+| `apple-music.html` | The Apple Music block's frame: `title`, `data-slot="cards"`, `message`, `detail`, `loading` |
+| `genre-tile.html`, `catalog-card.html`, `catalog-song.html` | Apple Music's genre tiles, playlists and albums, and songs (see Apple Music) |
 
 A section can use its own card markup by type: `song-tile-new.html` overrides `song-tile.html` for the New section only.
 
@@ -398,7 +434,7 @@ A **track** (song cards, song tiles, queue, now playing):
 
 **Now playing** adds `elapsed` (e.g. 1:12) and `state` (`playing`, `paused`, `stopped`).
 
-A **link card** has `label` (e.g. "Most Played"), `description` and `image`. Browse cards take their image from the theme, named after the sort: `assets/browse/most-played.jpg` (JPG, PNG or WebP). Without one, the card shows a random cover from that sort's own songs, changing every 30 minutes. Featured artist cards use a cover from that artist.
+A **link card** has `label` (e.g. "Most Played"), `description` and `image`; the Apple Music card also `image2`, `badge` and `badgeIcon`. Browse cards take their image from the theme, named after the sort: `assets/browse/most-played.jpg` (JPG, PNG or WebP). Without one, the card shows a random cover from that sort's own songs, changing every 30 minutes. Featured artist cards use a cover from that artist.
 
 A **section** has `title` (e.g. "New") and `count`, the number of cards in it. An empty section (nothing new yet, nothing played yet) has `data-empty`; hide it or show a message, your choice.
 
@@ -423,8 +459,11 @@ The engine sets attributes; style them in your CSS.
 | Board slot | `data-empty` | No song in this slot |
 | Board slot | `data-entry` | Its letter has been pressed, waiting for a digit |
 | Now playing | `data-state` | `playing`, `paused` or `stopped` |
-| Section | `data-type` | `new`, `recents`, `featured-artist`, `browse`, `playlists` |
+| Section | `data-type` | `new`, `recents`, `featured-artist`, `browse`, `playlists`, `apple-music` |
 | Section | `data-empty` | No cards (e.g. no new songs yet) |
+| `<jb-apple-music>` | `data-empty` | Nothing to show (hidden by the engine) |
+| `<jb-apple-music>` | `data-unavailable` | Saying why Apple Music isn't available |
+| Apple Music card | `data-kind` | `genre`, `playlist`, `album` or `song` |
 | `<html>` | `data-screen` | Current screen name |
 | `<html>` | `data-mode` | `select`, or a knob mode such as `volume` |
 | `<html>` | `data-phone` | `connected` or `disconnected` |

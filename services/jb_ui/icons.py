@@ -41,6 +41,8 @@ DEFAULT_ICONS = {
     "close": "lucide:x",
     "connection": "lucide:audio-lines",
     "dropdown": "lucide:chevron-down",
+    # The Apple Music nav button and the Apple Music badge.
+    "apple-music": "lucide:music-4",
 }
 
 

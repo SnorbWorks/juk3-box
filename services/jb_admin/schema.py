@@ -17,6 +17,7 @@ NAV_LABELS = {
     "all-songs": "All Songs",
     "settings": "Settings",
     "now-playing": "Now Playing button",
+    "apple-music": "Apple Music",   # the Apple Music screen (docs/contracts/apple-music.md)
 }
 
 SCHEMA = {
@@ -24,7 +25,8 @@ SCHEMA = {
         "type": "order", "label": "Navigation buttons", "group": "Screen", "modules_label": "Modules",
         "help": "Which buttons show in the cabinet's navigation bar, top to bottom. The first is where the knob rests. The Now Playing button opens the full-screen Now Playing view, which the Now Playing card's heading opens too.",
         "modules_help": "What shows below the buttons, top to bottom: the Now Playing card, Up Next, and modules that can go in the navigation bar. They always come after the buttons.",
-        "options": [{"value": b, "label": NAV_LABELS[b], "kind": "button"} for b in NAV_BUTTONS],
+        "options": [{"value": b, "label": NAV_LABELS.get(b, b.replace("-", " ").capitalize()), "kind": "button"}
+                    for b in NAV_BUTTONS],
         "default": DEFAULT_NAV,
     },
     "idle_home_minutes": {

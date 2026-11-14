@@ -1,10 +1,11 @@
 import asyncio
+import hashlib
 import json
 import logging
 
 from aiohttp.test_utils import TestClient, TestServer
 
-from services.jb_source_helper import main as helper_main, protocol, source
+from services.jb_source_helper import catalog, main as helper_main, protocol, source
 from services.jb_source_helper.phones import Challenge, Phones
 from services.jb_source_helper.source import Helper
 
@@ -59,11 +60,11 @@ class App:
         await self.ws.send_str(protocol.message(type_, payload, id_))
 
 
-def run(tmp_path, check, wake=None):
+def run(tmp_path, check, wake=None, fetch=None):
     async def go():
         bus = RecordingBus()
         helper = Helper(bus, Phones(tmp_path / "phones.json"), tmp_path, logging.getLogger("t"),
-                        "jb1", "Juk3box", wake)
+                        "jb1", "Juk3box", wake, **({"fetch": fetch} if fetch else {}))
         await helper.start()
         client = TestClient(TestServer(helper_main.make_app(helper)))
         await client.start_server()
@@ -74,12 +75,12 @@ def run(tmp_path, check, wake=None):
     asyncio.run(go())
 
 
-async def connect(client, token=None, device="dev-1"):
+async def connect(client, token=None, device="dev-1", features=None):
     app = App(await client.ws_connect("/helper"))
     hello = await app.get()
     assert hello["type"] == "hello" and hello["payload"]["jukeboxId"] == "jb1"
     await app.send("client_hello", {"deviceId": device, "deviceName": "Alex's iPhone", "appVersion": "0.1",
-                                    "token": token})
+                                    "token": token, **({"features": features} if features else {})})
     return app
 
 
@@ -91,8 +92,8 @@ async def send_library(app, request):
     await app.send("ack", {}, request["id"])
 
 
-async def pair(client, helper, bus, device="dev-1"):
-    app = await connect(client, device=device)
+async def pair(client, helper, bus, device="dev-1", features=None):
+    app = await connect(client, device=device, features=features)
     challenge = await app.get()
     assert challenge["type"] == "pair_challenge"
     code = bus.last("pairing")["code"]
@@ -349,4 +350,278 @@ def test_the_owner_renames_a_phone_and_the_jukebox(tmp_path):
         assert renamed == ["The Bar Box"] and bus.last("settings")["name"] == "The Bar Box"
         assert (tmp_path / "airplay.env").read_text() == 'JB_AIRPLAY_NAME="The Bar Box"\n'
         assert not bus.last("settings")["ble"]
+    run(tmp_path, check)
+
+
+# Apple Music (docs/contracts/apple-music.md) ---------------------------------
+
+ART = "https://is1-ssl.mzstatic.com/image/thumb/{}/600x600bb.jpg"
+GENRES = {"storefront": "us", "genres": [
+    {"id": "21", "name": "Rock", "playlist": {"id": "pl.rock", "name": "Rock Hits", "curator": "Apple Music Rock",
+                                             "artworkUrl": ART.format("rock")}},
+    {"id": "14", "name": "Pop", "playlist": {"id": "pl.pop", "name": "Pop Hits", "curator": "Apple Music Pop",
+                                            "artworkUrl": ART.format("pop")}},
+    {"id": "20", "name": "Alternative", "playlist": None},
+]}
+CHARTS = {
+    "playlists": [{"id": "pl.rock", "name": "Rock Hits", "curator": "Apple Music Rock", "artworkUrl": ART.format("rock")}],
+    "albums": [{"id": "a1", "name": "The Resistance", "artist": "Muse", "explicit": False, "artworkUrl": ART.format("a1")},
+               {"id": "a2", "name": "Rude", "artist": "X", "explicit": True, "artworkUrl": ART.format("a2")}],
+    "songs": [{"id": "1440833098", "title": "Uprising", "artist": "Muse", "album": "The Resistance",
+               "genre": "Alternative", "duration": 304.8, "explicit": False, "artworkUrl": ART.format("a1")},
+              {"id": "s2", "title": "Rude Song", "artist": "X", "album": "Rude", "explicit": True,
+               "artworkUrl": "http://evil.example.com/x.jpg"}],
+}
+
+
+class FakeFetch:
+    """Apple's image servers: a small JPEG per link."""
+
+    def __init__(self):
+        self.urls = []
+
+    async def __call__(self, url):
+        self.urls.append(url)
+        if "huge" in url:
+            return b"\xff\xd8" + b"0" * (3 * 1024 * 1024)
+        return b"\xff\xd8" + url.encode()
+
+
+async def nothing_from(app, wait=0.2):
+    try:
+        m = await asyncio.wait_for(app.ws.receive(), wait)
+    except asyncio.TimeoutError:
+        return True
+    raise AssertionError(f"the app was sent {m.data}")
+
+
+async def catalog_phone(client, helper, bus, features=("catalog",), subscribed=True):
+    """A paired app phone that's the source, its library read."""
+    app, _ = await pair(client, helper, bus, features=list(features) if features else None)
+    await send_library(app, await app.get())
+    await app.get()                                           # request_artwork
+    await app.send("music_status", {"authorization": "authorized", "canPlay": True, "canPlayCatalog": subscribed})
+    await asyncio.sleep(0.05)
+    return app
+
+
+async def answer(helper, app, cmd, type_, result):
+    """jb-core's catalog cmd; the app answers the command it's sent."""
+    task = asyncio.create_task(helper.command({"action": "catalog", **cmd}))
+    m = await app.get()
+    assert m["type"] == type_
+    await app.send("ack", result, m["id"])
+    await task
+    return m
+
+
+def cover_of(url):
+    return f"/covers/{hashlib.sha1(url.encode()).hexdigest()}.jpg"
+
+
+def test_apple_music_is_off_until_the_owner_turns_it_on_and_needs_a_subscribed_new_app(tmp_path):
+    async def check(client, helper, bus):
+        assert bus.last("catalog/status") == {"v": 1, "on": False, "available": False, "reason": "off", "storefront": None}
+        assert bus.last("settings")["apple_music"] == {"on": False, "clean": False, "genres": None, "refresh_hours": 24}
+        await helper.command({"action": "settings", "apple_music": {"on": True, "refresh_hours": 5}})
+        assert bus.last("settings")["apple_music"]["on"] and bus.last("settings")["apple_music"]["refresh_hours"] == 24
+        assert bus.last("catalog/status")["reason"] == "no_phone"
+        app = await catalog_phone(client, helper, bus, features=None)          # the App Store 1.0 app
+        assert bus.last("catalog/status")["reason"] == "app_update"
+        await helper.command({"action": "catalog", "what": "genres"})
+        assert await nothing_from(app)                                         # never sent catalog commands
+        assert bus.last("catalog/genres") == {"v": 1, "at": None, "state": "error", "reason": "app_update"}
+        # A catalog pick on it fails without reaching the app.
+        await helper.command({"action": "play_item", "item_path": "helper:dev-1/catalog:1", "title": "X"})
+        assert bus.last("play-error")["reason"] == "not_playable"
+        assert await nothing_from(app)
+    run(tmp_path, check)
+
+
+def test_no_subscription_says_so(tmp_path):
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True}})
+        await catalog_phone(client, helper, bus, subscribed=False)
+        assert bus.last("catalog/status") == {"v": 1, "on": True, "available": False, "reason": "no_subscription",
+                                              "storefront": None}
+    run(tmp_path, check)
+
+
+def test_apple_music_lists_come_from_the_app_with_their_covers_and_are_kept(tmp_path):
+    fetch = FakeFetch()
+
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True}})
+        app = await catalog_phone(client, helper, bus)
+        assert bus.last("catalog/status")["available"]
+        await answer(helper, app, {"what": "genres"}, "catalog_genres", GENRES)
+        states = [p["state"] for t, p in bus.sent if t == f"{TOPIC}/catalog/genres"]
+        assert states == ["loading", "ready"]
+        g = bus.last("catalog/genres")
+        assert [x["name"] for x in g["genres"]] == ["Rock", "Pop", "Alternative"]
+        assert g["genres"][0]["cover"] == cover_of(ART.format("rock")) and g["genres"][2]["cover"] is None
+        assert g["genres"][0]["playlist"] == {"id": "pl.rock", "name": "Rock Hits", "curator": "Apple Music Rock",
+                                              "cover": cover_of(ART.format("rock"))}
+        assert (tmp_path / "artwork" / cover_of(ART.format("rock"))[len("/covers/"):]).read_bytes().startswith(b"\xff\xd8")
+        assert bus.last("catalog/status")["storefront"] == "us"
+        # Asked again: the kept copy, at once, without the phone.
+        await helper.command({"action": "catalog", "what": "genres"})
+        assert await nothing_from(app) and bus.last("catalog/genres")["state"] == "ready"
+        # The owner's genres, in the owner's order (unknown ids skipped); every genre stays in "all".
+        await helper.command({"action": "settings", "apple_music": {"genres": ["14", "99", "21"]}})
+        g = bus.last("catalog/genres")
+        assert [x["id"] for x in g["genres"]] == ["14", "21"] and [x["id"] for x in g["all"]] == ["21", "14", "20"]
+
+        m = await answer(helper, app, {"what": "charts", "genre": "21"}, "catalog_charts", CHARTS)
+        assert m["payload"] == {"genre": "21", "limit": 25}
+        c = bus.last("catalog/charts/21")
+        assert c["state"] == "ready" and c["genre"] == {"id": "21", "name": "Rock"}
+        assert [a["id"] for a in c["albums"]] == ["a1", "a2"]
+        assert c["songs"][0] == {"title": "Uprising", "artist": "Muse", "album": "The Resistance", "genre": "Alternative",
+                                 "artwork_url": cover_of(ART.format("a1")), "item_path": "helper:dev-1/catalog:1440833098",
+                                 "duration_ms": 304800, "explicit": False, "catalog": True}
+        assert c["songs"][1]["artwork_url"] is None                           # not Apple's image servers
+        assert not [u for u in fetch.urls if "evil" in u]
+        # Clean versions only: explicit albums and songs go, from every list.
+        await helper.command({"action": "settings", "apple_music": {"clean": True}})
+        c = bus.last("catalog/charts/21")
+        assert [a["id"] for a in c["albums"]] == ["a1"] and [s["title"] for s in c["songs"]] == ["Uprising"]
+
+        m = await answer(helper, app, {"what": "items", "kind": "playlist", "id": "pl.rock"}, "catalog_items",
+                         {"id": "pl.rock", "name": "Rock Hits", "artist": None, "artworkUrl": ART.format("rock"),
+                          "songs": CHARTS["songs"]})
+        assert m["payload"] == {"kind": "playlist", "id": "pl.rock"}
+        items = bus.last("catalog/items/playlist/pl.rock")
+        assert items["name"] == "Rock Hits" and items["cover"] == cover_of(ART.format("rock"))
+        assert [s["title"] for s in items["songs"]] == ["Uprising"]
+        # Each list on disk, one file per topic.
+        assert {p.name for p in (tmp_path / "catalog").glob("*.json")} >= {
+            "genres.json", "charts-21.json", "items-playlist-pl.rock.json"}
+        # Bad requests are ignored.
+        await helper.command({"action": "catalog", "what": "items", "kind": "song", "id": "x"})
+        await helper.command({"action": "catalog", "what": "charts", "genre": "a/#"})
+        assert await nothing_from(app)
+    run(tmp_path, check, fetch=fetch)
+
+
+def test_a_catalog_song_plays_with_its_cover_on_now_playing(tmp_path):
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True}})
+        app = await catalog_phone(client, helper, bus)
+        await answer(helper, app, {"what": "charts"}, "catalog_charts", CHARTS)
+        assert bus.last("catalog/charts/all")["genre"] is None
+        # A track another phone listed plays on the phone that has the jukebox.
+        pick = asyncio.create_task(helper.command({"action": "play_item", "item_path": "helper:dev-0/catalog:1440833098",
+                                                   "title": "Uprising"}))
+        play = await app.get()
+        assert play["type"] == "play" and play["payload"] == {"itemId": "catalog:1440833098", "kind": "song"}
+        await app.send("ack", {}, play["id"])
+        await pick
+        await app.send("playback_state", {"itemId": "catalog:1440833098", "state": "playing", "position": 3,
+                                          "duration": 304.8, "title": "Uprising", "artist": "Muse", "album": None})
+        await asyncio.sleep(0.1)
+        np = bus.last("now-playing")
+        assert np["item_path"] == "helper:dev-1/catalog:1440833098" and np["catalog"] is True
+        assert np["artwork_url"] == cover_of(ART.format("a1")) and np["album"] == "The Resistance"
+    run(tmp_path, check, fetch=FakeFetch())
+
+
+def test_a_refresh_that_fails_keeps_the_old_lists_and_old_covers_go_when_no_list_names_them(tmp_path):
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True}})
+        app = await catalog_phone(client, helper, bus)
+        (tmp_path / "artwork").mkdir(exist_ok=True)
+        mine = tmp_path / "artwork" / ("c" * 40 + ".jpg")                    # an app upload: not ours to delete
+        mine.write_bytes(b"\xff\xd8")
+        await answer(helper, app, {"what": "charts"}, "catalog_charts", CHARTS)
+        old = tmp_path / "artwork" / (cover_of(ART.format("a2"))[len("/covers/"):])
+        assert old.exists()
+        # Refresh: the app is offline.
+        task = asyncio.create_task(helper.command({"action": "catalog", "what": "charts", "refresh": True}))
+        m = await app.get()
+        assert bus.last("catalog/charts/all")["state"] == "loading" and len(bus.last("catalog/charts/all")["albums"]) == 2
+        await app.send("error", {"reason": "offline", "message": "no internet"}, m["id"])
+        await task
+        c = bus.last("catalog/charts/all")
+        assert c["state"] == "error" and c["reason"] == "offline" and len(c["albums"]) == 2
+        # Again, with a2 gone from the chart and a huge cover for a new album.
+        charts = {**CHARTS, "albums": [CHARTS["albums"][0], {"id": "a3", "name": "Big", "artist": "Y",
+                                                             "artworkUrl": ART.format("huge")}]}
+        await answer(helper, app, {"what": "charts", "refresh": True}, "catalog_charts", charts)
+        c = bus.last("catalog/charts/all")
+        assert c["state"] == "ready" and c["albums"][1]["cover"] is None     # over 2 MB: none
+        await asyncio.sleep(0.1)
+        assert not old.exists() and mine.exists()
+        assert (tmp_path / "artwork" / (cover_of(ART.format("a1"))[len("/covers/"):])).exists()
+    run(tmp_path, check, fetch=FakeFetch())
+
+
+def test_kept_lists_run_out_after_refresh_hours(tmp_path, monkeypatch):
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True, "refresh_hours": 6}})
+        app = await catalog_phone(client, helper, bus)
+        await answer(helper, app, {"what": "genres"}, "catalog_genres", GENRES)
+        later = source.time.time() + 7 * 3600
+        monkeypatch.setattr(catalog.time, "time", lambda: later)
+        await answer(helper, app, {"what": "genres"}, "catalog_genres", GENRES)   # fetched again
+    run(tmp_path, check, fetch=FakeFetch())
+
+
+def test_cover_links_must_be_apples():
+    assert catalog.cover_allowed("https://is1-ssl.mzstatic.com/a.jpg")
+    assert not catalog.cover_allowed("http://is1-ssl.mzstatic.com/a.jpg")
+    assert not catalog.cover_allowed("https://mzstatic.com.evil.net/a.jpg")
+    assert not catalog.cover_allowed("https://evilmzstatic.com/a.jpg")
+    assert not catalog.cover_allowed(None)
+
+
+def test_refresh_now_fetches_the_apple_music_screens_lists_and_marks_the_rest_stale(tmp_path):
+    async def check(client, helper, bus):
+        await helper.command({"action": "settings", "apple_music": {"on": True}})
+        app = await catalog_phone(client, helper, bus)
+        await answer(helper, app, {"what": "charts", "genre": "21"}, "catalog_charts", CHARTS)
+        task = asyncio.create_task(helper.command({"action": "catalog", "what": "all", "refresh": True}))
+        asked = {}
+        for _ in range(2):
+            m = await app.get()
+            asked[m["type"]] = m
+        assert set(asked) == {"catalog_genres", "catalog_charts"} and asked["catalog_charts"]["payload"]["genre"] is None
+        await app.send("ack", GENRES, asked["catalog_genres"]["id"])
+        await app.send("ack", CHARTS, asked["catalog_charts"]["id"])
+        await task
+        assert bus.last("catalog/genres")["state"] == "ready" and bus.last("catalog/charts/all")["state"] == "ready"
+        await answer(helper, app, {"what": "charts", "genre": "21"}, "catalog_charts", CHARTS)   # stale: fetched again
+    run(tmp_path, check, fetch=FakeFetch())
+
+
+def test_the_remote_app_hears_up_next_and_its_skip_reaches_jb_core(tmp_path):
+    async def check(client, helper, bus):
+        app, _ = await pair(client, helper, bus, features=["catalog", "remote"])
+        m = await app.get()                                   # sent when chosen: nothing queued yet
+        assert m["type"] == "up_next" and m["payload"] == {}
+        await app.send("ack", {}, m["id"])
+        await send_library(app, await app.get())
+        await app.get()                                       # request_artwork
+        queue = {"shuffle_active": False, "upcoming": [{"title": "Uprising", "artist": "Muse", "album": "The Resistance",
+                                                        "item_path": "helper:dev-1/i.9"}]}
+        await helper.follow_queue(queue)
+        m = await app.get()
+        assert m["type"] == "up_next"
+        assert m["payload"] == {"title": "Uprising", "artist": "Muse", "album": "The Resistance"}
+        await app.send("ack", {}, m["id"])
+        await helper.follow_queue(queue)                      # unchanged: not sent again
+        await app.send("playback_state", {"itemId": "i.1", "state": "playing", "position": 1, "duration": 164})
+        await app.send("skip", {"itemId": "i.2"})             # a late tap for another song: ignored
+        await app.send("skip", {"itemId": "i.1"})
+        await asyncio.sleep(0.1)
+        skips = [p for t, p in bus.sent if t == "jukebox/jb-core/cmd"]
+        assert skips == [{"action": "skip", "by": "phone"}]
+    run(tmp_path, check)
+
+
+def test_the_hello_says_the_jukebox_takes_the_remote(tmp_path):
+    async def check(client, helper, bus):
+        app = App(await client.ws_connect("/helper"))
+        hello = await app.get()
+        assert "remote" in hello["payload"]["features"]
     run(tmp_path, check)

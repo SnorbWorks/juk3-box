@@ -21,7 +21,7 @@ KNOWN_BLOCKS = {
     "screen", "logo", "nav", "now-playing", "up-next", "board",
     "section", "page-info", "pager", "header", "connection", "sources", "bluetooth", "helper-app", "drives",
     "wholehome", "display", "collection",
-    "heading", "text", "image", "spacer", "shortcut",
+    "heading", "text", "image", "spacer", "shortcut", "apple-music",
 }
 
 ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

@@ -108,7 +108,24 @@ DEEP_SCHEMA = """
         label TEXT,
         last_seen REAL
     );
+    -- Apple Music songs played here (docs/contracts/apple-music.md): not the
+    -- owner's library, so never in tracks (the song list, New, Shuffle), but
+    -- they count in Recents and Most Played. Keyed by Apple's song id: the
+    -- same song from either phone is one song. The rest is the Track the
+    -- screen picked, as jb-source-helper's now-playing carries it.
+    CREATE TABLE IF NOT EXISTS catalog_plays (
+        song_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        artist TEXT, album TEXT, genre TEXT, artwork_url TEXT,
+        item_path TEXT,
+        duration_ms INTEGER,
+        play_count INTEGER DEFAULT 0,
+        last_played_at REAL
+    );
 """
+
+# Apple Music songs published for Recents and Most Played: the most recent.
+CATALOG_PLAYS_SHOWN = 200
 
 
 # A sync smaller than this fraction of the stored library is treated as a
@@ -766,6 +783,7 @@ class Snapshots:
         self._last_playlists: str | None = None
         self._last_albums: str | None = None
         self._last_drives: str | None = None
+        self._last_catalog: str | None = None
         # Whose music: the connected phone's, else the last one in use.
         # Only one phone's library at a time -- another phone's songs
         # can't be played on this one.
@@ -842,6 +860,12 @@ class Snapshots:
             await self.bus.publish("jukebox/jb-library/drives-in", {"drives": [
                 {"id": d["id"], "label": d["label"], "song_count": d["song_count"]}
                 for d in drives["drives"] if d["attached"] and d["song_count"]]}, retain=True)
+        # Apple Music songs played here: beside the library, never in it.
+        played = {"v": 1, "tracks": read_catalog_plays(self.conn)}
+        serialized = json.dumps(played)
+        if serialized != self._last_catalog:
+            await self.bus.publish("jukebox/jb-library/catalog-plays", played, retain=True)
+            self._last_catalog = serialized
 
 
 async def enrichment_loop(snapshots: Snapshots, wake: asyncio.Event, lastfm_key: str | None, log) -> None:
@@ -1011,6 +1035,10 @@ class PlayTracker:
                 or np.get("status") != "playing" or pos < PLAY_COUNT_THRESHOLD_MS):
             return False
         self._counted = True
+        return self.record(title, np)
+
+    def record(self, title: str, np: dict) -> bool:
+        """One play of what's playing, in the library."""
         dup = self._which_copy(title, np.get("artist"))
         if dup is None:
             return False
@@ -1036,6 +1064,51 @@ class PlayTracker:
             if artist and stored_artist and stored_artist.casefold() == artist.casefold():
                 return dup
         return rows[0][0]
+
+
+class CatalogPlays(PlayTracker):
+    """Counts plays of Apple Music songs (jb-source-helper's now-playing with
+    an item_path "helper:<device>/catalog:<id>"), the same way, into
+    catalog_plays instead of the library."""
+
+    def __init__(self, conn: sqlite3.Connection, log):
+        super().__init__(conn, log)
+        self.mac = "catalog"            # any phone: the song is Apple's, not a library's
+
+    def record(self, title: str, np: dict) -> bool:
+        path = str(np.get("item_path") or "")
+        song_id = path.rpartition("/catalog:")[2] if "/catalog:" in path else ""
+        if not song_id:
+            return False
+        duration = np.get("duration_ms")
+        self.conn.execute(
+            """
+            INSERT INTO catalog_plays (song_id, title, artist, album, genre, artwork_url, item_path, duration_ms,
+                                       play_count, last_played_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ON CONFLICT(song_id) DO UPDATE SET
+                title = excluded.title, artist = COALESCE(excluded.artist, artist),
+                album = COALESCE(excluded.album, album), genre = COALESCE(excluded.genre, genre),
+                artwork_url = COALESCE(excluded.artwork_url, artwork_url), item_path = excluded.item_path,
+                duration_ms = COALESCE(excluded.duration_ms, duration_ms),
+                play_count = play_count + 1, last_played_at = excluded.last_played_at
+            """,
+            (song_id, title, np.get("artist"), np.get("album"), np.get("genre"), np.get("artwork_url"), path,
+             duration if isinstance(duration, int) else None, time.time()))
+        self.conn.commit()
+        self.log.info("counted play: %s (Apple Music)", title)
+        return True
+
+
+def read_catalog_plays(conn: sqlite3.Connection) -> list:
+    """The Apple Music songs played here, newest first, as tracks (with
+    catalog: true) for the screen's Recents and Most Played."""
+    rows = conn.execute(
+        "SELECT title, artist, album, genre, artwork_url, item_path, duration_ms, play_count, last_played_at"
+        " FROM catalog_plays ORDER BY last_played_at DESC LIMIT ?", (CATALOG_PLAYS_SHOWN,)).fetchall()
+    return [{"title": r[0], "artist": r[1], "album": r[2], "genre": r[3], "artwork_url": r[4], "item_path": r[5],
+             "duration_ms": r[6], "play_count": r[7] or 0, "last_played_at": r[8], "catalog": True}
+            for r in rows]
 
 
 async def main() -> None:
@@ -1083,6 +1156,7 @@ async def main() -> None:
         plays = PlayTracker(conn, log)
         drive_plays = PlayTracker(conn, log)   # its mac follows the song playing
         helper_plays = PlayTracker(conn, log)
+        catalog_plays = CatalogPlays(conn, log)   # Apple Music songs, from the helper app
         last_drives: dict = {}
 
         async for topic, payload in messages:
@@ -1141,7 +1215,8 @@ async def main() -> None:
                             snapshots.mac = latest_phone(conn)
                         await snapshots.publish()
                 elif topic.endswith("/now-playing"):
-                    if helper_plays.on_now_playing(payload):
+                    plays_of = catalog_plays if "/catalog:" in str(payload.get("item_path") or "") else helper_plays
+                    if plays_of.on_now_playing(payload):
                         await snapshots.publish()
                 continue
             if topic.endswith("/connected"):

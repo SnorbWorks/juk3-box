@@ -8,6 +8,10 @@ lights treat it the same way; its songs' item_path is
 chose (jukebox/jb-core/source: the cabinet's Sources button), or none while
 a Bluetooth phone has the jukebox. Every paired phone's own state is in
 connected's "phones", for that choice.
+
+Apple Music itself (the catalog: genres, charts) also comes through the
+app, from a phone whose app says it can (client_hello's features); that
+part is in catalog.py (docs/contracts/apple-music.md).
 """
 
 import asyncio
@@ -16,7 +20,7 @@ import time
 from pathlib import Path
 
 from shared.files import write_atomic
-from services.jb_source_helper import protocol
+from services.jb_source_helper import catalog, protocol
 from services.jb_source_helper.phones import Challenge, Phones
 
 TOPIC = "jukebox/jb-source-helper"
@@ -51,14 +55,17 @@ class Session:
         self.ws, self.device_id, self.name = ws, device_id, name
         self.pending: dict[str, asyncio.Future] = {}
         self.chunks: list = []
+        self.features: list = []               # client_hello's: "catalog" = it can browse Apple Music
 
     async def send(self, type_: str, payload: dict | None = None, id_: str | None = None) -> None:
         await self.ws.send_str(protocol.message(type_, payload, id_))
 
 
 class Helper:
-    def __init__(self, bus, phones: Phones, data_dir: Path, log, jukebox_id: str, jukebox_name: str, ble=None):
+    def __init__(self, bus, phones: Phones, data_dir: Path, log, jukebox_id: str, jukebox_name: str, ble=None,
+                 fetch=catalog.fetch_url):
         self.bus, self.phones, self.log = bus, phones, log
+        self.topic = TOPIC
         self.data_dir = data_dir
         self.art_dir = data_dir / "artwork"
         self.jukebox_id, self.jukebox_name = jukebox_id, jukebox_name
@@ -68,6 +75,7 @@ class Helper:
         self.challenge: Challenge | None = None
         self.music: dict = {}                   # device id -> its last music_status
         self.playing: dict | None = None        # the last playback_state, for now-playing
+        self.up_next: dict = {}                 # jb-core's next song, for the app's "Up next"
         self.came_back: dict[str, asyncio.Event] = {}
         self.sync_state = "none"
         self.failed_recently: dict[str, float] = {}
@@ -77,6 +85,7 @@ class Helper:
         self._settings = {**SETTINGS, **self._read("settings.json")}
         if self._settings["name"]:
             self.jukebox_name = self._settings["name"]
+        self.catalog = catalog.Catalog(self, data_dir, fetch)   # `fetch`: a cover's bytes (tests fake it)
 
     # -- files -----------------------------------------------------------
 
@@ -100,6 +109,7 @@ class Helper:
         if s["allow_pairing"] is None:
             s["allow_pairing"] = not self.phones.phones
         s["name"] = self.jukebox_name
+        s["apple_music"] = self.catalog.settings()
         return s
 
     def _save_settings(self, **changes) -> None:
@@ -133,6 +143,8 @@ class Helper:
         }, retain=True)
         await self.bus.publish(f"{TOPIC}/sync", {"state": self.sync_state, "name": name}, retain=True)
         await self.bus.publish(f"{TOPIC}/settings", self.settings(), retain=True)
+        # Apple Music's availability follows all of the above.
+        await self.catalog.publish_status()
 
     async def publish_library(self) -> None:
         d = self.active
@@ -155,6 +167,8 @@ class Helper:
         await self.publish_library()
         await self.publish_pairing()
         await self.bus.publish(f"{TOPIC}/now-playing", protocol.now_playing(self.active, None))
+        await self.catalog.publish_status(force=True)
+        await self.catalog.republish()                  # the kept lists, in case the broker forgot them
 
     # -- a connection ------------------------------------------------------
 
@@ -162,7 +176,8 @@ class Helper:
         """Runs one app connection, from hello to close (main.py's /helper)."""
         await ws.send_str(protocol.message("hello", {
             "jukeboxName": self.jukebox_name, "jukeboxId": self.jukebox_id, "protocolVersions": [protocol.VERSION],
-            "ble": self.ble.uuids() if self.ble else None}))
+            "ble": self.ble.uuids() if self.ble else None,
+            "features": ["remote"]}))
         hello = await self._receive(ws, HELLO_WAIT_S)
         if not hello or hello["type"] != "client_hello":
             return
@@ -179,6 +194,8 @@ class Helper:
                 return
             self._save_settings(allow_pairing=False)    # the next phone needs the owner's say-so
         session = Session(ws, device_id, name)
+        session.features = p.get("features") if isinstance(p.get("features"), list) else []
+        self.catalog.heard_hello(device_id, session.features)
         old = self.sessions.get(device_id)
         if old:
             await old.ws.close()
@@ -192,6 +209,8 @@ class Helper:
         self.log.info("%s connected%s", name, "" if device_id == self.active else " (not the source)")
         await self.publish_state()
         asyncio.create_task(self.sync_library(device_id))
+        if "remote" in session.features and device_id == self.active:
+            asyncio.create_task(self._send_quietly(session, "up_next", self.up_next))
         try:
             async for msg in ws:
                 if msg.type != 1:               # aiohttp WSMsgType.TEXT
@@ -286,7 +305,10 @@ class Helper:
         elif t == "playback_state":
             if session.device_id == self.active:
                 self.playing = p
-                await self.bus.publish(f"{TOPIC}/now-playing", protocol.now_playing(session.device_id, p))
+                np = protocol.now_playing(session.device_id, p)
+                if np["status"] != "stopped":
+                    np = self.catalog.now_playing(np, str(p.get("itemId") or ""))
+                await self.bus.publish(f"{TOPIC}/now-playing", np)
         elif t == "track_ended":
             if session.device_id == self.active:
                 ended = {**protocol.now_playing(session.device_id, None), "ended": True,
@@ -297,7 +319,15 @@ class Helper:
             await self._play_failed(session.device_id, str(p.get("itemId") or ""), str(p.get("reason") or "other"))
         elif t == "music_status":
             self.music[session.device_id] = {k: p.get(k) for k in ("authorization", "canPlay", "canPlayCatalog", "route")}
+            self.catalog.heard_music(session.device_id, p)
             await self.publish_state()
+        elif t == "skip":
+            # The app's Skip: jb-core decides what plays next. Only the
+            # source phone may, and only for the song it's playing now.
+            playing = (self.playing or {}).get("itemId")
+            if session.device_id == self.active and (not p.get("itemId") or p.get("itemId") == playing):
+                self.log.info("%s skipped the song", session.name)
+                await self.bus.publish("jukebox/jb-core/cmd", {"action": "skip", "by": "phone"})
         else:
             self.log.debug("ignoring %s from %s", t, session.name)
 
@@ -436,6 +466,7 @@ class Helper:
                 if s:
                     await s.ws.close()
                 (self.data_dir / f"library-{device_id}.json").unlink(missing_ok=True)
+                self.catalog.forget(device_id)
                 if self.active == device_id:
                     self.active = None
                     self.sync_state = "none"
@@ -456,8 +487,17 @@ class Helper:
             if self.active:
                 self.log.info("syncing %s's library again, in full", self.phones.name_of(self.active))
                 await self.sync_library(self.active, full=True)
+        elif action == "catalog":
+            await self.catalog.request(cmd)
         elif action == "settings":
             changes = {k: bool(cmd[k]) for k in ("allow_pairing", "ble") if k in cmd}
+            refilter = False
+            if isinstance(cmd.get("apple_music"), dict):
+                old = self.catalog.settings()
+                new = catalog.clean_settings(cmd["apple_music"], old)
+                if new != old:
+                    changes["apple_music"] = new
+                    refilter = (new["clean"], new["genres"]) != (old["clean"], old["genres"])
             name = clean_name(cmd.get("name")) if "name" in cmd else None
             if name and name != self.jukebox_name:
                 changes["name"] = self.jukebox_name = name
@@ -469,12 +509,37 @@ class Helper:
                 self.log.info("settings: %s", changes)
                 await self.ble_update()
             await self.publish_state()
+            if refilter:
+                await self.catalog.republish()          # the lists with the new filters
+
+    async def catalog_command(self, device_id: str | None, type_: str, payload: dict, timeout: float) -> dict:
+        """One of the app's catalog_* commands, on that phone (woken if
+        asleep); its answer. Never sent to an app without the feature."""
+        if not device_id:
+            raise CommandError("no_phone")
+        if not self.catalog.can_browse(device_id):
+            raise CommandError("app_update")
+        s = await self.session_for(device_id)
+        return await self._command(s, type_, payload, timeout=timeout)
 
     def _write_airplay_name(self, name: str) -> None:
         """jb-airplay's speaker name (its unit reads this file; jb-admin
         restarts it), so the AirPlay picker and the app agree."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         write_atomic(self.data_dir / "airplay.env", f'JB_AIRPLAY_NAME="{name}"\n')
+
+    async def follow_queue(self, queue: dict) -> None:
+        """jukebox/jb-core/queue: tell the source phone's app what's next
+        (helper-protocol.md, "Remote"). Sent only when it changes."""
+        upcoming = (queue or {}).get("upcoming") or []
+        first = upcoming[0] if upcoming and isinstance(upcoming[0], dict) else {}
+        nxt = {k: first.get(k) for k in ("title", "artist", "album")} if first.get("title") else {}
+        if nxt == self.up_next:
+            return
+        self.up_next = nxt
+        s = self.sessions.get(self.active) if self.active else None
+        if s and "remote" in s.features:
+            asyncio.create_task(self._send_quietly(s, "up_next", nxt))
 
     async def follow_choice(self, source: dict) -> None:
         """jukebox/jb-core/source: the phone jb-core chose. One of ours, or
@@ -494,6 +559,8 @@ class Helper:
         self.log.info("the source is now %s", self.phones.name_of(want) if want else "not the app")
         for d, s in self.sessions.items():
             asyncio.create_task(self._send_quietly(s, "set_active", {"active": d == want}))
+            if d == want and "remote" in s.features:
+                asyncio.create_task(self._send_quietly(s, "up_next", self.up_next))
         await self.publish_state()
         await self.publish_library()
         if want:
@@ -505,6 +572,14 @@ class Helper:
             await self.bus.publish(f"{TOPIC}/play-error", {"item_path": path, "title": title, "reason": "not_found"})
             return
         device_id, item_id = split
+        if item_id.startswith("catalog:"):
+            # An Apple Music song is the same on any phone: the one that has
+            # the jukebox plays it, even if another phone's app listed it.
+            device_id = self.active or device_id
+            if not self.catalog.can_browse(device_id):
+                self.log.warning("%s: this phone's app can't play Apple Music songs (too old)", path)
+                await self._play_failed(device_id, item_id, "not_playable", title)
+                return
         try:
             s = await self.session_for(device_id)
             self.log.info("playing %s", path)

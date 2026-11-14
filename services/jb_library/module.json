@@ -5,7 +5,7 @@
   "description": "Keeps the phone's songs, playlists and albums with cover art, play counts and favorites.",
   "version": "1.0.0",
   "roles": ["source"],
-  "publishes": ["jukebox/jb-library/tracks", "jukebox/jb-library/playlists", "jukebox/jb-library/albums"],
+  "publishes": ["jukebox/jb-library/tracks", "jukebox/jb-library/playlists", "jukebox/jb-library/albums", "jukebox/jb-library/catalog-plays"],
   "subscribes": ["jukebox/jb-library/cmd", "jukebox/jb-source-phone/crawl-result", "jukebox/jb-source-phone/now-playing", "jukebox/jb-source-local/library", "jukebox/jb-source-local/now-playing"],
   "commands": ["favorite"],
   "settings": "jb-library",

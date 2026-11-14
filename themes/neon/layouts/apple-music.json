@@ -1,0 +1,12 @@
+{
+  "class": "apple-music jb-apple-music-screen",
+  "children": [
+    { "class": "top-bar", "focus": "top", "children": [
+      { "block": "header" }
+    ]},
+    { "class": "jb-apple-music-sections", "focus": "apple-music", "children": [
+      { "block": "apple-music", "show": "top-playlists", "shape": "row", "limit": 12 },
+      { "block": "apple-music", "show": "genres", "shape": "grid" }
+    ]}
+  ]
+}

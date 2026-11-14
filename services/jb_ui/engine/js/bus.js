@@ -28,6 +28,10 @@ const HANDLERS = {
   'jukebox/jb-core/source': s => store.set('source', s),
   'jukebox/jb-source-helper/connected': h => store.set('helper', h),
   'jukebox/jb-source-helper/settings': s => store.set('helperSettings', s),
+  // Apple Music (catalog.js): whether it can be browsed now, and its genres.
+  // The charts and a playlist's or album's songs are watched as they're needed.
+  'jukebox/jb-source-helper/catalog/status': s => store.set('catalogStatus', s),
+  'jukebox/jb-source-helper/catalog/genres': g => store.set('catalogGenres', g),
   // New covers from the app landed: tiles drawn before them load them now.
   'jukebox/jb-source-helper/artwork': a => store.set('coversAt', a.at),
   'jukebox/jb-library/drives-in': d => store.set('drivesIn', d.drives || []),
@@ -36,6 +40,12 @@ const HANDLERS = {
   'jukebox/jb-library/tracks': lib => {
     store.set('library', libraryIndex(lib.tracks || []));
     store.set('tracks', lib.tracks || []);
+  },
+  // Apple Music songs played here (jb-library): they join Recents and Most
+  // Played only, never the song list. Views draw from 'tracks', so redraw them.
+  'jukebox/jb-library/catalog-plays': p => {
+    store.set('catalogPlays', p.tracks || []);
+    if (store.get('tracks')) store.set('tracks', store.get('tracks'));
   },
   'jukebox/jb-library/playlists': p => store.set('playlists', p.playlists || []),
   'jukebox/jb-library/albums': a => store.set('albums', a),
@@ -115,13 +125,25 @@ function activity() {
   store.set('activity', Date.now());
 }
 
-// Topics blocks from modules show (installed-modules.md): each message is kept
-// in the store as "topic:<topic>".
+// Topics blocks from modules show (installed-modules.md), and Apple Music's
+// lists (catalog.js): each message is kept in the store as "topic:<topic>".
+// `tick` names a store key also set on every message, for a block that
+// shows whichever of several topics.
 const extra = new Set();
-export function watchTopic(topic) {
+const ticks = new Map();   // topic -> store key
+export function watchTopic(topic, tick) {
+  if (tick) ticks.set(topic, tick);
   if (extra.has(topic) || HANDLERS[topic]) return;
   extra.add(topic);
   if (client?.connected) client.subscribe(topic);
+}
+
+// Stop watching a topic and forget its message (a long list no longer shown).
+export function unwatchTopic(topic) {
+  if (!extra.delete(topic)) return;
+  if (client?.connected) client.unsubscribe(topic);
+  store.set(`topic:${topic}`, undefined);
+  ticks.delete(topic);
 }
 
 export function publish(topic, payload) {
@@ -151,7 +173,10 @@ export function connectBus() {
     // cost that message only.
     try {
       if (HANDLERS[topic]) HANDLERS[topic](JSON.parse(payload.toString()));
-      else if (extra.has(topic)) store.set(`topic:${topic}`, payload.length ? JSON.parse(payload.toString()) : null);
+      else if (extra.has(topic)) {
+        store.set(`topic:${topic}`, payload.length ? JSON.parse(payload.toString()) : null);
+        if (ticks.has(topic)) store.set(ticks.get(topic), Date.now());
+      }
     } catch (e) {
       console.error('bad message on', topic, e);
     }

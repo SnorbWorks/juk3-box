@@ -80,6 +80,10 @@ def test_owner_nav_settings_are_cleaned():
     assert main.owner_settings({"nav": ["settings", "bogus", "home", "home"]})["nav"] == ["settings", "home"]
     assert main.owner_settings({"nav": ["bogus"]})["nav"] == main.DEFAULT_NAV
     assert main.owner_settings({"nav": "home"})["nav"] == main.DEFAULT_NAV
+    # Apple Music's button is one the owner can add (it hides itself while
+    # Apple Music is off); it isn't in the default bar.
+    assert main.owner_settings({"nav": ["home", "apple-music"]})["nav"] == ["home", "apple-music"]
+    assert "apple-music" not in main.DEFAULT_NAV
 
 
 def test_nav_modules_come_after_every_button():

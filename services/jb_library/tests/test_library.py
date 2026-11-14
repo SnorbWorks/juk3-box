@@ -513,3 +513,34 @@ def test_bluetooth_songs_borrow_the_apps_looked_up_genre_too(db):
     asyncio.run(snaps.publish())
     shown = snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]
     assert [(t["title"], t["genre"]) for t in shown] == [("Days of Wine", "Vocal")]
+
+
+# -- Apple Music songs (docs/contracts/apple-music.md) ------------------------
+
+def test_an_apple_music_song_counts_in_recents_and_most_played_but_never_joins_the_library(db):
+    import asyncio
+    helper = "helper:dev-1"
+    lib.store_helper(db, helper, [{"title": "Moon River", "artist": "Andy Williams", "item_path": f"{helper}/i.1"}], [])
+    snaps = lib.Snapshots(FakeBus(), db, Log())
+    snaps.mac = helper
+    plays = lib.CatalogPlays(db, Log())
+    np = {"title": "Uprising", "artist": "Muse", "album": "The Resistance", "genre": "Alternative",
+          "artwork_url": "/covers/" + "a" * 40 + ".jpg", "item_path": f"{helper}/catalog:1440833098",
+          "duration_ms": 304800, "status": "playing", "catalog": True}
+    plays.on_now_playing({**np, "position_ms": 1000})
+    assert not plays.on_now_playing({**np, "position_ms": 20_000})          # not 30 s yet
+    assert plays.on_now_playing({**np, "position_ms": 31_000})
+    assert not plays.on_now_playing({**np, "position_ms": 40_000})          # once per playthrough
+    plays.on_now_playing({**np, "position_ms": 1000})                       # played again
+    assert plays.on_now_playing({**np, "item_path": "helper:dev-2/catalog:1440833098", "position_ms": 31_000})
+    asyncio.run(snaps.publish())
+    assert [t["title"] for t in snaps.bus.sent["jukebox/jb-library/tracks"]["tracks"]] == ["Moon River"]
+    played = snaps.bus.sent["jukebox/jb-library/catalog-plays"]
+    assert played["v"] == 1 and len(played["tracks"]) == 1
+    t = played["tracks"][0]
+    assert {k: t[k] for k in ("title", "artist", "album", "artwork_url", "item_path", "play_count", "catalog")} == {
+        "title": "Uprising", "artist": "Muse", "album": "The Resistance", "artwork_url": "/covers/" + "a" * 40 + ".jpg",
+        "item_path": "helper:dev-2/catalog:1440833098", "play_count": 2, "catalog": True}
+    assert t["last_played_at"] and t["duration_ms"] == 304800
+    # A library song's now-playing isn't Apple Music's to count.
+    assert not lib.CatalogPlays(db, Log()).record("Moon River", {"item_path": f"{helper}/i.1"})

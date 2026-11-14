@@ -654,6 +654,9 @@ body.builder-open .content { min-height: 0; display: flex; }
 .source-link:hover { border-color: var(--accent); }
 .source-link > .icon:last-child { color: var(--text-3); }
 .source-phone + .source-phone { padding-top: 10px; border-top: 1px solid var(--line); }
+/* Sources > Apple Music: each genre with its tile's cover. */
+.am-cover { width: 32px; height: 32px; flex: none; border-radius: 6px; object-fit: cover; background: var(--surface-2); }
+.order-item.off .am-cover { opacity: .45; }
 
 /* Setup page: what the wizard knows. */
 .setup-summary { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }

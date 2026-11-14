@@ -87,7 +87,9 @@ def read_settings(path: Path) -> dict:
 # Nav buttons the engine knows (docs/theme-format.md, "Nav buttons").
 # "now-playing" is a nav button an owner can add (it opens the Now Playing
 # overlay), but by default the header of the Now Playing card does that.
-NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playing")
+# "apple-music" opens the Apple Music screen; it hides itself while Apple
+# Music is off (docs/contracts/apple-music.md).
+NAV_BUTTONS = ("home", "volume", "shuffle", "all-songs", "settings", "now-playing", "apple-music")
 # A block below the buttons in the navigation bar: "block:<block id>".
 NAV_BLOCK_PREFIX = "block:"
 # The engine's own blocks that can go there (besides modules' blocks).

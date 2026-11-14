@@ -212,3 +212,29 @@ def test_block_patterns_are_valid_layouts():
         problems, warnings = themes.check_layout("home", p["tree"])
         assert problems == [] and warnings == [], (p["label"], problems, warnings)
         assert "children" in p["tree"]
+
+
+def test_apple_music_screens_and_block_are_in_the_schema():
+    here = Path(__file__).resolve().parents[1]
+    schema = json.loads((here / "block_schema.json").read_text())
+    # The page builder's screen picker labels the two new screens.
+    assert {"apple-music", "apple-music-genre"} <= set(schema["layouts"])
+    block = schema["blocks"]["apple-music"]
+    assert [o["value"] for o in block["settings"]["show"]["options"]] == [
+        "genres", "top-playlists", "top-albums", "top-songs", "genre"]
+    section = schema["blocks"]["section"]["settings"]
+    assert "apple-music" in [o["value"] for o in section["type"]["options"]]
+    assert "apple-music" in [o["value"] for o in section["sorts"]["options"]]
+    # The engine's own default layouts name the block's real settings.
+    js = (here / "engine" / "js" / "main.js").read_text()
+    assert "DEFAULT_APPLE_MUSIC_LAYOUT" in js and "DEFAULT_APPLE_MUSIC_GENRE_LAYOUT" in js
+
+
+def test_neon_apple_music_layouts_are_valid():
+    shipped = Path(__file__).resolve().parents[3] / "themes"
+    theme = themes.load_theme("neon", [shipped])
+    for name in ("apple-music", "apple-music-genre"):
+        assert name in theme.layouts
+        problems, warnings = themes.check_layout(name, theme.layouts[name])
+        assert problems == [] and warnings == [], (name, problems, warnings)
+    assert not theme.warnings
