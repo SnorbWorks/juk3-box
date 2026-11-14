@@ -816,6 +816,41 @@ jb-screen > [data-parked] { opacity: 0; pointer-events: none; }
 }
 @keyframes jb-sync-spin { to { transform: rotate(360deg); } }
 
+/* The song board while its songs are on their way (an Apple Music playlist
+   or album, or a phone album jb-crawl is fetching): dimmed, with a spinner
+   and "Loading songs…" over it, so it's plain something is happening.
+   No blur: a plain dim is cheap on the Pi; only the spinner moves. */
+jb-board { position: relative; }
+jb-board[data-loading]::before {
+  content: "Loading songs…";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 16vmin;
+  border-radius: 1.2vh;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  font-size: 3vmin;
+  font-weight: 700;
+}
+jb-board[data-loading]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 6;
+  width: 9vmin;
+  height: 9vmin;
+  margin: -6vmin 0 0 -4.5vmin;
+  border-radius: 50%;
+  border: 1vmin solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  animation: jb-sync-spin 1s linear infinite;
+}
+
 /* The cabinet during setup (setup.js): Juk3box's own look whatever the
    theme, as on the setup page (docs/Setup Wizard — Plan.md, "The look").
    Under the popups (a pairing code must show), over the page. */
