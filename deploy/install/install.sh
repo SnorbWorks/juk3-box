@@ -20,7 +20,7 @@ HOME_DIR=$(getent passwd "$JB_USER" | cut -d: -f6)
 BOOT=/boot/firmware
 IMAGE=${JB_IMAGE_BUILD:-}
 SERVICES="jb_admin jb_analyzer jb_core jb_display jb_input jb_library jb_source_helper jb_source_local jb_source_phone jb_ui"
-OWN_UNITS="jb-audio jb-crawl jb-lights jb-netwatch jb-airplay"
+OWN_UNITS="jb-audio jb-crawl jb-lights jb-netwatch jb-nqptp jb-airplay"
 
 say() { echo "== $*"; }
 die() { echo "install.sh: $*" >&2; exit 1; }
@@ -86,6 +86,14 @@ install -o root -g root -m 0755 "$REPO"/deploy/bluez/bluetoothd-* /usr/local/lib
 install -o root -g root -m 0755 "$REPO/deploy/bluez/jb-bluetoothd" /usr/local/sbin/
 install -D -o root -g root -m 0644 "$REPO/deploy/systemd/bluetooth.service.d/50-juk3box-bluez.conf" \
   /etc/systemd/system/bluetooth.service.d/50-juk3box-bluez.conf
+
+say "AirPlay: the AirPlay 2 receiver (deploy/airplay)"
+# Our Shairport Sync with AirPlay 2 and NQPTP, its clock; jb-airplay runs it,
+# or Raspberry Pi OS's classic shairport-sync when it can't (deploy/airplay/README.md).
+install -d -m 0755 /usr/local/lib/juk3-box/airplay
+install -o root -g root -m 0755 "$REPO"/deploy/airplay/shairport-sync-[0-9]* /usr/local/lib/juk3-box/airplay/shairport-sync
+install -o root -g root -m 0755 "$REPO"/deploy/airplay/nqptp-[0-9]* /usr/local/lib/juk3-box/airplay/nqptp
+install -o root -g root -m 0755 "$REPO/deploy/airplay/jb-airplay" /usr/local/sbin/
 
 say "Overflow swap"
 # A card that has made its data partition keeps the swap there
@@ -157,5 +165,8 @@ systemctl enable mosquitto jb-modctl.path jb-setupctl.path jb-update.timer jb-up
   jb-update-boot.service jb-rootfs-data.service $SWAP_UNIT >/dev/null
 for s in $SERVICES; do systemctl enable "$(echo "$s" | tr _ -)" >/dev/null; done
 for u in $OWN_UNITS; do systemctl enable "$u" >/dev/null; done
+# AirPlay 2's clock now, so the receiver restarted after an update finds it
+# (jb-airplay runs classic without it).
+[ -n "$IMAGE" ] || systemctl start jb-nqptp.service || echo "install.sh: NQPTP didn't start: AirPlay stays classic" >&2
 
 say "Done. Reboot to start the jukebox: sudo reboot"

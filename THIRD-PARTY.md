@@ -17,6 +17,8 @@ every month (`.github/workflows/check-updates.yml`).
 | Fonts: Bebas Neue, Courier Prime, Inter, Nunito, Oswald, Playfair Display, Righteous | Oct 2026 | SIL Open Font License 1.1 | `services/jb_ui/engine/fonts/` |
 | The Neon theme's concert video and pictures | | Made for this project; covered by its license | `themes/neon/assets/` |
 | BlueZ's bluetoothd, rebuilt from Raspberry Pi OS's bluez source package with the jukebox's AVRCP fixes; its source, the fixes and how it's built are next to it | 5.82-1.1+rpt2 | GPL-2.0-or-later | `deploy/bluez/` |
+| Shairport Sync, built with AirPlay 2 (the AirPlay receiver); its release source and how it's built are next to it | 5.6.3 | MIT and other permissive licenses (per file; `LICENSES-shairport-sync.txt`) | `deploy/airplay/` |
+| NQPTP, AirPlay 2's network clock; its release source and how it's built are next to it | 1.2.9 | GPL-2.0 | `deploy/airplay/` |
 
 Each one's license text is next to it.
 
@@ -47,7 +49,7 @@ Installed by `deploy/install/install.sh`, updated by Raspberry Pi OS, not by thi
 | Mosquitto | The message bus between the services | 2.0.21 | EPL-2.0 or EDL-1.0 |
 | PipeWire, WirePlumber | Sound | 1.4.2, 0.5.8 | MIT, LGPL-2.1+ |
 | BlueZ | Bluetooth (phones) | 5.82 | GPL-2.0+, LGPL-2.1+ |
-| Shairport Sync | AirPlay receiver | 4.3.7 | MIT |
+| Shairport Sync | AirPlay receiver, classic (the fallback when the AirPlay 2 build can't run) | 4.3.7 | MIT |
 | Chromium | Shows the song board | 152 | BSD-3-Clause and others |
 | Sway, seatd | The screen's window manager | 1.10.1, 0.9.1 | MIT, LGPL-2.1+ |
 | FFmpeg, mpv | Video and audio decoding | 7.1.5, 0.40.0 | LGPL-2.1+ |

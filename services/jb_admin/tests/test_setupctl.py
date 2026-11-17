@@ -128,3 +128,26 @@ def test_bluez_switches_bluetoothd_and_restarts_what_registers_with_it(monkeypat
     assert ctl.cmd_bluez("fixed") == "fixed"
     assert not ctl.BLUEZ_STOCK.exists() and not ctl.BLUEZ_FAILED.exists()   # ours gets another go
     assert ctl.PERSIST["bluez"] == ["/etc/juk3-box"]     # the choice outlives a restart
+
+
+def test_airplay_takes_ap2_or_classic_only():
+    for bad in (["airplay"], ["airplay", "maybe"], ["airplay", "ap2", "now"]):
+        with pytest.raises(ctl.Refused):
+            ctl.dispatch(bad)
+
+
+def test_airplay_switches_the_receiver(monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(ctl, "run", lambda *cmd, **kw: ran.append(cmd))
+    monkeypatch.setattr(ctl, "ETC", tmp_path / "etc")
+    monkeypatch.setattr(ctl, "AIRPLAY_CLASSIC", tmp_path / "etc" / "airplay-classic")
+    monkeypatch.setattr(ctl, "AIRPLAY_FAILED", tmp_path / "failed")
+    assert ctl.cmd_airplay("classic") == "classic"
+    assert ctl.AIRPLAY_CLASSIC.exists()
+    assert ran == [("systemctl", "restart", "jb-airplay.service")]
+    ran.clear()
+    ctl.AIRPLAY_FAILED.write_text("exit-code\n")
+    assert ctl.cmd_airplay("ap2") == "ap2"
+    assert not ctl.AIRPLAY_CLASSIC.exists() and not ctl.AIRPLAY_FAILED.exists()   # AirPlay 2 gets another go
+    assert ran == [("systemctl", "start", "jb-nqptp.service"), ("systemctl", "restart", "jb-airplay.service")]
+    assert ctl.PERSIST["airplay"] == ["/etc/juk3-box"]     # the choice outlives a restart

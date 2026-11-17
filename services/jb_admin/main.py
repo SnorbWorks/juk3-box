@@ -531,7 +531,7 @@ class Admin:
         return {"current": s.get("current"), "latest": s.get("latest"), "available": bool(s.get("available")),
                 "checked_at": s.get("checked_at"), "updated_at": s.get("updated_at"), "phase": phase,
                 "phase_at": s.get("phase_at"), "starting": updates.starting(self.updates.asked.get("juk3box"), phase, s),
-                "error": s.get("error"), "note": s.get("note"),
+                "error": s.get("error"), "note": s.get("note"), "airplay_upstream": s.get("airplay_upstream"),
                 "auto": not (isinstance(auto, dict) and auto.get("auto") is False)}
 
     # The Updates tab (updates.py): everything that updates, in one place.

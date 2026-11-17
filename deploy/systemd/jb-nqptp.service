@@ -1,0 +1,23 @@
+# NQPTP: the network clock AirPlay 2 needs (deploy/airplay). jb-airplay runs
+# the AirPlay 2 receiver only while this runs. It listens on the PTP ports
+# (319, 320), which need CAP_NET_BIND_SERVICE; it runs as admin, so the
+# receiver (also admin) can read the clock it shares in /dev/shm/nqptp.
+# Install: deploy/install/install.sh
+[Unit]
+Description=juk3-box AirPlay 2 clock (NQPTP)
+After=network-online.target
+Before=jb-airplay.service
+
+[Service]
+Type=simple
+User=admin
+ExecStart=/usr/local/lib/juk3-box/airplay/nqptp
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+Nice=-10
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

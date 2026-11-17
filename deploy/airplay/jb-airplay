@@ -1,0 +1,58 @@
+#!/bin/sh
+# The jukebox's AirPlay receiver, as jb-airplay.service starts it: our AirPlay 2
+# build (deploy/airplay) when it can run, otherwise Raspberry Pi OS's own
+# shairport-sync (classic AirPlay). Classic is what iPhones played to before
+# v0.4.2; the Apple TV only plays Apple Music to AirPlay 2.
+#
+#   jb-airplay              start it (ExecStart; the speaker's name from
+#                           $JB_AIRPLAY_NAME, else the config's)
+#   jb-airplay --stopped    after it stopped (ExecStopPost, as root): when the
+#                           AirPlay 2 build failed, classic runs until the next
+#                           start of the Pi
+#
+# Classic instead when:
+#   - /etc/juk3-box/airplay-classic exists (jb-setupctl airplay classic);
+#   - AirPlay 2 failed since the Pi started (/run/jb-airplay.failed);
+#   - NQPTP, AirPlay 2's clock (jb-nqptp), isn't running;
+#   - our build can't find its libraries (an OS update replaced one).
+# Installed root-owned in /usr/local/sbin (deploy/install/install.sh), with the
+# builds in /usr/local/lib/juk3-box/airplay.
+
+BUILDS=/usr/local/lib/juk3-box/airplay
+CONF=/opt/juk3-box/deploy/airplay
+STOCK=/usr/bin/shairport-sync
+CHOSEN_CLASSIC=/etc/juk3-box/airplay-classic
+FAILED=/run/jb-airplay.failed
+# Written as AirPlay 2 starts: the unit's RuntimeDirectory, admin's.
+RUNNING_AP2=/run/jb-airplay/ap2
+
+if [ "${1:-}" = --stopped ]; then
+  # systemd's account of the stop: "success" unless it crashed or failed.
+  # Only an AirPlay 2 run that failed counts (classic failing isn't ours to fix).
+  if [ -n "${SERVICE_RESULT:-}" ] && [ "$SERVICE_RESULT" != success ] && [ -e "$RUNNING_AP2" ]; then
+    echo "$SERVICE_RESULT" > "$FAILED"
+  fi
+  rm -f "$RUNNING_AP2"
+  exit 0
+fi
+
+classic() {
+  echo "jb-airplay: classic AirPlay (Raspberry Pi OS's shairport-sync): $1" >&2
+  exec "$STOCK" -c "$CONF/shairport-sync.conf" ${JB_AIRPLAY_NAME:+-a "$JB_AIRPLAY_NAME"}
+}
+
+ours=$BUILDS/shairport-sync
+if [ ! -x "$ours" ]; then
+  classic "no AirPlay 2 build installed"
+elif [ -e "$CHOSEN_CLASSIC" ]; then
+  classic "as chosen ($CHOSEN_CLASSIC)"
+elif [ -e "$FAILED" ]; then
+  classic "AirPlay 2 stopped with \"$(cat "$FAILED")\" since the Pi started"
+elif ! systemctl is-active --quiet jb-nqptp.service; then
+  classic "NQPTP (jb-nqptp) isn't running"
+elif ldd "$ours" 2>/dev/null | grep -q "not found"; then
+  classic "the AirPlay 2 build is missing a library: $(ldd "$ours" | grep "not found" | head -1 | xargs)"
+fi
+echo "jb-airplay: AirPlay 2 ($("$ours" -V 2>&1 | cut -d- -f1))" >&2
+touch "$RUNNING_AP2" 2>/dev/null || true
+exec "$ours" -c "$CONF/shairport-sync-ap2.conf" ${JB_AIRPLAY_NAME:+-a "$JB_AIRPLAY_NAME"}

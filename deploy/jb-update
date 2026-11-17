@@ -90,6 +90,7 @@ import urllib.request
 from pathlib import Path
 
 LATEST_URL = "https://github.com/SnorbWorks/juk3-box/releases/latest/download/latest.json"
+AIRPLAY_RELEASES = "https://api.github.com/repos/mikebrady/shairport-sync/releases/latest"
 REPO = Path("/opt/juk3-box")
 PREV = Path("/opt/juk3-box.prev")
 NEW = Path("/opt/juk3-box.new")
@@ -504,7 +505,18 @@ def check() -> dict:
     if not version_key(v):
         return state(current=current, checked_at=time.time(), error="The release list didn't make sense.")
     return state(current=current, latest=v, latest_date=latest.get("date"), available=newer(v, current),
-                 checked_at=time.time(), error=None, note=None, release=latest)
+                 checked_at=time.time(), error=None, note=None, release=latest, airplay_upstream=airplay_upstream())
+
+
+def airplay_upstream() -> str | None:
+    """The newest Shairport Sync release, for the admin's "newer version is
+    out" note by the AirPlay receiver (deploy/airplay). Only a note: a newer
+    one reaches the jukebox in a Juk3box release, built and tested there."""
+    try:
+        tag = json.loads(fetch(AIRPLAY_RELEASES)).get("tag_name")
+    except Exception:
+        return None
+    return tag if isinstance(tag, str) and re.fullmatch(r"\d+(\.\d+)*", tag) else None
 
 
 # Applying --------------------------------------------------------------------

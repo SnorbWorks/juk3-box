@@ -30,6 +30,9 @@ it only ever does these:
     jb-setupctl bluez fixed|stock         which bluetoothd runs (deploy/bluez): the jukebox's
                                           build with its AVRCP fixes, or Raspberry Pi OS's own
                                           (restarts Bluetooth and what registers with it)
+    jb-setupctl airplay ap2|classic       which AirPlay receiver runs (deploy/airplay): the
+                                          jukebox's AirPlay 2 build, or Raspberry Pi OS's classic
+                                          one (restarts the receiver)
     jb-setupctl serve                     answer every waiting request
 
 config.txt is only ever changed inside its own marked block at the end
@@ -84,6 +87,9 @@ BLUEZ_FAILED = Path("/run/jb-bluetoothd.failed")
 # They register with bluetoothd as they start (the pairing agent, the app's
 # Bluetooth LE service), and a restarted bluetoothd has forgotten them.
 BLUEZ_USERS = ("jb-source-phone", "jb-source-helper")
+# deploy/airplay/jb-airplay's choice, and its note that AirPlay 2 failed.
+AIRPLAY_CLASSIC = ETC / "airplay-classic"
+AIRPLAY_FAILED = Path("/run/jb-airplay.failed")
 AVAHI = ("busctl", "call", "org.freedesktop.Avahi", "/", "org.freedesktop.Avahi.Server")
 
 BEGIN = "# --- juk3box setup: written by jb-setupctl (the admin's Setup page); don't edit by hand ---"
@@ -511,6 +517,21 @@ def cmd_bluez(which: str) -> str:
     return which
 
 
+def cmd_airplay(which: str) -> str:
+    """Which AirPlay receiver runs: the jukebox's AirPlay 2 build
+    (deploy/airplay), or Raspberry Pi OS's classic one if it misbehaves.
+    Takes effect now: the receiver restarts (a song playing through it stops)."""
+    if which == "classic":
+        ETC.mkdir(mode=0o755, exist_ok=True)
+        write(AIRPLAY_CLASSIC, "Raspberry Pi OS's classic AirPlay receiver (jb-setupctl airplay classic)\n")
+    else:
+        AIRPLAY_CLASSIC.unlink(missing_ok=True)
+        AIRPLAY_FAILED.unlink(missing_ok=True)   # try AirPlay 2 again
+        run("systemctl", "start", "jb-nqptp.service", check=False)
+    run("systemctl", "restart", "jb-airplay.service")
+    return which
+
+
 def name_taken(name: str) -> bool:
     """Does another device on the network answer to NAME.local? (Avahi gives up after about 5 s.)"""
     try:
@@ -548,7 +569,8 @@ PERSIST = {"timezone": ["/etc/localtime", "/etc/timezone"],
            "lastfm": ["/etc/juk3-box"],
            "hostname": ["/etc/hostname", "/etc/hosts", "/etc/machine-info"],
            "ssh": ["/etc/ssh", "/etc/systemd/system"],
-           "bluez": ["/etc/juk3-box"]}
+           "bluez": ["/etc/juk3-box"],
+           "airplay": ["/etc/juk3-box"]}
 ROOTFS = "/usr/local/sbin/jb-rootfs"
 
 
@@ -586,6 +608,8 @@ def act(a: list[str]) -> str:
         return cmd_ssh(a[1])
     if len(a) == 2 and a[0] == "bluez" and a[1] in ("fixed", "stock"):
         return cmd_bluez(a[1])
+    if len(a) == 2 and a[0] == "airplay" and a[1] in ("ap2", "classic"):
+        return cmd_airplay(a[1])
     if len(a) == 2 and a[0] == "rootfs" and a[1] in ("on", "off"):
         r = run(ROOTFS, a[1], check=False)
         if r.returncode:

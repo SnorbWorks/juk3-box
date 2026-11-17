@@ -155,6 +155,20 @@ def test_whats_inside_a_release_comes_from_its_files():
     assert inside["MQTT.js"]["version"].count(".") == 2 and "CircuitPython" in inside
 
 
+def test_the_airplay_receiver_notes_a_newer_release_but_only_a_newer_one():
+    from services.jb_admin import updates
+    inside = {p["name"]: p for p in updates.included()}
+    ours = inside["Shairport Sync"]["version"]
+    assert inside["Shairport Sync"]["kind"] == "AirPlay 2 receiver" and "newer" not in inside["Shairport Sync"]
+    assert inside["NQPTP"]["version"]
+    same = {p["name"]: p for p in updates.included(airplay_upstream=ours)}
+    assert "newer" not in same["Shairport Sync"]
+    later = {p["name"]: p for p in updates.included(airplay_upstream="99.0")}
+    assert later["Shairport Sync"]["newer"] == "99.0"
+    older = {p["name"]: p for p in updates.included(airplay_upstream="4.3.7")}
+    assert "newer" not in older["Shairport Sync"]
+
+
 def test_the_updates_tab_and_the_dashboards_line(tmp_path, monkeypatch):
     from services.jb_admin import updates
     monkeypatch.setattr(updates, "boot_time", lambda: 1000.0)

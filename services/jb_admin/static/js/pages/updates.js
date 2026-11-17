@@ -294,7 +294,7 @@ function insideCard(u) {
     h('h2', { style: { marginBottom: '6px' } }, 'What\'s inside'),
     h('p.muted', 'These come inside each Juk3box release, tested together, so they update with it and never one by one.'),
     h('dl.setup-summary', { style: { marginTop: '12px' } },
-      u.included.flatMap(p => [h('dt', p.name), h('dd', `${p.version} · ${p.kind}`)])),
+      u.included.flatMap(p => [h('dt', p.name), h('dd', `${p.version} · ${p.kind}${p.newer ? ` · ${p.newer} is out: it comes in a Juk3box update once it's tested` : ''}`)])),
     u.system.length ? h('details.advanced', h('summary', 'From Raspberry Pi OS'),
       h('div.advanced-body', h('dl.setup-summary', u.system.flatMap(p => [h('dt', p.name), h('dd', `${p.version} · ${p.does}`)])))) : null,
     h('p.muted', { style: { marginTop: '12px' } }, 'Licenses: THIRD-PARTY.md in the project.'));

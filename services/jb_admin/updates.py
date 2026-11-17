@@ -38,7 +38,7 @@ NOW_PLAYING = ("now_playing", "now_playing_local", "now_playing_helper")
 # The Raspberry Pi OS programs the jukebox leans on (THIRD-PARTY.md).
 SYSTEM = (("chromium", "Chromium", "Shows the song board"), ("pipewire", "PipeWire", "Sound"),
           ("wireplumber", "WirePlumber", "Sound"), ("bluez", "BlueZ", "Bluetooth"),
-          ("shairport-sync", "Shairport Sync", "AirPlay"), ("mosquitto", "Mosquitto", "The message bus"),
+          ("shairport-sync", "Shairport Sync", "AirPlay, classic (the fallback)"), ("mosquitto", "Mosquitto", "The message bus"),
           ("sway", "Sway", "The screen"), ("ffmpeg", "FFmpeg", "Video and audio"), ("mpv", "mpv", "Video"))
 
 
@@ -127,9 +127,19 @@ def add_key(key: str, home: Path = Path.home()) -> bool:
     return True
 
 
-def included(repo: Path = REPO) -> list[dict]:
-    """What ships inside a Juk3box release, with its version (from the files)."""
+def included(repo: Path = REPO, airplay_upstream: str | None = None) -> list[dict]:
+    """What ships inside a Juk3box release, with its version (from the files).
+    airplay_upstream: the newest Shairport Sync (jb-update's check), noted
+    by the AirPlay receiver when it's newer than ours."""
     out = []
+    for build in sorted((repo / "deploy/airplay").glob("shairport-sync-[0-9]*")):
+        version = build.name.removeprefix("shairport-sync-")
+        item = {"name": "Shairport Sync", "version": version, "kind": "AirPlay 2 receiver"}
+        if airplay_upstream and version_tuple(airplay_upstream) > version_tuple(version):
+            item["newer"] = airplay_upstream
+        out.append(item)
+    for build in sorted((repo / "deploy/airplay").glob("nqptp-[0-9]*")):
+        out.append({"name": "NQPTP", "version": build.name.removeprefix("nqptp-"), "kind": "AirPlay 2's clock"})
     try:
         wanted = {re.split(r"[<>=\[ ]", l.strip())[0].lower()
                   for l in (repo / "deploy/requirements.txt").read_text().splitlines()
@@ -152,6 +162,10 @@ def included(repo: Path = REPO) -> list[dict]:
         if m:
             out.append({"name": "CircuitPython", "version": m.group(1), "kind": "For the keypad board"})
     return out
+
+
+def version_tuple(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:4])
 
 
 def system_versions() -> list[dict]:
@@ -223,7 +237,8 @@ class Updates:
         k = self.keypad_view()
         if self._system is None:
             self._system = system_versions()
-        return {"auto": j["auto"], "juk3box": j, "os": o, "keypad": k, "included": included(),
+        return {"auto": j["auto"], "juk3box": j, "os": o, "keypad": k,
+                "included": included(airplay_upstream=j.get("airplay_upstream")),
                 "system": self._system, "rootfs": rootfs_view(), "ssh": ssh_view(), "announce": self.announcement(j, o, k)}
 
     def quiet(self) -> bool:
