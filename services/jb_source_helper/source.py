@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 from shared.files import write_atomic
-from services.jb_source_helper import catalog, protocol
+from services.jb_source_helper import catalog, protocol, speaker
 from services.jb_source_helper.phones import Challenge, Phones
 
 TOPIC = "jukebox/jb-source-helper"
@@ -51,8 +51,10 @@ class CommandError(Exception):
 class Session:
     """One connected app."""
 
-    def __init__(self, ws, device_id: str, name: str):
+    def __init__(self, ws, device_id: str, name: str, ip: str | None = None):
         self.ws, self.device_id, self.name = ws, device_id, name
+        self.ip = ip                           # where its WebSocket comes from (speaker.py)
+        self.airplay: bool | None = None       # the last `speaker` it was sent
         self.pending: dict[str, asyncio.Future] = {}
         self.chunks: list = []
         self.features: list = []               # client_hello's: "catalog" = it can browse Apple Music
@@ -86,6 +88,8 @@ class Helper:
         if self._settings["name"]:
             self.jukebox_name = self._settings["name"]
         self.catalog = catalog.Catalog(self, data_dir, fetch)   # `fetch`: a cover's bytes (tests fake it)
+        self.airplay_peers = speaker.airplay_peers     # tests fake these two
+        self.neighbours = speaker.neighbours
 
     # -- files -----------------------------------------------------------
 
@@ -172,12 +176,13 @@ class Helper:
 
     # -- a connection ------------------------------------------------------
 
-    async def serve(self, ws) -> None:
-        """Runs one app connection, from hello to close (main.py's /helper)."""
+    async def serve(self, ws, remote: str | None = None) -> None:
+        """Runs one app connection, from hello to close (main.py's /helper).
+        `remote` is the app's address, to match it to an AirPlay sender."""
         await ws.send_str(protocol.message("hello", {
             "jukeboxName": self.jukebox_name, "jukeboxId": self.jukebox_id, "protocolVersions": [protocol.VERSION],
             "ble": self.ble.uuids() if self.ble else None,
-            "features": ["remote"]}))
+            "features": ["remote", "speaker"]}))
         hello = await self._receive(ws, HELLO_WAIT_S)
         if not hello or hello["type"] != "client_hello":
             return
@@ -193,7 +198,7 @@ class Helper:
             if not await self._pair(ws, device_id, name, p.get("model")):
                 return
             self._save_settings(allow_pairing=False)    # the next phone needs the owner's say-so
-        session = Session(ws, device_id, name)
+        session = Session(ws, device_id, name, remote)
         session.features = p.get("features") if isinstance(p.get("features"), list) else []
         self.catalog.heard_hello(device_id, session.features)
         old = self.sessions.get(device_id)
@@ -211,6 +216,7 @@ class Helper:
         asyncio.create_task(self.sync_library(device_id))
         if "remote" in session.features and device_id == self.active:
             asyncio.create_task(self._send_quietly(session, "up_next", self.up_next))
+        asyncio.create_task(self.check_speakers())
         try:
             async for msg in ws:
                 if msg.type != 1:               # aiohttp WSMsgType.TEXT
@@ -278,6 +284,23 @@ class Helper:
         finally:
             self.challenge = None
             await self.publish_pairing()
+
+    # -- is the app's device the AirPlay sender? (speaker.py) ---------------
+
+    async def check_speakers(self) -> None:
+        """Tells each app that asked ("speaker" feature) whether its device is
+        the one sending AirPlay to the jukebox, when that changes."""
+        wanting = [s for s in self.sessions.values() if "speaker" in s.features]
+        if not wanting:
+            return
+        peers = self.airplay_peers()
+        macs = self.neighbours() if peers else {}
+        for session in wanting:
+            hears = speaker.hears(session.ip, peers, macs)
+            if hears != session.airplay:
+                session.airplay = hears
+                self.log.info("%s %s AirPlay to the jukebox", session.name, "is sending" if hears else "isn't sending")
+                asyncio.create_task(self._send_quietly(session, "speaker", {"airplay": hears}))
 
     async def _send_quietly(self, session: Session, type_: str, payload: dict) -> None:
         try:

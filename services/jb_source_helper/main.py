@@ -36,6 +36,7 @@ DEFAULTS = {
     "ble": True,
 }
 MAX_ARTWORK = 2 * 1024 * 1024
+SPEAKER_CHECK_S = 2                  # how often to check who sends AirPlay (speaker.py)
 
 
 def jukebox_id(machine_id: Path = Path("/etc/machine-id")) -> str:
@@ -51,7 +52,7 @@ def make_app(helper: Helper) -> web.Application:
         ws = web.WebSocketResponse(heartbeat=15, max_msg_size=8 * 1024 * 1024)
         await ws.prepare(request)
         try:
-            await helper.serve(ws)
+            await helper.serve(ws, request.remote)
         finally:
             await ws.close()
         return ws
@@ -120,6 +121,16 @@ async def main() -> None:
                 await asyncio.sleep(300)
                 await helper.publish_state()
         asyncio.create_task(refresh())
+
+        async def speakers():
+            # Whether each app's device is the AirPlay sender (speaker.py).
+            while True:
+                await asyncio.sleep(SPEAKER_CHECK_S)
+                try:
+                    await helper.check_speakers()
+                except Exception:
+                    log.exception("couldn't check the AirPlay sender")
+        asyncio.create_task(speakers())
 
         async def run(cmd):
             try:

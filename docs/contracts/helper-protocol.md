@@ -109,3 +109,12 @@ Browsing Apple Music (its genres and charts, not just the owner's library) is an
 - New Pi → app commands `catalog_genres`, `catalog_charts` and `catalog_items`, answered with `ack` (the lists in its payload) or `error`.
 - `play` takes an `itemId` of `catalog:<song id>` for an Apple Music song.
 - `music_status.canPlayCatalog` says whether the phone's subscription can play it.
+
+## The speaker check
+
+The app shows whether its sound reaches the jukebox. An iPhone names the AirPlay speaker it plays to ("Juk3box"), so it can tell by itself; an Apple TV reports every AirPlay output as just "AirPlay", so only the jukebox can say.
+
+- Both sides say they can: the Pi's `hello` carries `"speaker"` in its `features`, the app's `client_hello` carries `"speaker"` in its `features`. Without both, the message below is never sent.
+- **Speaker**, Pi → app command `speaker` `{ "airplay": bool }`; the app `ack`s it. `airplay` is true while the jukebox's AirPlay receiver (jb-airplay) has a connection from the app's device: a device keeps that connection open for as long as it has the jukebox chosen as its speaker, playing or not. Sent once after `welcome`, then whenever it changes (checked every 2 s).
+- The Pi matches the two connections by address, or, since the app may connect over IPv4 and AirPlay over IPv6 (and IPv6 addresses rotate), by the hardware address the neighbour table gives both (`services/jb_source_helper/speaker.py`).
+- The Apple TV app shows Speaker as good only when `airplay` is true; false is "Playing on another AirPlay speaker". The iPhone app keeps going by the speaker's name.
