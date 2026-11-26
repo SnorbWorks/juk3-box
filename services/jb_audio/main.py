@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from shared import config, logging as jb_logging, pipewire as pw
 from shared.bus import Bus
@@ -16,6 +17,8 @@ SOURCES = {
     "jukebox/jb-source-helper/now-playing": "helper",
 }
 PHONE_CONNECTED = "jukebox/jb-source-phone/connected"
+# Which phone has the jukebox: "helper" is the app (its music comes by AirPlay).
+SOURCE = "jukebox/jb-core/source"
 VOLUME_ACTIONS = ("volume_delta",)
 # At boot PipeWire may come up after us: keep trying to put the volume back this long.
 RESTORE_TRIES, RESTORE_EVERY_S = 30, 2.0
@@ -109,26 +112,34 @@ async def set_level(bus: Bus, log, outputs: Outputs, level: float) -> None:
     remember_volume(outputs, (await get_state())["volume"])
 
 
-async def phone_connected(bus: Bus, log, outputs: Outputs, phone: PhoneVolume, payload: dict) -> None:
+async def phone_connected(bus: Bus, log, outputs: Outputs, phone: PhoneVolume, payload: dict,
+                          app_has_it: bool = False) -> None:
     """A phone connecting starts everything at 20%, its slider included; one
     leaving lets go. jb-audio restarting hears the (retained) message again
-    and only picks the phone back up."""
+    and only picks the phone back up. Two Bluetooth connects leave the
+    volume alone: the same phone back within REJOIN_S (its link dropped),
+    and any phone while the app has the jukebox (the music comes by AirPlay;
+    a paired iPhone's Bluetooth just reconnects in the background)."""
     mac = payload.get("mac") if payload.get("connected") else None
     if not mac:
         phone.detach()
-        if outputs.settings.phone:
-            outputs.settings.phone = None
+        last = outputs.settings.phone
+        if last and last.get("left") is None:
+            outputs.settings.phone = {**last, "left": time.time()}
             outputs.settings.clamped().save()
         return
     phone.attach(mac)
     boot = boot_id()
-    if is_new_connection(mac, boot, outputs.settings.phone):
-        outputs.settings.phone = {"mac": mac, "boot": boot}
-        outputs.settings.clamped().save()
+    new = is_new_connection(mac, boot, outputs.settings.phone)
+    outputs.settings.phone = {"mac": mac, "boot": boot, "left": None}
+    outputs.settings.clamped().save()
+    if new and not app_has_it:
         log.info("phone connected: everything at %.0f%%", CONNECT_LEVEL * 100)
         await set_level(bus, log, outputs, CONNECT_LEVEL)
         await phone.follow(CONNECT_LEVEL)
     else:
+        if new:
+            log.info("phone connected while the app has the jukebox: volume left as it is")
         await phone.follow((await get_state())["volume"])
 
 
@@ -191,8 +202,9 @@ async def main() -> None:
         # One subscription per topic, read through one iterator (they share
         # the client's message queue).
         messages = await bus.subscribe(cmd_topic)
-        for topic in (*SOURCES, PHONE_CONNECTED):
+        for topic in (*SOURCES, PHONE_CONNECTED, SOURCE):
             await bus.subscribe(topic)
+        source = {"kind": None}
         await publish_state(bus, log, outputs)
         tasks = [asyncio.create_task(bus.run_heartbeat()), asyncio.create_task(outputs.run()),
                  asyncio.create_task(receivers.run()), asyncio.create_task(restore_volume(bus, log, outputs)),
@@ -205,10 +217,13 @@ async def main() -> None:
                     elif topic in SOURCES:
                         if outputs.source_status(SOURCES[topic], payload.get("status")):
                             await outputs.tick()   # start the feed now, not on the next tick
+                    elif topic == SOURCE:
+                        source["kind"] = ((payload or {}).get("active") or {}).get("kind")
                     elif topic == PHONE_CONNECTED:
                         if not payload.get("connected"):
                             outputs.source_status("phone", None)
-                        await phone_connected(bus, log, outputs, phone, payload)
+                        await phone_connected(bus, log, outputs, phone, payload,
+                                              app_has_it=source["kind"] == "helper")
                 except Exception:
                     log.exception("failed to handle %s: %r", topic, payload)
         finally:

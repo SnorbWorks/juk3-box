@@ -32,6 +32,8 @@ from typing import Awaitable, Callable
 
 AVRCP_MAX = 127
 CONNECT_LEVEL = 0.20         # everything starts here when a phone connects
+# The same phone back within this long is a dropped link, not a new connection.
+REJOIN_S = 600
 STREAM_PREFIX = "bluez_input."
 # A level the phone reports back within this long of us sending it is our own
 # echo, not the owner moving the slider (the knob can turn faster than the
@@ -63,10 +65,20 @@ def transport_path(tree: str, mac: str) -> str | None:
     return m.group(1) if m else None
 
 
-def is_new_connection(mac: str, boot_id: str, last: dict | None) -> bool:
+def is_new_connection(mac: str, boot_id: str, last: dict | None, now: float | None = None) -> bool:
     """A real connect, not jb-audio restarting with the phone still there
-    (the connected message is retained, so a restart hears it again)."""
-    return not last or last.get("mac") != mac or last.get("boot") != boot_id
+    (the connected message is retained, so a restart hears it again), and
+    not the same phone's Bluetooth dropping and coming straight back: an
+    iPhone left paired reconnects on its own, every few minutes in the
+    cabinet (Nov 23: 73 times in five hours), and each one used to put the
+    volume back to 20%."""
+    if not last or last.get("mac") != mac or last.get("boot") != boot_id:
+        return True
+    left = last.get("left")
+    if left is None:
+        return False
+    now = time.time() if now is None else now
+    return now - left > REJOIN_S
 
 
 def stream_volumes(batch: list, names: dict) -> list[tuple[int, float]]:

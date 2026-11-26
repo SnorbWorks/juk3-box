@@ -42,6 +42,15 @@ def test_a_restart_of_jb_audio_isnt_a_new_connection():
     assert pv.is_new_connection("11:22:33:44:55:66", "boot1", {"mac": MAC, "boot": "boot1"})
 
 
+def test_the_same_phone_back_soon_isnt_a_new_connection():
+    # Nov 23: a paired iPhone's Bluetooth dropped and came back 73 times in five hours
+    last = {"mac": MAC, "boot": "boot1", "left": 1000.0}
+    assert not pv.is_new_connection(MAC, "boot1", last, now=1000.0 + 30)
+    assert not pv.is_new_connection(MAC, "boot1", last, now=1000.0 + pv.REJOIN_S)
+    assert pv.is_new_connection(MAC, "boot1", last, now=1000.0 + pv.REJOIN_S + 1)
+    assert pv.is_new_connection("11:22:33:44:55:66", "boot1", last, now=1000.0 + 30)
+
+
 def test_phone_stream_volumes_from_pw_dump_batches():
     names = {}
     assert pv.stream_volumes([stream(90, 0.823), stream(76, 1.0, "juk3box AirPlay")], names) == [(90, 0.823)]
@@ -127,15 +136,28 @@ def test_a_phone_connecting_starts_everything_at_20_percent(monkeypatch, tmp_pat
     log = logging.getLogger("test")
 
     asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": MAC}))
-    assert levels == [0.2] and follows == [0.2] and out.settings.phone == {"mac": MAC, "boot": "boot1"}
+    assert levels == [0.2] and follows == [0.2] and out.settings.phone == {"mac": MAC, "boot": "boot1", "left": None}
     # jb-audio restarting hears the retained message again: no reset, the slider just follows the knob
     asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": MAC}))
     assert levels == [0.2] and follows == [0.2, 0.6]
-    # leaving, then coming back: a new connection
+    # its link dropping and coming straight back: the volume stays
+    clock = [5000.0]
+    monkeypatch.setattr(main.time, "time", lambda: clock[0])
     asyncio.run(main.phone_connected(None, log, out, phone, {"connected": False}))
-    assert phone.mac is None and out.settings.phone is None
+    assert phone.mac is None and out.settings.phone == {"mac": MAC, "boot": "boot1", "left": 5000.0}
+    clock[0] += 20
+    monkeypatch.setattr(pv.time, "time", lambda: clock[0])
+    asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": MAC}))
+    assert levels == [0.2] and follows[-1] == 0.6
+    # gone longer than REJOIN_S, then back: a new connection
+    asyncio.run(main.phone_connected(None, log, out, phone, {"connected": False}))
+    clock[0] += pv.REJOIN_S + 5
     asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": MAC}))
     assert levels == [0.2, 0.2]
+    # a phone's Bluetooth connecting while the app has the jukebox: the volume stays
+    asyncio.run(main.phone_connected(None, log, out, phone, {"connected": True, "mac": "11:22:33:44:55:66"},
+                                     app_has_it=True))
+    assert levels == [0.2, 0.2] and follows[-1] == 0.6
 
 
 def test_the_knobs_level_reaches_the_phone_once_its_link_shows_up(monkeypatch):

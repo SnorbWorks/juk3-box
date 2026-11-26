@@ -81,8 +81,8 @@ class Settings:
     airplay_match: float = 1.0        # the AirPlay speaker's level relative to the cabinet's knob
     volume: float | None = None       # the cabinet's volume as last set, put back at startup (PipeWire
                                       # doesn't remember it for the DAC's stereo-fallback profile)
-    phone: dict | None = None         # {"mac", "boot"} of the phone connected now (phone_volume.py:
-                                      # a restart of jb-audio isn't a new connection)
+    phone: dict | None = None         # {"mac", "boot", "left"} of the phone connected last; "left" is when it
+                                      # dropped (phone_volume.py: a restart or a quick rejoin isn't a new connection)
 
     @property
     def delay_ms(self) -> int:
