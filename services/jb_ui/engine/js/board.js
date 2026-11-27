@@ -265,6 +265,22 @@ export function openCatalog(kind, id, name) {
   changed();
 }
 
+// The songs on the board for the Shuffle button: a list it shows (an Apple
+// Music playlist, a phone playlist, an artist, album or genre, Top 100,
+// Most Played). null on All Songs or a list of artists/albums: shuffle then
+// plays the whole library.
+export function shufflePool() {
+  if (SORTS[state.sort]?.category && !state.filter) return null;
+  if (!state.filter && state.sort === 'title') return null;
+  const tracks = songsFor(store.get('tracks') || [], state.sort, state.filter);
+  if (!tracks.length) return null;
+  const f = state.filter;
+  const key = f ? [f.field, f.kind || '', f.id || '', f.value].join('|') : `sort|${state.sort}`;
+  const from = !f ? SORTS[state.sort]?.label
+    : f.field === 'catalog' ? `Apple Music · ${f.value}` : f.value;
+  return { key, from, tracks };
+}
+
 export function showingCatalog() {
   return state.filter?.field === 'catalog';
 }

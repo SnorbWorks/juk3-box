@@ -1,7 +1,7 @@
 // Juk3box UI engine: loads the active theme and builds the screen from
 // its layouts. Behavior lives here; the look lives in the theme.
 
-import { albumSongs, openCatalog, openFilter, openList, pick, setSort, showingCatalog, upLevel } from './board.js';
+import { albumSongs, openCatalog, openFilter, openList, pick, setSort, showingCatalog, shufflePool, upLevel } from './board.js';
 import { appleMusicOn, genreCard, genres, statusChanged } from './catalog.js';
 import { playList, startAutoplay } from './lists.js';
 import { reloadMissingCovers } from './bind.js';
@@ -242,10 +242,22 @@ function volumeMode() {
   });
 }
 
+// Shuffle plays what the song board shows (an Apple Music playlist, an
+// artist, ...), or the whole library on All Songs. Pressed while shuffling a
+// different list than the board shows, it switches to the board's list;
+// otherwise it turns shuffle off.
 function toggleShuffle() {
-  const on = !!store.get('queue')?.shuffle_active;
+  const q = store.get('queue');
+  const pool = shufflePool();
+  const on = !!q?.shuffle_active;
   // jb-core answers with a new queue state, which updates the button.
-  publish('jukebox/jb-core/cmd', { action: on ? 'shuffle_off' : 'shuffle_on' });
+  if (on && !(pool && pool.key !== q.shuffle_key)) {
+    publish('jukebox/jb-core/cmd', { action: 'shuffle_off' });
+  } else if (pool) {
+    publish('jukebox/jb-core/cmd', { action: 'shuffle_on', tracks: pool.tracks, key: pool.key, from: pool.from });
+  } else {
+    publish('jukebox/jb-core/cmd', { action: 'shuffle_on' });
+  }
 }
 
 // The Now Playing overlay: the song large, over everything, with Favorite

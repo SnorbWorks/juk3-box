@@ -65,6 +65,12 @@ class Queue:
         self.manual: list[dict] = []
         self.shuffle_buffer: list[dict] = []
         self.shuffle_active = False
+        # What shuffle draws from: the songs that were on the song board when
+        # it was turned on (an Apple Music playlist, an artist, ...), or None
+        # for the whole library. shuffle_key/from say which list that was.
+        self.shuffle_pool: list[dict] | None = None
+        self.shuffle_key: str | None = None
+        self.shuffle_from: str | None = None
         self.library_tracks: list[dict] = []
         self.expected_title: str | None = None
         self.last_seen_title: str | None = None
@@ -111,7 +117,8 @@ class Queue:
         return playable(track, self.phone_ready, self.helper_ready)
 
     def refill_shuffle(self) -> None:
-        pool = [t for t in self.library_tracks if self.can_play(t)]
+        source = self.shuffle_pool if self.shuffle_pool else self.library_tracks
+        pool = [t for t in source if self.can_play(t)]
         if not self.shuffle_active or not pool:
             return
         while len(self.shuffle_buffer) < SHUFFLE_BUFFER_TARGET:
@@ -122,6 +129,24 @@ class Queue:
             if self.shuffle_buffer and pick["title"] == self.shuffle_buffer[-1]["title"]:
                 continue  # avoid an immediate repeat
             self.shuffle_buffer.append(pick)
+
+    def shuffle_off(self) -> None:
+        self.shuffle_active = False
+        self.shuffle_buffer = []
+        self.shuffle_pool = self.shuffle_key = self.shuffle_from = None
+
+    def shuffle_on(self, tracks: list | None = None, key: str | None = None,
+                   source: str | None = None) -> None:
+        """Shuffle the songs on the song board (tracks), or the whole library
+        when none are given. Turning it on again with a different list
+        switches to that list: its songs replace the old shuffle picks."""
+        tracks = [t for t in tracks or [] if isinstance(t, dict) and t.get("title")]
+        self.shuffle_pool = tracks or None
+        self.shuffle_key = (key or None) if tracks else None
+        self.shuffle_from = (source or None) if tracks else None
+        self.shuffle_active = True
+        self.shuffle_buffer = []
+        self.refill_shuffle()
 
     def pop_next(self) -> dict | None:
         """The next song that can play now. A phone song with no phone keeps
@@ -195,7 +220,8 @@ async def shuffle_autoplay(bus: Bus, q: Queue, log) -> None:
 async def publish_queue(bus: Bus, q: Queue) -> None:
     await bus.publish(
         "jukebox/jb-core/queue",
-        {"shuffle_active": q.shuffle_active, "upcoming": q.upcoming()},
+        {"shuffle_active": q.shuffle_active, "shuffle_key": q.shuffle_key,
+         "shuffle_from": q.shuffle_from, "upcoming": q.upcoming()},
         retain=True,
     )
 
@@ -261,7 +287,8 @@ async def apply_power(bus: Bus, q: Queue, actions: list, log) -> None:
             log.info("power menu cancelled: resuming")
             await source_action(bus, q, "play")
         elif act == "clear":
-            q.manual, q.shuffle_buffer, q.shuffle_active = [], [], False
+            q.manual = []
+            q.shuffle_off()
             await publish_queue(bus, q)
         elif act == "setup_wifi":
             # jb-netwatch turns the hotspot on (shared/setup_net.py).
@@ -522,7 +549,7 @@ async def main() -> None:
                     # 3,000 songs in two minutes, and Reset couldn't get a
                     # word in). Manual picks keep their place.
                     log.warning("%d picks failed in a row: stopping, shuffle off", q.doctor.in_row)
-                    q.shuffle_active, q.shuffle_buffer = False, []
+                    q.shuffle_off()
                     await report_pick(bus, q, q.doctor.stuck_verdict(), log)
                     await publish_queue(bus, q)
                 else:
@@ -685,16 +712,19 @@ async def main() -> None:
                         else:
                             await publish_queue(bus, q)
                 elif action == "shuffle_on":
-                    q.shuffle_active = True
-                    q.refill_shuffle()
+                    # tracks: the songs on the song board (the kiosk sends
+                    # them when it shows a list: an Apple Music playlist, an
+                    # artist, Top 100 ...); none = the whole library.
+                    q.shuffle_on(payload.get("tracks"), payload.get("key"), payload.get("from"))
+                    log.info("shuffle on: %s (%d songs)", q.shuffle_from or "whole library",
+                             len(q.shuffle_pool or q.library_tracks))
                     await publish_queue(bus, q)
                     if q.shuffle_buffer:   # something it can play (sources.playable)
                         asyncio.create_task(shuffle_autoplay(bus, q, log))
                     else:
                         await explain_wait(bus, q, None, log)
                 elif action == "shuffle_off":
-                    q.shuffle_active = False
-                    q.shuffle_buffer = []
+                    q.shuffle_off()
                     await publish_queue(bus, q)
                 elif action == "skip":
                     # The Helper app's Skip (jb-source-helper passes it on).

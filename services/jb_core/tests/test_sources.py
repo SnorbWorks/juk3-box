@@ -66,3 +66,30 @@ def test_helper_app_songs_go_to_the_helper_source_and_need_it_reachable():
     assert q.pop_next() is None                    # its library is still being read
     q.helper_sync = "ready"
     assert q.pop_next() is HELPER_SONG
+
+
+def _drive(title):
+    return {"title": title, "item_path": f"drive:6AD0/Music/{title}.wav"}
+
+
+def test_shuffle_plays_the_song_boards_list_not_the_library():
+    q = Queue()
+    q.library_tracks = [_drive(f"Lib {i}") for i in range(30)]
+    board = [_drive("Board A"), _drive("Board B"), _drive("Board C")]
+    q.shuffle_on(board, key="catalog|playlist|pl.1|Rock Hits", source="Apple Music · Rock Hits")
+    assert q.shuffle_buffer and all(t in board for t in q.shuffle_buffer)
+    assert q.shuffle_from == "Apple Music · Rock Hits"
+
+
+def test_shuffle_switches_lists_and_off_goes_back_to_the_library():
+    q = Queue()
+    q.library_tracks = [_drive(f"Lib {i}") for i in range(30)]
+    q.shuffle_on([_drive("Old 1"), _drive("Old 2")], key="a", source="A")
+    new = [_drive("New 1"), _drive("New 2")]
+    q.shuffle_on(new, key="b", source="B")
+    assert all(t in new for t in q.shuffle_buffer)   # old list's picks gone
+    q.shuffle_off()
+    assert not q.shuffle_active and q.shuffle_pool is None and q.shuffle_key is None
+    q.shuffle_on()                                     # no list: whole library
+    assert all(t in q.library_tracks for t in q.shuffle_buffer)
+    assert q.shuffle_from is None
